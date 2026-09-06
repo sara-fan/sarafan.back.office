@@ -24,7 +24,7 @@ The app consumes a versioned `@sara-fan/ui-shared` GitHub release tarball pinned
 
 ## Deploy and verify
 
-Cloud service `backoffice` serves internal port 8080 at **https://sarafan-b.sw.consulting**, through same-origin staff API proxying. The shared edge resolves `sarafan-backoffice`; dedicated edge routing is maintained in Core. Configure DNS and certificate coverage before deployment. Image and version are independent of Core and the customer UI.
+Cloud service `backoffice` serves internal port 8080 at **https://sb.sw.consulting**, through same-origin staff API proxying. The shared edge resolves `sarafan-backoffice`; dedicated edge routing is maintained in Core. Configure DNS and certificate coverage before deployment. Image and version are independent of Core and the customer UI.
 
 Set `SARAFAN_BACKOFFICE_LOGGING_ENABLED=true` to enable privacy-safe logs. Runtime config loads before the bundle and is uncached; changing logging requires only a container restart. Missing/invalid values disable logging. Trace propagation is independent of this switch.
 

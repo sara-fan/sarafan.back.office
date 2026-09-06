@@ -74,7 +74,7 @@ For other comment-capable formats, use the same three lines with that format's n
 - Authorize by the stable administrator, shift-manager, senior-operator and operator codes through a deny-by-default action matrix; only administrator can manage staff.
 - Keep all account state scoped to the current session; ignore stale asynchronous responses after logout or identity change. Server authorization remains authoritative.
 - Disable rather than delete. Preserve the last-administrator protection and require login after security-relevant self-changes.
-- Serve on its own origin/container at sarafan-b.sw.consulting. Keep logging identity and runtime configuration independent of the customer application.
+- Serve on its own origin/container at sb.sw.consulting. Keep logging identity and runtime configuration independent of the customer application.
 
 ## Action buttons
 
