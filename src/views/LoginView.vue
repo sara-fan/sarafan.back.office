@@ -3,11 +3,11 @@
 // All rights reserved.
 // This file is a part of the Sarafan application
 import ActionButton from '../components/ActionButton.vue'
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import FormField from '../components/FormField.vue'
 import PageAlertRegion from '../components/PageAlertRegion.vue'
-import { createInternalProblem, normalizeProblem } from '../errors/problem.js'
+import { createInternalProblem, hasOnlyPresentedFieldErrors, normalizeProblem, problemFieldErrors } from '../errors/problem.js'
 import { safeReturn } from '../roles.js'
 import { useSession } from '../stores/session.js'
 const session = useSession()
@@ -18,6 +18,8 @@ const password = ref('')
 const reveal = ref(false)
 const busy = ref(false)
 const problem = ref(null)
+const passwordErrors = computed(() => problemFieldErrors(problem.value, 'password'))
+const pageProblem = computed(() => hasOnlyPresentedFieldErrors(problem.value, ['email', 'password']) ? null : problem.value)
 async function submit() {
   if (busy.value) return
   problem.value = null
@@ -35,34 +37,32 @@ async function submit() {
 </script>
 <template>
   <main class="login-layout">
-    <section class="login-story">
+    <section
+      class="login-panel"
+      aria-labelledby="login-title"
+    >
       <a
-        class="brand"
+        class="login-brand"
         href="/login"
+        aria-label="Сарафан · Офис"
       ><img
         :src="'/sarafan-gzhel-icon.png'"
         alt=""
-      ><span>САРАФАН<small>БЭК-ОФИС</small></span></a>
-      <div>
-        <p class="eyebrow">
-          КОМАНДА САРАФАНА
-        </p><h1>Всё начинается<br>с нашей команды.</h1><p>Единое пространство для сотрудников.<br>Ваши задачи, доступы и рабочие инструменты.</p>
-      </div>
-      <span class="login-caption">Забота о деталях. На каждом шаге.</span>
-    </section>
-    <section class="login-form-area">
+      ><span>САРАФАН<small>ОФИС</small></span></a>
       <form
         class="login-card"
         novalidate
         @submit.prevent="submit"
       >
-        <p class="eyebrow">
-          СЛУЖЕБНЫЙ ВХОД
-        </p><h2>Добро пожаловать</h2><p class="muted">
-          Войдите с учётной записью сотрудника
-        </p>
+        <h1
+          id="login-title"
+          class="primary-heading"
+        >
+          Вход
+        </h1>
+        <hr class="hr">
         <PageAlertRegion
-          :problem="problem"
+          :problem="pageProblem || session.loginProblem.value"
           :message="session.notice.value"
         />
         <fieldset :disabled="busy">
@@ -75,31 +75,47 @@ async function submit() {
             maxlength="254"
             :problem="problem"
           />
-          <FormField
-            v-model="password"
-            name="password"
-            label="Пароль"
-            :type="reveal ? 'text' : 'password'"
-            autocomplete="current-password"
-            :problem="problem"
-          />
-          <label class="check"><input
-            v-model="reveal"
-            type="checkbox"
-          >Показать пароль</label>
-          <ActionButton
-            class="login-submit"
-            type="submit"
-            variant="blue"
-            :loading="busy"
-            icon="$login"
-            label="Войти"
-            tooltip-text="Войти"
-          />
+          <div class="form-field login-password-field">
+            <label for="password">Пароль</label>
+            <div class="password-control">
+              <input
+                id="password"
+                v-model="password"
+                name="password"
+                :type="reveal ? 'text' : 'password'"
+                autocomplete="current-password"
+                :aria-invalid="passwordErrors.length > 0"
+                aria-describedby="password-error"
+              >
+              <ActionButton
+                :icon="reveal ? '$eyeOff' : '$eye'"
+                :tooltip-text="reveal ? 'Скрыть пароль' : 'Показать пароль'"
+                :disabled="busy"
+                @click="reveal = !reveal"
+              />
+            </div>
+            <div
+              id="password-error"
+              class="field-error"
+            >
+              <span
+                v-for="error in passwordErrors"
+                :key="error"
+              >{{ error }}</span>
+            </div>
+          </div>
+          <div class="login-actions">
+            <ActionButton
+              class="login-submit"
+              type="submit"
+              variant="blue"
+              :loading="busy"
+              icon="$login"
+              label="Войти"
+              tooltip-text="Войти"
+            />
+          </div>
         </fieldset>
-        <p class="login-help">
-          Для получения доступа обратитесь<br>к администратору вашей команды.
-        </p>
       </form>
     </section>
   </main>

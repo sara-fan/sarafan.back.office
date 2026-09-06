@@ -4,15 +4,22 @@
 import { createInternalProblem } from './errors/problem.js'
 import { ROLES } from './roles.js'
 
+export const PASSWORD_MIN_LENGTH = 8
+export const PASSWORD_MAX_LENGTH = 18
+
 export function accountPayload(form, { profile = false, creating = false } = {}) {
   const errors = {}
-  for (const field of ['firstName','lastName']) {
-    if (!form[field].trim() || form[field].trim().length > 100) errors[field] = ['Введите от 1 до 100 символов']
+  const requiredNames = { firstName:'Имя обязательно', lastName:'Фамилия обязательна' }
+  for (const [field, requiredMessage] of Object.entries(requiredNames)) {
+    const value = form[field].trim()
+    if (!value) errors[field] = [requiredMessage]
+    else if (value.length > 100) errors[field] = ['Не более 100 символов']
   }
   if (form.patronymic.trim().length > 100) errors.patronymic = ['Не более 100 символов']
   if (!profile && (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(form.email.trim()) || form.email.trim().length > 254)) errors.email = ['Укажите корректный адрес электронной почты']
   if (creating || form.password) {
-    if (form.password.length < 12 || new globalThis.TextEncoder().encode(form.password).length > 72 || !form.password.trim()) errors.password = ['Не менее 12 символов и не более 72 байт UTF-8']
+    const passwordLength = Array.from(form.password).length
+    if (passwordLength < PASSWORD_MIN_LENGTH || passwordLength > PASSWORD_MAX_LENGTH || !form.password.trim()) errors.password = ['Пароль должен содержать от 8 до 18 символов']
     if (form.password !== form.confirmation) errors.confirmation = ['Пароли не совпадают']
   }
   if (!profile && (!form.roles.length || form.roles.some(role => !Object.hasOwn(ROLES, role)))) errors.roles = ['Выберите хотя бы одну доступную роль']

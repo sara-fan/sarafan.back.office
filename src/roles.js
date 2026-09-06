@@ -4,7 +4,7 @@
 
 export const ROLES = Object.freeze({
   administrator: 'Администратор',
-  'shift-manager': 'Начальник смены',
+  'shift-manager': 'Старший смены',
   'senior-operator': 'Старший оператор',
   operator: 'Оператор'
 })
@@ -13,13 +13,19 @@ export function can(user, action) {
   return Array.isArray(user?.roles) && user.roles.some(role => permissions[action]?.includes(role))
 }
 export function roleLabel(code) { return ROLES[code] || 'Неизвестная роль' }
-export function landing(user) { return can(user, 'manageUsers') ? '/users' : '/home' }
+export function landing(user) { return can(user, 'manageUsers') ? '/users' : '/profile' }
+export function profileRoute(user) {
+  return can(user, 'manageUsers') && Number.isInteger(user?.id) && user.id > 0
+    ? `/users/${user.id}`
+    : '/profile'
+}
 export function fullName(user) {
   return [user?.lastName, user?.firstName, user?.patronymic].filter(Boolean).join(' ')
 }
 export function safeReturn(value, user) {
   if (typeof value !== 'string') return landing(user)
-  if (['/home', '/profile'].includes(value)) return value
+  if (value === '/home') return landing(user)
+  if (value === '/profile') return profileRoute(user)
   if (can(user, 'manageUsers') && /^\/users(?:\/(?:new|[1-9]\d*))?$/u.test(value)) return value
   return landing(user)
 }

@@ -16,26 +16,58 @@ const users = ref([])
 const search = ref('')
 const role = ref('')
 const state = ref('')
-const sort = ref('name')
 const page = ref(1)
+const itemsPerPage = ref(10)
+const sortBy = ref([{ key:'displayName', order:'asc' }])
 const busy = ref(false)
 const problem = ref(null)
 const selected = ref(null)
-const filtered = computed(() => users.value.filter(user => {
+const roleItems = computed(() => [
+  { title:'Все роли', value:'' },
+  ...Object.entries(ROLES).map(([value,title]) => ({ title, value }))
+])
+const stateItems = [
+  { title:'Все статусы', value:'' },
+  { title:'Активные', value:'true' },
+  { title:'Отключённые', value:'false' }
+]
+const lastAdministratorTooltip = 'Нельзя отключить последнего активного администратора'
+const headers = [
+  { title:'', key:'actions', sortable:false, width:'96px' },
+  { title:'Пользователь', key:'displayName' },
+  { title:'Электронная почта', key:'email' },
+  { title:'Роли', key:'roles', sortable:false },
+  { title:'Статус', key:'isActive' }
+]
+const filtered = computed(() => users.value.map(user => ({
+  ...user,
+  displayName:fullName(user)
+})).filter(user => {
   const text = `${fullName(user)} ${user.email} ${user.roles.map(roleLabel).join(' ')}`.toLocaleLowerCase('ru')
   return text.includes(search.value.trim().toLocaleLowerCase('ru')) && (!role.value || user.roles.includes(role.value)) && (!state.value || String(user.isActive) === state.value)
-}).sort((a,b) => (sort.value === 'email' ? a.email : fullName(a)).localeCompare(sort.value === 'email' ? b.email : fullName(b), 'ru')))
-const pages = computed(() => Math.max(1, Math.ceil(filtered.value.length / 10)))
-const visible = computed(() => filtered.value.slice((page.value - 1) * 10, page.value * 10))
-watch([search, role, state, sort], () => { page.value = 1 })
+}))
+const activeAdministratorCount = computed(() => users.value.filter(user =>
+  user.isActive && Array.isArray(user.roles) && user.roles.includes('administrator')
+).length)
+function isLastActiveAdministrator(user) {
+  return Boolean(user?.isActive && user.roles?.includes('administrator') && activeAdministratorCount.value <= 1)
+}
+function disableTooltip(user) {
+  return isLastActiveAdministrator(user) ? lastAdministratorTooltip : 'Отключить учётную запись'
+}
+watch([search, role, state], () => { page.value = 1 })
 async function load() {
   busy.value = true
   problem.value = null
-  try { users.value = await session.listUsers(); page.value = Math.min(page.value, pages.value) }
+  try { users.value = await session.listUsers() }
   catch (value) { users.value = []; page.value = 1; problem.value = normalizeProblem(value) }
   finally { busy.value = false }
 }
 async function disable() {
+  if (!selected.value || isLastActiveAdministrator(selected.value)) {
+    selected.value = null
+    return
+  }
   const id = selected.value.id
   selected.value = null
   busy.value = true
@@ -50,130 +82,141 @@ async function disable() {
 onMounted(load)
 </script>
 <template>
-  <section>
-    <header class="page-heading">
-      <div>
-        <p class="eyebrow">
-          УПРАВЛЕНИЕ КОМАНДОЙ
-        </p><h1>Сотрудники <span class="count">{{ users.length }}</span></h1><p class="muted">
-          Учётные записи и доступ к рабочему пространству
-        </p>
-      </div><ActionButton
-        variant="blue"
-        icon="$add"
-        label="Добавить сотрудника"
-        tooltip-text="Добавить сотрудника"
-        @click="router.push('/users/new')"
-      />
-    </header>
-    <PageAlertRegion :problem="problem" />
-    <div class="table-card">
-      <fieldset
-        class="table-filters"
-        :disabled="busy"
-      >
-        <label class="search-field">Поиск<input
-          v-model="search"
-          type="search"
-          placeholder="Имя, почта или роль"
-        ></label><label>Роль<select v-model="role"><option value="">Все роли</option><option
-          v-for="(label, code) in ROLES"
-          :key="code"
-          :value="code"
-        >{{ label }}</option></select></label><label>Статус<select v-model="state"><option value="">Все статусы</option><option value="true">Активные</option><option value="false">Отключённые</option></select></label><label>Сортировка<select v-model="sort"><option value="name">По имени</option><option value="email">По почте</option></select></label>
-      </fieldset>
-      <p
-        v-if="busy"
-        class="empty-state"
-        role="status"
-      >
-        Загрузка сотрудников…
-      </p>
-      <div
-        v-else-if="problem"
-        class="empty-state"
-      >
+  <section class="settings table-wide">
+    <header class="header-with-actions">
+      <h1 class="primary-heading">
+        Пользователи <span class="count">{{ users.length }}</span>
+      </h1>
+      <div class="header-actions">
+        <span
+          v-if="busy"
+          class="header-spinner"
+          role="status"
+          aria-label="Загрузка"
+        />
         <ActionButton
-
-          icon="$refresh"
-          label="Повторить загрузку"
-          tooltip-text="Повторить загрузку"
-          @click="load"
+          variant="blue"
+          icon="$addUser"
+          icon-size="28"
+          tooltip-text="Добавить пользователя"
+          :disabled="busy"
+          @click="router.push('/users/new')"
         />
       </div>
-      <template v-else>
-        <div class="table-scroll">
-          <table>
-            <thead><tr><th>Сотрудник</th><th>Роли</th><th>Статус</th><th><span class="sr-only">Действия</span></th></tr></thead><tbody>
-              <tr
-                v-for="user in visible"
-                :key="user.id"
-              >
-                <td>
-                  <div class="staff-name">
-                    {{ fullName(user) }} <span
-                      v-if="user.id === session.user.value?.id"
-                      class="muted"
-                    >(вы)</span>
-                  </div><div class="muted">
-                    {{ user.email }}
-                  </div>
-                </td><td>
-                  <div class="role-row">
-                    <span
-                      v-for="code in user.roles"
-                      :key="code"
-                      class="role-chip"
-                    >{{ roleLabel(code) }}</span>
-                  </div>
-                </td><td><span :class="['status-pill', { inactive:!user.isActive }]">{{ user.isActive ? 'Активен' : 'Отключён' }}</span></td><td class="row-actions">
-                  <ActionButton
-                    :item="user"
-                    icon="$edit"
-                    tooltip-text="Редактировать учётную запись"
-                    :disabled="busy"
-                    @click="router.push(`/users/${$event.id}`)"
-                  /><ActionButton
-                    v-if="user.isActive"
-                    :item="user"
-                    icon="$block"
-                    tooltip-text="Отключить учётную запись"
-                    variant="red"
-                    :disabled="busy"
-                    @click="selected = $event"
-                  />
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-        <p
-          v-if="!visible.length"
-          class="empty-state"
-        >
-          Сотрудники не найдены. Попробуйте изменить фильтры.
-        </p>
-        <footer class="pagination">
-          <span>Найдено: {{ filtered.length }}</span><div>
+    </header>
+    <hr class="hr">
+    <PageAlertRegion :problem="problem" />
+    <fieldset
+      class="filter-bar"
+      :disabled="busy"
+    >
+      <v-text-field
+        id="user-search"
+        v-model="search"
+        class="filter-control filter-search"
+        label="Поиск по любой информации о пользователе"
+        prepend-inner-icon="$search"
+        variant="solo"
+        density="compact"
+        active
+        hide-details
+        clearable
+      />
+      <v-select
+        v-model="role"
+        class="filter-control"
+        label="Роль"
+        :items="roleItems"
+        variant="solo"
+        density="compact"
+        active
+        hide-details
+      />
+      <v-select
+        v-model="state"
+        class="filter-control"
+        label="Статус"
+        :items="stateItems"
+        variant="solo"
+        density="compact"
+        active
+        hide-details
+      />
+    </fieldset>
+    <div
+      v-if="problem"
+      class="empty-state"
+    >
+      <ActionButton
+        icon="$refresh"
+        label="Повторить загрузку"
+        tooltip-text="Повторить загрузку"
+        @click="load"
+      />
+    </div>
+    <v-card
+      v-else
+      class="table-card"
+    >
+      <v-data-table
+        v-model:page="page"
+        v-model:items-per-page="itemsPerPage"
+        v-model:sort-by="sortBy"
+        :headers="headers"
+        :items="filtered"
+        :loading="busy"
+        item-value="id"
+        items-per-page-text="Пользователей на странице"
+        page-text="{0}-{1} из {2}"
+        no-data-text="Пользователи не найдены."
+        density="compact"
+        class="interlaced-table"
+        height="var(--staff-table-height)"
+        fixed-header
+      >
+        <template #[`item.actions`]="{ item }">
+          <div class="actions-container">
             <ActionButton
-              icon="$previous"
-              tooltip-text="Предыдущая страница"
-              :disabled="page === 1"
-              @click="page--"
-            /><span>{{ page }} / {{ pages }}</span><ActionButton
-              icon="$next"
-              tooltip-text="Следующая страница"
-              :disabled="page === pages"
-              @click="page++"
+              :item="item"
+              icon="$edit"
+              tooltip-text="Редактировать учётную запись"
+              :disabled="busy"
+              @click="router.push(`/users/${$event.id}`)"
+            /><ActionButton
+              v-if="item.isActive"
+              :item="item"
+              icon="$block"
+              :tooltip-text="disableTooltip(item)"
+              variant="red"
+              :disabled="busy || isLastActiveAdministrator(item)"
+              @click="selected = $event"
             />
           </div>
-        </footer>
-      </template>
-    </div>
+        </template>
+        <template #[`item.displayName`]="{ item }">
+          <span class="staff-name">{{ item.displayName }}</span><span
+            v-if="item.id === session.user.value?.id"
+            class="current-user"
+          > (вы)</span>
+        </template>
+        <template #[`item.roles`]="{ item }">
+          <div class="role-row">
+            <span
+              v-for="code in item.roles"
+              :key="code"
+              class="role-chip"
+            >{{ roleLabel(code) }}</span>
+          </div>
+        </template>
+        <template #[`item.isActive`]="{ item }">
+          <span :class="['status-pill', { inactive:!item.isActive }]">{{ item.isActive ? 'Активен' : 'Отключён' }}</span>
+        </template>
+      </v-data-table>
+    </v-card>
     <ConfirmDialog
       :open="Boolean(selected)"
-      title="Отключить сотрудника?"
-      :message="`Сотрудник ${fullName(selected)} потеряет доступ. Все его сеансы будут завершены.`"
+      title="Отключить пользователя?"
+      :message="`Пользователь ${fullName(selected)} потеряет доступ. Все его сеансы будут завершены.`"
       action="Отключить"
       @cancel="selected = null"
       @confirm="disable"

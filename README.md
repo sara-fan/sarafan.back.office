@@ -8,7 +8,7 @@ Staff application for [back-office issue #1](https://github.com/sara-fan/sarafan
 
 ## Run locally
 
-Use Node 22.23+ or Node 24.15+. Run `npm ci` and `npm run dev`, then open http://localhost:5174. Start Core on port 8080; set `SARAFAN_API_TARGET=http://localhost:5080` when using its native launch profile.
+Use Node 22.23.x or Node 24.15.x. Run `npm ci` and `npm run dev`, then open http://localhost:5174. Start Core on port 8080; set `SARAFAN_API_TARGET=http://localhost:5080` when using its native launch profile.
 
 From the sibling Core checkout, `docker compose -f docker-compose.yml -f docker-compose.backoffice.yml up -d --build --wait` serves the container on http://localhost:8083. Set `SARAFAN_BACKOFFICE_PORT` to change the loopback port. Ordinary Core-only builds do not require this checkout.
 
