@@ -95,9 +95,10 @@ export function createSession() {
   async function saveUser(id, payload, original) {
     const result = await request(id ? `/users/${id}` : '/users', json(id ? 'PUT' : 'POST', payload))
     if (id === user.value?.id) {
-      const securityChanged = Boolean(payload.password) || !payload.isActive
-        || payload.email.trim().toLowerCase() !== original.email.trim().toLowerCase()
-        || [...payload.roles].sort().join() !== [...original.roles].sort().join()
+      const securityChanged = Boolean(payload.password)
+        || (typeof payload.isActive === 'boolean' && payload.isActive !== original.isActive)
+        || (typeof payload.email === 'string' && payload.email.trim().toLowerCase() !== original.email.trim().toLowerCase())
+        || (Array.isArray(payload.roles) && [...payload.roles].sort().join() !== [...original.roles].sort().join())
       if (securityChanged) await logout('Данные доступа изменены. Войдите повторно.')
       else user.value = result
     }

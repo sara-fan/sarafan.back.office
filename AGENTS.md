@@ -81,3 +81,9 @@ For other comment-capable formats, use the same three lines with that format's n
 - Use the Logibooks ActionButton concept for application actions: an icon, tooltip, item payload emitted on click, semantic variant, and disabled/loading state. Use the local ActionButton component; row actions are icon-only and primary form actions may add visible labels.
 - Keep disabled-action explanations keyboard-accessible through a focusable tooltip activator. Never emit actions while disabled or loading. Keep native button types and accessible names. Navigation and confirmations stay with the owning view.
 - Use Sarafan SVG icons, palette, focus styles and reduced-motion behavior; do not add per-call button styling.
+
+- Application logger adapters fix service/version identity, event catalogue, severities and catalogue validation after configurable test/runtime options; callers cannot override these invariants.
+
+## GitHub Actions conventions
+
+- Pin reusable actions to published version tags and give every workflow step a descriptive name.

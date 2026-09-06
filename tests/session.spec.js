@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createSession } from '../src/stores/session.js'
 import { problemResponse, response } from './fixtures/http.js'
 
-const identity = { id:1, email:'admin@example.test', firstName:'Иван', lastName:'Иванов', patronymic:null, roles:['administrator'] }
+const identity = { id:1, email:'admin@example.test', firstName:'Иван', lastName:'Иванов', patronymic:null, roles:['administrator'], isActive:true }
 const auth = (user = identity) => response(200, { accessToken:'staff-token', expiresAt:'2026-10-01T00:00:00Z', user })
 const deferred = () => { let resolve; const promise = new Promise(r => { resolve = r }); return { promise, resolve } }
 afterEach(() => vi.unstubAllGlobals())
@@ -71,10 +71,13 @@ describe('staff session boundary', () => {
     await s.saveUser(null,{...identity,password:'secret-password'}); expect(fetch.mock.calls.at(-1)[1].method).toBe('POST')
     await s.saveUser(2,{...identity,isActive:true},identity); expect(s.user.value.id).toBe(1)
     await s.saveUser(1,{...identity,isActive:true,firstName:'Пётр'},identity); expect(s.user.value.firstName).toBe('Пётр')
+    await s.saveUser(1,{firstName:'Олег'},identity); expect(s.user.value.firstName).toBe('Олег')
+    expect(fetch.mock.calls.some(([url])=>url.endsWith('/logout'))).toBe(false)
     await s.saveProfile({firstName:'Анна'}); expect(s.user.value.firstName).toBe('Анна')
     for(const change of [{password:'new-secret-password'},{email:'new@example.test'},{roles:['operator']},{isActive:false}]) {
       await s.login('a@b.test','p'); await s.saveUser(1,{...identity,isActive:true,...change},identity); expect(s.user.value).toBeNull()
     }
     await s.login('a@b.test','p'); await s.saveProfile({password:'new-secret-password'}); expect(s.notice.value).toContain('Пароль изменён')
+    await s.login('a@b.test','p'); await s.saveUser(1,{...identity,isActive:true},{...identity,isActive:false}); expect(s.user.value).toBeNull()
   })
 })

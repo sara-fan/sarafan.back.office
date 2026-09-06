@@ -7,7 +7,16 @@ import { version } from '../../package.json'
 import { runtimeConfig } from '../config/runtime.js'
 import { EVENTS, SEVERITY, isCatalogueEvent } from './catalogue.js'
 
-export function createLogger(options = {}) {
-  return createSharedLogger({ serviceName: 'sarafan.back.office', version, events: EVENTS, severity: SEVERITY, isCatalogueEvent, enabled: runtimeConfig.loggingEnabled, minimumSeverity: runtimeConfig.minimumSeverity, environment: import.meta.env.MODE || 'unknown', ...options })
+export function createLogger({
+  enabled = runtimeConfig.loggingEnabled,
+  minimumSeverity = runtimeConfig.minimumSeverity,
+  environment = import.meta.env.MODE || 'unknown',
+  sink, now, rateLimit
+} = {}) {
+  return createSharedLogger({
+    enabled, minimumSeverity, environment, sink, now, rateLimit,
+    serviceName: 'sarafan.back.office', version,
+    events: EVENTS, severity: SEVERITY, isCatalogueEvent
+  })
 }
 export const uiLogger = createLogger()
