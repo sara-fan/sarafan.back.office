@@ -21,6 +21,8 @@ describe('official exchange-rate display', () => {
     expect(exchangeRateDisplay([{ ...rate, sourceEffectiveDate:'2020-01-01', officialRate:81 }]).value).toBe('81,0000')
     expect(exchangeRateDisplay([{ ...rate, nominal:100, officialRate:8112.34 }])).toMatchObject({ label:'100 USD', value:'8 112,3400' })
     expect(exchangeRateDisplay([{ ...rate, baseCurrency:'usd', quoteCurrency:'rub' }])).not.toBeNull()
+    expect(exchangeRateDisplay([rate, { ...rate,quoteCurrency:'EUR' }, { ...rate,provider:'other' }])).toEqual(exchangeRateDisplay([rate]))
+    expect(wrapper.attributes('tabindex')).toBe('0')
     wrapper.unmount()
   })
   it.each([undefined, null, {}, [], [null], [{ ...rate, baseCurrency:1 }], [{ ...rate, baseCurrency:'EUR' }], [rate, rate],
@@ -47,7 +49,7 @@ describe('official exchange-rate display', () => {
     expect(component).toContain('color: #1976d2')
     expect(component).toContain('font-size: 0.875rem')
     expect(component).toContain('gap: 0.75rem')
-    expect(component).toContain('max-width: calc(100vw - 80px)')
+    expect(component).toContain('max-width: calc(100% - 80px)')
     expect(component).toContain('font-weight: 700')
   })
 })

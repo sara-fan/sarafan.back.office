@@ -12,6 +12,7 @@ const display = computed(() => exchangeRateDisplay(props.rates))
 <template>
   <div
     class="exchange-rates"
+    tabindex="0"
     role="status"
     aria-live="polite"
     aria-atomic="true"
@@ -34,7 +35,7 @@ const display = computed(() => exchangeRateDisplay(props.rates))
   align-items: center;
   gap: 0.75rem;
   min-width: 0;
-  max-width: calc(100vw - 80px);
+  max-width: calc(100% - 80px);
   margin: 0 16px 0 8px;
   overflow-x: auto;
   color: #1976d2;

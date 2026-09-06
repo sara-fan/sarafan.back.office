@@ -8,11 +8,12 @@ const dateFormat = new Intl.DateTimeFormat('ru-RU', { day: '2-digit', month: '2-
 
 export function exchangeRateDisplay(rates) {
   if (!Array.isArray(rates)) return null
-  const candidates = rates.filter(rate => typeof rate?.baseCurrency === 'string' && rate.baseCurrency.toUpperCase() === 'USD')
+  const candidates = rates.filter(rate => rate?.provider === 'CBR'
+    && typeof rate.baseCurrency === 'string' && rate.baseCurrency.toUpperCase() === 'USD'
+    && typeof rate.quoteCurrency === 'string' && rate.quoteCurrency.toUpperCase() === 'RUB')
   if (candidates.length !== 1) return null
   const rate = candidates[0]
-  if (rate.provider !== 'CBR' || typeof rate.quoteCurrency !== 'string' || rate.quoteCurrency.toUpperCase() !== 'RUB'
-    || !Number.isInteger(rate.nominal) || rate.nominal < 1 || rate.nominal > 1_000_000
+  if (!Number.isInteger(rate.nominal) || rate.nominal < 1 || rate.nominal > 1_000_000
     || typeof rate.officialRate !== 'number' || !Number.isFinite(rate.officialRate)
     || rate.officialRate <= 0 || rate.officialRate >= 1_000_000_000_000
     || typeof rate.sourceEffectiveDate !== 'string' || !/^\d{4}-\d{2}-\d{2}$/u.test(rate.sourceEffectiveDate)) return null

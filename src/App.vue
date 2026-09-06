@@ -38,7 +38,7 @@ watch(() => user.value?.id, async (id, _previous, onCleanup) => {
     if (!active) return
     coreVersion.value = typeof result?.appVersion === 'string' ? result.appVersion : ''
     exchangeRates.value = Array.isArray(result?.exchangeRates) ? result.exchangeRates : []
-  } catch (problem) { suppressProblem(problem, { operation:'status.version.load' }) }
+  } catch (problem) { if (active) suppressProblem(problem, { operation:'status.version.load' }) }
 }, { immediate:true, flush:'sync' })
 </script>
 <template>

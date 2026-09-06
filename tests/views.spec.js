@@ -6,6 +6,7 @@ import { ref, defineComponent, nextTick } from 'vue'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createSarafanVuetify } from '../src/plugins/vuetify.js'
 import { createInternalProblem } from '../src/errors/problem.js'
+import * as problemReporting from '../src/errors/problem.js'
 import LoginView from '../src/views/LoginView.vue'
 import StatusView from '../src/views/StatusView.vue'
 import UsersView from '../src/views/UsersView.vue'
@@ -50,7 +51,7 @@ beforeEach(()=>{
     listUsers:vi.fn().mockResolvedValue([{...identity},{...identity,id:2,firstName:'Анна',email:'anna@example.test',roles:['operator'],isActive:false}]),
     getUser:vi.fn().mockResolvedValue({...identity}),getRoles:vi.fn().mockResolvedValue(roles),getStatus:vi.fn().mockResolvedValue({appVersion:'0.0.6'}),saveUser:vi.fn().mockResolvedValue(identity),saveProfile:vi.fn().mockResolvedValue(identity)}
 })
-afterEach(()=>{for(const w of wrappers.splice(0)) w.unmount()})
+afterEach(()=>{for(const w of wrappers.splice(0)) w.unmount();vi.restoreAllMocks()})
 
 describe('ActionButton pattern',()=>{
   it('emits its item, preserves attrs/classes, labels icons and explains disabled actions',async()=>{
@@ -72,6 +73,15 @@ describe('ActionButton pattern',()=>{
   })
 })
 describe('staff views',()=>{
+  it('ignores a late status rejection after identity cleanup',async()=>{
+    let rejectLate
+    const late=new Promise((_resolve,reject)=>{rejectLate=reject})
+    h.session.getStatus.mockReturnValueOnce(late)
+    const suppressed=vi.spyOn(problemReporting,'suppressProblem')
+    render(App);h.session.user.value=null;await nextTick()
+    rejectLate(failure());await flushPromises()
+    expect(suppressed).not.toHaveBeenCalled()
+  })
   it('loads rates only for the signed-in identity and ignores late results after logout or replacement',async()=>{
     h.session.user.value=null
     const w=render(App);await flushPromises();expect(h.session.getStatus).not.toHaveBeenCalled()
