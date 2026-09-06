@@ -13,6 +13,7 @@ import AccountView from '../src/views/AccountView.vue'
 import ActionButton from '../src/components/ActionButton.vue'
 import ConfirmDialog from '../src/components/ConfirmDialog.vue'
 import App from '../src/App.vue'
+import { version } from '../package.json'
 
 const h=vi.hoisted(()=>({session:null,route:null,router:null}))
 vi.mock('../src/stores/session.js',()=>({useSession:()=>h.session}))
@@ -71,6 +72,25 @@ describe('ActionButton pattern',()=>{
   })
 })
 describe('staff views',()=>{
+  it('loads rates only for the signed-in identity and ignores late results after logout or replacement',async()=>{
+    h.session.user.value=null
+    const w=render(App);await flushPromises();expect(h.session.getStatus).not.toHaveBeenCalled()
+    const old=pending();const current=pending()
+    h.session.getStatus.mockReturnValueOnce(old.promise).mockReturnValueOnce(current.promise)
+    h.session.user.value={...identity};await nextTick()
+    expect(w.text()).toContain('USD —')
+    h.session.user.value=null;h.session.user.value={...identity,id:2};await nextTick()
+    old.resolve({appVersion:'old',exchangeRates:[{provider:'CBR',baseCurrency:'USD',quoteCurrency:'RUB',nominal:1,officialRate:99,sourceEffectiveDate:'2026-09-04'}]});await flushPromises()
+    expect(w.text()).not.toContain('99,0000');expect(w.text()).not.toContain('Сервер old')
+    current.resolve({appVersion:'0.0.7',exchangeRates:[{provider:'CBR',baseCurrency:'USD',quoteCurrency:'RUB',nominal:1,officialRate:81.1234,sourceEffectiveDate:'2026-09-05'}]});await flushPromises()
+    expect(w.text()).toContain('05.09.26');expect(w.text()).toContain('USD 81,1234');expect(w.text()).toContain('Сервер 0.0.7')
+    h.session.getStatus.mockRejectedValueOnce(failure());h.session.user.value={...identity,id:3};await flushPromises()
+    expect(w.text()).toContain('USD —');expect(w.find('.app-bar').exists()).toBe(true)
+    h.session.getStatus.mockResolvedValueOnce({appVersion:3,exchangeRates:{}});h.session.user.value={...identity,id:4};await flushPromises()
+    expect(w.text()).not.toContain('Сервер');expect(w.text()).toContain('USD —')
+    h.session.getStatus.mockResolvedValueOnce(null);h.session.user.value={...identity,id:5};await flushPromises()
+    expect(w.text()).toContain('USD —')
+  })
   it('renders service unavailability as a red login error',async()=>{
     h.route={path:'/login',params:{},query:{}};h.session.loginProblem.value=createInternalProblem('serviceUnavailable')
     const w=render(LoginView);expect(w.get('.page-alert').text()).toBe('Сервис недоступен. Пожалуйста, повторите позже.');expect(w.find('.page-notice').exists()).toBe(false)
@@ -166,7 +186,7 @@ describe('staff views',()=>{
     h.session.ready.value=false;const w=render(App);await flushPromises();expect(w.text()).toContain('Восстановление сеанса')
     h.session.ready.value=true;h.session.restoreProblem.value=failure();await nextTick();expect(w.get('[role=alert]').exists()).toBe(true)
     await button(w,'Повторить').trigger('click');await flushPromises();expect(h.router.replace).not.toHaveBeenCalled()
-    h.session.restoreSession.mockImplementationOnce(()=>{h.session.restoreProblem.value=null;return Promise.resolve()});await button(w,'Повторить').trigger('click');await flushPromises();expect(h.router.replace).toHaveBeenCalledWith('/users');expect(w.text()).toContain('Сервер 0.0.6');expect(w.text()).toContain('Клиент 0.0.1');expect(w.text()).toContain('Иванов Иван');expect(w.find('nav a[href="/users"] i').attributes('data-icon')).toBe('$staff');expect(w.find('nav a[href="/users/1"] i').attributes('data-icon')).toBe('$profile')
+    h.session.restoreSession.mockImplementationOnce(()=>{h.session.restoreProblem.value=null;return Promise.resolve()});await button(w,'Повторить').trigger('click');await flushPromises();expect(h.router.replace).toHaveBeenCalledWith('/users');expect(w.text()).toContain('Сервер 0.0.6');expect(w.text()).toContain(`Клиент ${version}`);expect(w.text()).toContain('Иванов Иван');expect(w.find('nav a[href="/users"] i').attributes('data-icon')).toBe('$staff');expect(w.find('nav a[href="/users/1"] i').attributes('data-icon')).toBe('$profile')
     const drawer=w.findComponent({name:'VNavigationDrawer'});expect(drawer.props('permanent')).toBe(true);const initiallyOpen=drawer.props('modelValue');await button(w,'Открыть меню').trigger('click');expect(drawer.props('modelValue')).toBe(!initiallyOpen)
     Object.defineProperty(globalThis.window,'innerWidth',{configurable:true,writable:true,value:390});globalThis.window.dispatchEvent(new globalThis.Event('resize'));await nextTick();expect(drawer.props('temporary')).toBe(true);expect(drawer.props('modelValue')).toBe(false);await button(w,'Открыть меню').trigger('click');expect(drawer.props('modelValue')).toBe(true);h.router.currentRoute.value={fullPath:'/profile'};await nextTick();expect(drawer.props('modelValue')).toBe(false);Object.defineProperty(globalThis.window,'innerWidth',{configurable:true,writable:true,value:1024});globalThis.window.dispatchEvent(new globalThis.Event('resize'));await nextTick()
     expect(w.find('nav a[href="/users"]').exists()).toBe(true);h.session.user.value={...identity,roles:['operator']};await nextTick();expect(w.find('nav a[href="/users"]').exists()).toBe(false);expect(w.find('nav a[href="/profile"]').exists()).toBe(true)

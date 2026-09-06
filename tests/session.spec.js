@@ -11,6 +11,24 @@ const deferred = () => { let resolve; const promise = new Promise(r => { resolve
 afterEach(() => vi.unstubAllGlobals())
 
 describe('staff session boundary', () => {
+  it('authorizes supplementary status, preserves the shell on failure and rejects stale results', async () => {
+    const wait = deferred()
+    const fetch = vi.fn().mockResolvedValueOnce(auth())
+      .mockResolvedValueOnce(problemResponse(503,'service-unavailable'))
+      .mockResolvedValueOnce(new globalThis.Response('invalid JSON', { status:200,headers:{'Content-Type':'application/json'} }))
+      .mockRejectedValueOnce(new Error('offline'))
+      .mockReturnValueOnce(wait.promise).mockResolvedValueOnce(response(204))
+    vi.stubGlobal('fetch',fetch)
+    const s = createSession(); await s.login('admin@example.test','password')
+    await expect(s.getStatus()).rejects.toBeDefined(); expect(s.user.value).toEqual(identity)
+    await expect(s.getStatus()).rejects.toBeDefined(); expect(s.user.value).toEqual(identity)
+    await expect(s.getStatus()).rejects.toBeDefined(); expect(s.user.value).toEqual(identity)
+    expect(fetch.mock.calls[1][0]).toBe('/api/v1/backoffice/status')
+    expect(fetch.mock.calls[1][1].headers.get('Authorization')).toBe('Bearer staff-token')
+    const stale = s.getStatus(); const rejected = expect(stale).rejects.toBeDefined()
+    await s.logout(); wait.resolve(response(200,{ exchangeRates:[] })); await rejected
+    expect(s.user.value).toBeNull()
+  })
   it('restores once, logs in by email, reads staff resources and logs out locally even on failure', async () => {
     const fetch = vi.fn().mockResolvedValueOnce(problemResponse(401,'invalid-backoffice-refresh-token')).mockResolvedValueOnce(auth()).mockResolvedValueOnce(response(200,[])).mockResolvedValueOnce(response(200,identity)).mockResolvedValueOnce(response(200,[])).mockResolvedValueOnce(response(200,{appVersion:'0.0.6'})).mockRejectedValueOnce(new Error('secret'))
     vi.stubGlobal('fetch',fetch)
@@ -21,7 +39,7 @@ describe('staff session boundary', () => {
     expect(JSON.parse(fetch.mock.calls[1][1].body)).toEqual({email:'admin@example.test',password:'secret-password'})
     expect(s.user.value).toEqual(identity)
     await s.listUsers(); await s.getUser(1); await s.getRoles(); await s.getStatus()
-    expect(fetch.mock.calls.map(([url])=>url)).toEqual(['/api/v1/backoffice/auth/refresh','/api/v1/backoffice/auth/login','/api/v1/backoffice/users','/api/v1/backoffice/users/1','/api/v1/backoffice/users/ops','/api/v1/status/status'])
+    expect(fetch.mock.calls.map(([url])=>url)).toEqual(['/api/v1/backoffice/auth/refresh','/api/v1/backoffice/auth/login','/api/v1/backoffice/users','/api/v1/backoffice/users/1','/api/v1/backoffice/users/ops','/api/v1/backoffice/status'])
     expect(fetch.mock.calls[2][1].headers.get('Authorization')).toBe('Bearer staff-token')
     await s.logout(); expect(s.user.value).toBeNull()
   })
