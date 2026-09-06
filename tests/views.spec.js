@@ -53,7 +53,7 @@ describe('ActionButton pattern',()=>{
     await w.setProps({'data-test':'updated'});expect(w.get('button').attributes('data-test')).toBe('updated')
     await button(w,'Изменить').trigger('click');expect(w.emitted('click')).toHaveLength(1)
     await w.setProps({disabled:false,loading:true,label:'Сохранить',variant:'blue'});expect(w.find('.progress').exists()).toBe(true);expect(w.get('button').attributes('aria-busy')).toBe('true')
-    await w.setProps({loading:false,tooltipText:'',type:'submit'});expect(w.get('button').attributes('aria-label')).toBe('Сохранить');expect(w.get('button').attributes('type')).toBe('submit')
+    await w.setProps({loading:false,disabled:true,tooltipText:'   ',type:'submit'});expect(w.findComponent(stubs.VTooltip).props('disabled')).toBe(true);expect(w.get('.action-button-activator').attributes('tabindex')).toBeUndefined();expect(w.get('button').attributes('aria-label')).toBe('Сохранить');expect(w.get('button').attributes('type')).toBe('submit')
   })
   it('supports cancellation, confirmation and outside dismissal consistently',async()=>{
     const w=render(ConfirmDialog,{props:{open:true,message:'Проверка'}})
@@ -69,7 +69,7 @@ describe('staff views',()=>{
     const w=render(LoginView);await w.get('form').trigger('submit');expect(w.findAll('.field-error').some(e=>e.text())).toBe(true)
     await fill(w,'email','a@b.test');await fill(w,'password','test-password');await w.get('[type="checkbox"]').setValue(true);expect(w.get('[name=password]').attributes('type')).toBe('text')
     h.session.login.mockRejectedValueOnce(failure());await w.get('form').trigger('submit');await flushPromises();expect(w.get('[role=alert]').text()).toContain('Проверьте');expect(w.get('[name=password]').element.value).toBe('test-password');expect(h.router.replace).not.toHaveBeenCalled()
-    const wait=pending();h.session.login.mockReturnValueOnce(wait.promise);await w.get('form').trigger('submit');await w.get('form').trigger('submit');expect(h.session.login).toHaveBeenCalledTimes(2);wait.resolve(identity);await flushPromises();expect(h.router.replace).toHaveBeenCalledWith('/users/2')
+    h.session.login.mockClear();const wait=pending();h.session.login.mockReturnValueOnce(wait.promise);await w.get('form').trigger('submit');await w.get('form').trigger('submit');expect(h.session.login).toHaveBeenCalledTimes(1);wait.resolve(identity);await flushPromises();expect(h.router.replace).toHaveBeenCalledWith('/users/2')
     h.session.login.mockResolvedValueOnce(null);await w.get('form').trigger('submit');await flushPromises();expect(h.router.replace).toHaveBeenCalledTimes(1)
   })
   it('shows only available home actions and dedicated missing/forbidden pages',async()=>{
@@ -95,12 +95,19 @@ describe('staff views',()=>{
     await button(w,'Повторить загрузку').trigger('click');await flushPromises();await button(w,'Отключить учётную запись').trigger('click');await button(w,'Отключить').trigger('click');await flushPromises();expect(h.session.saveUser).toHaveBeenCalledWith(1,expect.objectContaining({isActive:false}),expect.objectContaining({id:1}))
     await button(w,'Отключить учётную запись').trigger('click');h.session.saveUser.mockImplementationOnce(()=>{h.session.user.value=null;return Promise.resolve(identity)});await button(w,'Отключить').trigger('click');await flushPromises()
   })
+  it('clears stale staff counts when reloading after a successful change fails',async()=>{
+    h.session.listUsers.mockResolvedValueOnce([identity]).mockRejectedValueOnce(failure())
+    const w=render(UsersView);await flushPromises();expect(w.get('.count').text()).toBe('1')
+    await button(w,'Отключить учётную запись').trigger('click');await button(w,'Отключить').trigger('click');await flushPromises()
+    expect(w.get('.count').text()).toBe('0');expect(w.find('table').exists()).toBe(false);expect(w.get('[role=alert]').exists()).toBe(true)
+    await button(w,'Повторить загрузку').trigger('click');await flushPromises();expect(w.get('.count').text()).toBe('2')
+  })
   it('creates accounts with field validation and retains input on failed saves',async()=>{
     h.route={path:'/users/new',params:{},query:{}};const w=render(AccountView);await flushPromises();await w.get('form').trigger('submit');expect(w.get('#roles-error').text()).toContain('Выберите')
     for(const [name,value] of Object.entries({firstName:'Иван',lastName:'Иванов',email:'new@example.test',password:'test-password',confirmation:'test-password'})) await fill(w,name,value)
     await w.get('input[value=operator]').setValue(true);h.session.saveUser.mockRejectedValueOnce(failure());await w.get('form').trigger('submit');await flushPromises();expect(w.get('[name=email]').element.value).toBe('new@example.test');expect(h.router.push).not.toHaveBeenCalled()
     await button(w,'Отмена').trigger('click');expect(h.router.push).toHaveBeenCalledWith('/users');h.router.push.mockClear()
-    const wait=pending();h.session.saveUser.mockReturnValueOnce(wait.promise);await w.get('form').trigger('submit');await w.get('form').trigger('submit');wait.resolve(identity);await flushPromises();expect(h.session.saveUser).toHaveBeenCalledTimes(2);expect(h.router.push).toHaveBeenCalledWith('/users')
+    h.session.saveUser.mockClear();const wait=pending();h.session.saveUser.mockReturnValueOnce(wait.promise);await w.get('form').trigger('submit');await w.get('form').trigger('submit');wait.resolve(identity);await flushPromises();expect(h.session.saveUser).toHaveBeenCalledTimes(1);expect(h.router.push).toHaveBeenCalledWith('/users')
   })
   it('retries failed account loads and confirms security edits before saving',async()=>{
     h.route={path:'/users/1',params:{id:'1'},query:{}};h.session.getRoles.mockRejectedValueOnce(failure());const w=render(AccountView);await flushPromises();expect(w.find('form').exists()).toBe(false);await button(w,'Повторить загрузку').trigger('click');await flushPromises()

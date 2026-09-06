@@ -13,13 +13,14 @@ const props = defineProps({
 const emit = defineEmits(['click'])
 const attrs = useAttrs()
 const inactive = computed(() => props.disabled || props.loading)
-const disabledExplanation = computed(() => inactive.value && Boolean(props.tooltipText.trim()))
+const tooltip = computed(() => props.tooltipText.trim())
+const disabledExplanation = computed(() => inactive.value && Boolean(tooltip.value))
 function forwarded() { const rest = { ...attrs }; delete rest.class; return rest }
 function activate() { if (!inactive.value) emit('click', props.item) }
 </script>
 <template>
   <v-tooltip
-    :disabled="!tooltipText"
+    :disabled="!tooltip"
     :open-delay="300"
   >
     <template #activator="{ props: activator }">
@@ -30,14 +31,14 @@ function activate() { if (!inactive.value) emit('click', props.item) }
         :tabindex="disabledExplanation ? 0 : undefined"
         :role="disabledExplanation ? 'button' : undefined"
         :aria-disabled="disabledExplanation ? 'true' : undefined"
-        :aria-label="disabledExplanation ? tooltipText : undefined"
+        :aria-label="disabledExplanation ? tooltip : undefined"
       >
         <button
           v-bind="{ ...(disabledExplanation ? {} : activator), ...forwarded() }"
           :type="type"
           :class="['action-button', `action-button--${variant}`, { 'action-button--labelled':label }, attrs.class]"
           :disabled="inactive"
-          :aria-label="tooltipText || label"
+          :aria-label="tooltip || label"
           :aria-busy="loading"
           @click="activate"
         >
@@ -58,7 +59,7 @@ function activate() { if (!inactive.value) emit('click', props.item) }
         </button>
       </span>
     </template>
-    <span class="action-tooltip">{{ tooltipText }}</span>
+    <span class="action-tooltip">{{ tooltip }}</span>
   </v-tooltip>
 </template>
 <style scoped>

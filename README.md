@@ -29,3 +29,8 @@ Cloud service `backoffice` serves internal port 8080 at **https://sarafan-b.sw.c
 Set `SARAFAN_BACKOFFICE_LOGGING_ENABLED=true` to enable privacy-safe logs. Runtime config loads before the bundle and is uncached; changing logging requires only a container restart. Missing/invalid values disable logging. Trace propagation is independent of this switch.
 
 Run `npm run lint`, `npm run coverage`, and `npm run build`. CI enforces 95% statements, branches, functions and lines. Staff bootstrap remains an opt-in Core migration operation with credentials supplied securely; never put them in this repository.
+
+Workflow actions are pinned to verified upstream commit SHAs. Update pins in a
+reviewed pull request after checking the upstream release and running CI and the
+container build. Use a recent Docker Compose v2 supporting `--wait` and
+`--wait-timeout` for Core deployment commands.

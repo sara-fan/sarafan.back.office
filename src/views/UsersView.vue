@@ -32,7 +32,7 @@ async function load() {
   busy.value = true
   problem.value = null
   try { users.value = await session.listUsers(); page.value = Math.min(page.value, pages.value) }
-  catch (value) { problem.value = normalizeProblem(value) }
+  catch (value) { users.value = []; page.value = 1; problem.value = normalizeProblem(value) }
   finally { busy.value = false }
 }
 async function disable() {
