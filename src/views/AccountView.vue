@@ -8,9 +8,9 @@ import { useRoute, useRouter } from 'vue-router'
 import FormField from '../components/FormField.vue'
 import PageAlertRegion from '../components/PageAlertRegion.vue'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
-import { normalizeProblem, problemFieldErrors } from '../errors/problem.js'
+import { hasOnlyPresentedFieldErrors, normalizeProblem, problemFieldErrors } from '../errors/problem.js'
 import { accountPayload } from '../forms.js'
-import { roleLabel } from '../roles.js'
+import { landing, roleLabel, ROLES } from '../roles.js'
 import { useSession } from '../stores/session.js'
 const session = useSession()
 const route = useRoute()
@@ -18,7 +18,7 @@ const router = useRouter()
 const profile = route.path === '/profile'
 const id = profile ? null : Number(route.params.id) || null
 const creating = !profile && !id
-const title = profile ? 'Мой профиль' : creating ? 'Новый сотрудник' : 'Карточка сотрудника'
+const title = profile ? 'Профиль' : (creating ? 'Регистрация пользователя' : 'Изменить информацию о пользователе')
 const form = reactive({ firstName:'', lastName:'', patronymic:'', email:'', password:'', confirmation:'', roles:[], isActive:true })
 const original = ref(null)
 const catalogue = ref([])
@@ -27,19 +27,41 @@ const loaded = ref(false)
 const problem = ref(null)
 const message = ref('')
 const pending = ref(null)
+const lastAdministrator = ref(false)
 const roleErrors = computed(() => problemFieldErrors(problem.value, 'roles'))
+const presentedErrorFields = ['firstName', 'lastName', 'patronymic', 'email', 'password', 'confirmation', ...(!profile ? ['roles'] : [])]
+const pageProblem = computed(() => hasOnlyPresentedFieldErrors(problem.value, presentedErrorFields) ? null : problem.value)
+const roleDescriptions = computed(() => lastAdministrator.value ? 'roles-error last-administrator-note' : 'roles-error')
+const returnPath = computed(() => profile ? landing(session.user.value) : '/users')
+const roleRank = new Map(Object.keys(ROLES).map((code, index) => [code, index]))
+function isActiveAdministrator(value) {
+  return Boolean(value?.isActive && value.roles?.includes('administrator'))
+}
+function resetForm(value) {
+  Object.assign(form, {
+    firstName:value?.firstName || '', lastName:value?.lastName || '', patronymic:value?.patronymic || '',
+    email:value?.email || '', password:'', confirmation:'', roles:[...(value?.roles || [])], isActive:value?.isActive ?? true
+  })
+}
 async function load() {
   loaded.value = false
   busy.value = true
   problem.value = null
+  lastAdministrator.value = false
   try {
     if (profile) original.value = session.user.value
     else {
-      const [roles, user] = await Promise.all([session.getRoles(), id ? session.getUser(id) : Promise.resolve(null)])
-      catalogue.value = roles
+      const [roles, user, users] = await Promise.all([
+        session.getRoles(),
+        id ? session.getUser(id) : Promise.resolve(null),
+        id ? session.listUsers() : Promise.resolve([])
+      ])
+      catalogue.value = [...roles].sort((left, right) => (roleRank.get(left.code) ?? roleRank.size) - (roleRank.get(right.code) ?? roleRank.size))
       original.value = user
+      lastAdministrator.value = isActiveAdministrator(user)
+        && users.filter(isActiveAdministrator).length <= 1
     }
-    if (original.value) Object.assign(form, original.value, { patronymic:original.value.patronymic || '', roles:[...original.value.roles] })
+    resetForm(original.value)
     loaded.value = true
   } catch (value) { problem.value = normalizeProblem(value) }
   finally { busy.value = false }
@@ -70,26 +92,45 @@ async function submit() {
     else await save(payload)
   } catch (value) { problem.value = normalizeProblem(value) }
 }
+function cancel() {
+  if (returnPath.value === route.path) {
+    problem.value = null
+    message.value = ''
+    resetForm(original.value)
+  } else router.push(returnPath.value)
+}
 onMounted(load)
 </script>
 <template>
-  <section>
-    <header class="page-heading">
-      <div>
-        <p class="eyebrow">
-          {{ profile ? 'ЛИЧНЫЙ КАБИНЕТ' : 'УПРАВЛЕНИЕ КОМАНДОЙ' }}
-        </p><h1>{{ title }}</h1><p class="muted">
-          {{ profile ? 'Ваши данные и безопасность учётной записи' : 'Личные данные, роли и доступ сотрудника' }}
-        </p>
-      </div><RouterLink
-        :to="profile ? '/home' : '/users'"
-        class="text-link"
+  <section class="settings form-medium">
+    <header class="header-with-actions">
+      <h1 class="primary-heading">
+        {{ title }}
+      </h1>
+      <div
+        v-if="loaded"
+        class="header-actions"
       >
-        ← Назад
-      </RouterLink>
+        <ActionButton
+          type="submit"
+          form="account-form"
+          variant="blue"
+          :loading="busy"
+          icon="$saveChanges"
+          icon-size="28"
+          :tooltip-text="creating ? 'Создать пользователя' : 'Сохранить изменения'"
+        /><ActionButton
+          icon="$close"
+          icon-size="28"
+          tooltip-text="Отменить"
+          :disabled="busy"
+          @click="cancel"
+        />
+      </div>
     </header>
+    <hr class="hr">
     <PageAlertRegion
-      :problem="problem"
+      :problem="pageProblem"
       :message="message"
     />
     <p
@@ -109,137 +150,133 @@ onMounted(load)
     />
     <form
       v-else
-      novalidate
+      id="account-form"
       class="account-form"
+      novalidate
       @submit.prevent="submit"
     >
       <fieldset :disabled="busy">
-        <section class="form-card">
-          <h2>Личные данные</h2><p class="muted">
-            Имя и фамилия обязательны для заполнения
-          </p><div class="form-grid">
-            <FormField
-              v-model="form.lastName"
-              name="lastName"
-              label="Фамилия"
-              maxlength="100"
-              autocomplete="family-name"
-              :problem="problem"
-            /><FormField
-              v-model="form.firstName"
-              name="firstName"
-              label="Имя"
-              maxlength="100"
-              autocomplete="given-name"
-              :problem="problem"
-            /><FormField
-              v-model="form.patronymic"
-              name="patronymic"
-              label="Отчество · необязательно"
-              maxlength="100"
-              autocomplete="additional-name"
-              :problem="problem"
-            /><FormField
-              v-model="form.email"
-              name="email"
-              label="Электронная почта"
-              type="email"
-              :readonly="profile"
-              maxlength="254"
-              autocomplete="username"
-              :problem="problem"
-            />
-          </div>
-        </section>
-        <section class="form-card">
-          <h2>Безопасность</h2><p class="muted">
-            {{ creating ? 'Задайте пароль для первого входа сотрудника.' : 'Оставьте поля пустыми, чтобы сохранить текущий пароль.' }} Не менее 12 символов, не более 72 байт UTF-8.
-          </p><div class="form-grid">
-            <FormField
-              v-model="form.password"
-              name="password"
-              :label="creating ? 'Пароль' : 'Новый пароль'"
-              type="password"
-              autocomplete="new-password"
-              :problem="problem"
-            /><FormField
-              v-model="form.confirmation"
-              name="confirmation"
-              label="Повторите пароль"
-              type="password"
-              autocomplete="new-password"
-              :problem="problem"
-            />
-          </div>
-        </section>
-        <section class="form-card">
-          <h2>Роли и доступ</h2><div
-            v-if="profile"
-            class="role-row"
-          >
-            <span
-              v-for="role in form.roles"
-              :key="role"
-              class="role-chip"
-            >{{ roleLabel(role) }}</span>
-          </div><template v-else>
-            <p class="muted">
-              Можно выбрать несколько ролей. Управлять сотрудниками может только администратор.
-            </p><div
-              class="role-options"
-              role="group"
-              aria-label="Роли сотрудника"
-              aria-describedby="roles-error"
+        <FormField
+          v-model="form.lastName"
+          name="lastName"
+          label="Фамилия:"
+          placeholder="Фамилия"
+          maxlength="100"
+          autocomplete="family-name"
+          :problem="problem"
+        /><FormField
+          v-model="form.firstName"
+          name="firstName"
+          label="Имя:"
+          placeholder="Имя"
+          maxlength="100"
+          autocomplete="given-name"
+          :problem="problem"
+        /><FormField
+          v-model="form.patronymic"
+          name="patronymic"
+          label="Отчество:"
+          placeholder="Отчество"
+          maxlength="100"
+          autocomplete="additional-name"
+          :problem="problem"
+        /><FormField
+          v-model="form.email"
+          name="email"
+          label="Адрес электронной почты:"
+          placeholder="Адрес электронной почты"
+          type="email"
+          :readonly="profile"
+          maxlength="254"
+          autocomplete="username"
+          :problem="problem"
+        /><FormField
+          v-model="form.password"
+          name="password"
+          label="Пароль:"
+          placeholder="Пароль"
+          type="password"
+          autocomplete="new-password"
+          revealable
+          :hint="creating ? 'От 8 до 18 символов.' : 'Оставьте пустым, чтобы сохранить текущий пароль. От 8 до 18 символов.'"
+          :problem="problem"
+        /><FormField
+          v-model="form.confirmation"
+          name="confirmation"
+          label="Пароль ещё раз:"
+          placeholder="Пароль"
+          type="password"
+          autocomplete="new-password"
+          revealable
+          :problem="problem"
+        />
+        <div class="account-form-row">
+          <span class="account-form-label">Права:</span>
+          <div class="account-form-control">
+            <p
+              v-if="lastAdministrator"
+              id="last-administrator-note"
+              class="protection-note"
             >
-              <label
-                v-for="role in catalogue"
-                :key="role.code"
-                class="check"
-              ><input
-                v-model="form.roles"
-                type="checkbox"
-                name="roles"
-                :value="role.code"
-              >{{ roleLabel(role.code) }}</label>
-            </div><div
-              id="roles-error"
-              class="field-error"
+              Последнего активного администратора нельзя отключить или лишить роли.
+            </p><div
+              v-if="profile"
+              class="role-row"
             >
               <span
-                v-for="error in roleErrors"
-                :key="error"
-              >{{ error }}</span>
-            </div><label
-              v-if="!creating"
-              class="check active-check"
-            ><input
-              v-model="form.isActive"
-              type="checkbox"
-            >Учётная запись активна</label>
-          </template>
-        </section>
-        <div class="form-actions">
-          <ActionButton
-
-            icon="$close"
-            label="Отмена"
-            tooltip-text="Отмена"
-            @click="router.push(profile ? '/home' : '/users')"
-          /><ActionButton
-            type="submit"
-            variant="blue"
-            :loading="busy"
-            icon="$save"
-            :label="creating ? 'Создать сотрудника' : 'Сохранить изменения'"
-            :tooltip-text="creating ? 'Создать сотрудника' : 'Сохранить изменения'"
-          />
+                v-for="role in form.roles"
+                :key="role"
+                class="role-chip"
+              >{{ roleLabel(role) }}</span>
+            </div><template v-else>
+              <div
+                class="role-options"
+                role="group"
+                aria-label="Роли пользователя"
+                :aria-describedby="roleDescriptions"
+              >
+                <label
+                  v-for="role in catalogue"
+                  :key="role.code"
+                  class="check"
+                ><input
+                  v-model="form.roles"
+                  type="checkbox"
+                  name="roles"
+                  :value="role.code"
+                  :disabled="lastAdministrator && role.code === 'administrator'"
+                  :aria-describedby="lastAdministrator && role.code === 'administrator' ? 'last-administrator-note' : undefined"
+                >{{ roleLabel(role.code) }}</label>
+              </div><div
+                id="roles-error"
+                class="field-error"
+              >
+                <span
+                  v-for="error in roleErrors"
+                  :key="error"
+                >{{ error }}</span>
+              </div>
+            </template>
+          </div>
+        </div>
+        <div
+          v-if="!profile && !creating"
+          class="account-form-row"
+        >
+          <span class="account-form-label">Статус:</span><label class="check"><input
+            v-model="form.isActive"
+            type="checkbox"
+            name="isActive"
+            :disabled="lastAdministrator"
+            :aria-describedby="lastAdministrator ? 'last-administrator-note' : undefined"
+          >Учётная запись активна</label>
         </div>
       </fieldset>
     </form>
     <ConfirmDialog
       :open="Boolean(pending)"
       title="Изменить данные доступа?"
-      message="Все сеансы сотрудника будут завершены. Для продолжения работы потребуется войти повторно."
+      message="Все сеансы пользователя будут завершены. Для продолжения работы потребуется войти повторно."
       action="Сохранить изменения"
       @cancel="pending = null"
       @confirm="save(pending)"

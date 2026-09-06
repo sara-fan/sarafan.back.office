@@ -58,6 +58,20 @@ describe('staff session boundary', () => {
     await expect(s.listUsers()).rejects.toMatchObject({code:'ui_network_unavailable'}); expect(s.user.value).not.toBeNull()
     await expect(s.listUsers()).rejects.toMatchObject({code:'invalid_backoffice_refresh_token'}); expect(s.user.value).toBeNull()
   })
+  it.each([
+    ['an HTML gateway error', response(502,null,'text/html')],
+    ['a structured server error', problemResponse(503,'service-unavailable')]
+  ])('forces logoff with a safe message after %s', async (_label, unavailable) => {
+    vi.stubGlobal('fetch',vi.fn().mockResolvedValueOnce(auth()).mockResolvedValueOnce(unavailable))
+    const s=createSession();await s.login('a@b.test','p')
+    await expect(s.listUsers()).rejects.toMatchObject({code:'ui_service_unavailable',detail:'Сервис недоступен. Пожалуйста, повторите позже.'})
+    expect(s.user.value).toBeNull();expect(s.notice.value).toBe('');expect(s.loginProblem.value).toMatchObject({code:'ui_service_unavailable',detail:'Сервис недоступен. Пожалуйста, повторите позже.'})
+  })
+  it('shows the service notice instead of restore recovery for an HTML gateway error', async () => {
+    vi.stubGlobal('fetch',vi.fn().mockResolvedValue(response(502,null,'text/html')))
+    const s=createSession();await s.ensureReady()
+    expect(s.user.value).toBeNull();expect(s.restoreProblem.value).toBeNull();expect(s.notice.value).toBe('');expect(s.loginProblem.value).toMatchObject({code:'ui_service_unavailable'})
+  })
   it('never restores stale responses after logout or a subsequent login', async () => {
     const login=deferred(), list=deferred(), refresh=deferred()
     const fetch=vi.fn().mockReturnValueOnce(login.promise).mockResolvedValueOnce(response(204)).mockResolvedValueOnce(auth()).mockReturnValueOnce(list.promise).mockResolvedValueOnce(response(204)).mockReturnValueOnce(refresh.promise).mockResolvedValueOnce(response(204))

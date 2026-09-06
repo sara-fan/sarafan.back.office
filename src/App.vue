@@ -4,17 +4,18 @@
 // This file is a part of the Sarafan application
 import ActionButton from './components/ActionButton.vue'
 import { onMounted, ref, watch } from 'vue'
+import { useDisplay } from 'vuetify'
 import { useRouter } from 'vue-router'
 import { version } from '../package.json'
-import { can, fullName, landing } from './roles.js'
+import { can, fullName, landing, profileRoute } from './roles.js'
 import { useSession } from './stores/session.js'
 import { suppressProblem } from './errors/problem.js'
 import PageAlertRegion from './components/PageAlertRegion.vue'
 const session = useSession()
 const { user, ready, restoring, restoreProblem } = session
 const router = useRouter()
-const menu = ref(false)
-const collapsed = ref(false)
+const { mdAndUp } = useDisplay()
+const drawer = ref(mdAndUp.value)
 const coreVersion = ref('')
 async function retry() {
   await session.restoreSession()
@@ -22,7 +23,8 @@ async function retry() {
 }
 async function signOut() { await session.logout(); await router.replace('/login') }
 watch(user, value => { if (!value && ready.value && !restoreProblem.value) router.replace('/login') })
-watch(() => router.currentRoute.value.fullPath, () => { menu.value = false })
+watch(mdAndUp, value => { drawer.value = value })
+watch(() => router.currentRoute.value.fullPath, () => { if (!mdAndUp.value) drawer.value = false })
 onMounted(async () => {
   try { const result = await session.getStatus(); coreVersion.value = result.appVersion || '' }
   catch (problem) { suppressProblem(problem, { operation:'status.version.load' }) }
@@ -53,99 +55,81 @@ onMounted(async () => {
       </p>
     </main>
     <RouterView v-else-if="!user" />
-    <div
-      v-else
-      :class="['app-frame', { 'nav-collapsed':collapsed }]"
-      @keydown.esc="menu = false"
-    >
-      <button
-        v-if="menu"
-        class="drawer-backdrop"
-        aria-label="Закрыть меню"
-        @click="menu = false"
-      />
-      <aside :class="['sidebar', { 'is-open':menu }]">
-        <RouterLink
-          class="brand"
-          to="/home"
-          aria-label="Сарафан · Главная"
-        >
-          <img
-            :src="'/sarafan-gzhel-icon.png'"
-            alt=""
-          ><span>САРАФАН<small>БЭК-ОФИС</small></span>
-        </RouterLink>
-        <p class="nav-label">
-          РАБОЧЕЕ ПРОСТРАНСТВО
-        </p><nav aria-label="Главная навигация">
+    <template v-else>
+      <v-app-bar
+        class="app-bar"
+        height="64"
+        elevation="1"
+      >
+        <template #prepend>
+          <v-app-bar-nav-icon
+            color="primary"
+            aria-label="Открыть меню"
+            :aria-expanded="drawer"
+            @click.stop="drawer = !drawer"
+          />
+        </template>
+        <v-app-bar-title class="app-title">
+          <span class="app-user">{{ fullName(user) }}</span>
+        </v-app-bar-title>
+      </v-app-bar>
+      <v-navigation-drawer
+        v-model="drawer"
+        :permanent="mdAndUp"
+        :temporary="!mdAndUp"
+        elevation="4"
+        width="256"
+      >
+        <template #prepend>
           <RouterLink
-            to="/home"
-            aria-label="Главная"
-            title="Главная"
+            class="drawer-brand"
+            :to="landing(user)"
+            aria-label="Сарафан · Офис"
           >
-            <v-icon
-              icon="$home"
-              size="20"
-            /><span>Главная</span>
-          </RouterLink><RouterLink
+            <img
+              :src="'/sarafan-gzhel-icon.png'"
+              alt=""
+            ><span>САРАФАН<small>ОФИС</small></span>
+          </RouterLink>
+        </template>
+        <v-list aria-label="Главная навигация">
+          <v-list-item
             v-if="can(user, 'manageUsers')"
             to="/users"
-            aria-label="Сотрудники"
-            title="Сотрудники"
-          >
-            <v-icon
-              icon="$profile"
-              size="20"
-            /><span>Сотрудники</span>
-          </RouterLink><RouterLink
-            to="/profile"
-            aria-label="Мой профиль"
-            title="Мой профиль"
-          >
-            <v-icon
-              icon="$profile"
-              size="20"
-            /><span>Мой профиль</span>
-          </RouterLink>
-        </nav>
-        <footer class="sidebar-footer">
-          <ActionButton
-            class="collapse-navigation"
-            :icon="collapsed ? '$next' : '$previous'"
-            :tooltip-text="collapsed ? 'Развернуть навигацию' : 'Свернуть навигацию'"
-            :aria-expanded="!collapsed"
-            @click="collapsed = !collapsed"
+            class="drawer-link"
+            prepend-icon="$staff"
+            title="Пользователи"
           />
-          <span>Сарафан · Бэк-офис {{ version }}</span><span v-if="coreVersion">Core {{ coreVersion }}</span><span>Работаем с заботой о деталях</span>
-        </footer>
-      </aside>
-      <div class="workspace">
-        <header class="topbar">
-          <ActionButton
-            class="menu-button"
-            icon="$menu"
-            tooltip-text="Открыть меню"
-            :aria-expanded="menu"
-            @click="menu = !menu"
-          /><span class="topbar-caption">Служебное пространство</span><div class="identity">
-            <RouterLink to="/profile">
-              {{ fullName(user) }}
-            </RouterLink><ActionButton
-              icon="$logout"
-              label="Выйти"
-              tooltip-text="Выйти"
-              @click="signOut"
-            />
+          <v-list-item
+            :to="profileRoute(user)"
+            class="drawer-link"
+            prepend-icon="$profile"
+            title="Профиль"
+          />
+          <v-list-item
+            tag="button"
+            type="button"
+            class="drawer-action"
+            prepend-icon="$logout"
+            title="Выход"
+            aria-label="Выйти"
+            @click="signOut"
+          />
+        </v-list>
+        <template #append>
+          <div class="version-info">
+            <span>Клиент {{ version }}</span><span v-if="coreVersion">Сервер {{ coreVersion }}</span>
           </div>
-        </header><main
+        </template>
+      </v-navigation-drawer>
+      <v-main class="app-main">
+        <main
           id="main-content"
-          class="page-content"
+          class="app-page-shell"
         >
           <RouterView :key="$route.path" />
-        </main><footer class="workspace-footer">
-          © 2026 Сарафан <span>Бэк-офис</span>
-        </footer>
-      </div>
-    </div>
+        </main>
+      </v-main>
+    </template>
   </v-app>
 </template>

@@ -4,11 +4,23 @@
 
 import { readonly, ref } from 'vue'
 import { createApiClient } from '../api/client.js'
-import { CORE_PROBLEM_TYPES, createInternalProblem, suppressProblem } from '../errors/problem.js'
+import { CORE_PROBLEM_TYPES, INTERNAL_PROBLEM_TYPES, createInternalProblem, suppressProblem } from '../errors/problem.js'
 import { can } from '../roles.js'
 
 const BASE = '/api/v1/backoffice'
 const json = (method, body) => ({ method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+
+function isServiceUnavailable(problem) {
+  return problem?.type === INTERNAL_PROBLEM_TYPES.protocolError
+    || problem?.type === INTERNAL_PROBLEM_TYPES.serviceUnavailable
+    || (Number.isInteger(problem?.status) && problem.status >= 500)
+}
+
+function serviceUnavailableProblem(problem) {
+  return problem?.type === INTERNAL_PROBLEM_TYPES.serviceUnavailable
+    ? problem
+    : createInternalProblem('serviceUnavailable', { cause:problem })
+}
 
 export function createSession() {
   const user = ref(null)
@@ -16,17 +28,24 @@ export function createSession() {
   const restoring = ref(false)
   const restoreProblem = ref(null)
   const notice = ref('')
+  const loginProblem = ref(null)
   let token = ''
   let epoch = 0
   let refreshing = null
   let initialization = null
   const client = createApiClient({ getAccessToken: () => token, refreshSession })
 
-  function clearSession(message = '') {
+  function clearSession(message = '', problem = null) {
     epoch += 1
     token = ''
     user.value = null
     notice.value = message
+    loginProblem.value = problem
+  }
+  function forceLogoff(problem) {
+    const unavailable = serviceUnavailableProblem(problem)
+    clearSession('', unavailable)
+    return unavailable
   }
   function applySession(session, generation) {
     if (generation !== epoch) return null
@@ -37,19 +56,24 @@ export function createSession() {
     token = session.accessToken
     user.value = session.user
     notice.value = ''
+    loginProblem.value = null
     return user.value
   }
   async function refreshSession(operationTrace) {
     if (!refreshing) {
       const generation = epoch
       const pending = client.request(`${BASE}/auth/refresh`, { method:'POST' }, { operationTrace })
-        .then(session => applySession(session, generation))
         .catch(problem => {
-          if (generation === epoch && problem.type === CORE_PROBLEM_TYPES.invalidRefreshToken) {
-            clearSession(user.value ? 'Сеанс завершён. Войдите повторно.' : '')
+          if (generation === epoch) {
+            if (problem.type === CORE_PROBLEM_TYPES.invalidRefreshToken) {
+              clearSession(user.value ? 'Сеанс завершён. Войдите повторно.' : '')
+            } else if (isServiceUnavailable(problem)) {
+              throw forceLogoff(problem)
+            }
           }
           throw problem
         })
+        .then(session => applySession(session, generation))
         .finally(() => { if (refreshing === pending) refreshing = null })
       refreshing = pending
     }
@@ -60,7 +84,8 @@ export function createSession() {
     restoreProblem.value = null
     try { await refreshSession() }
     catch (problem) {
-      if (problem.type !== CORE_PROBLEM_TYPES.invalidRefreshToken) restoreProblem.value = problem
+      if (problem.type !== CORE_PROBLEM_TYPES.invalidRefreshToken
+        && problem.type !== INTERNAL_PROBLEM_TYPES.serviceUnavailable) restoreProblem.value = problem
     } finally { restoring.value = false; ready.value = true }
   }
   function ensureReady() {
@@ -71,7 +96,15 @@ export function createSession() {
   async function login(email, password) {
     clearSession()
     const generation = epoch
-    const result = await client.request(`${BASE}/auth/login`, json('POST', { email:email.trim(), password }))
+    let result
+    try {
+      result = await client.request(`${BASE}/auth/login`, json('POST', { email:email.trim(), password }))
+    } catch (problem) {
+      if (generation === epoch && isServiceUnavailable(problem)) {
+        throw forceLogoff(problem)
+      }
+      throw problem
+    }
     return applySession(result, generation)
   }
   async function logout(message = '') {
@@ -86,8 +119,13 @@ export function createSession() {
       if (generation !== epoch) throw createInternalProblem('sessionRestoreUnavailable')
       return result
     } catch (problem) {
-      if (generation === epoch && [CORE_PROBLEM_TYPES.invalidAccessToken, CORE_PROBLEM_TYPES.invalidRefreshToken].includes(problem.type)) {
-        clearSession('Сеанс завершён. Войдите повторно.')
+      if (generation === epoch) {
+        if (isServiceUnavailable(problem)) {
+          throw forceLogoff(problem)
+        }
+        if ([CORE_PROBLEM_TYPES.invalidAccessToken, CORE_PROBLEM_TYPES.invalidRefreshToken].includes(problem.type)) {
+          clearSession('Сеанс завершён. Войдите повторно.')
+        }
       }
       throw problem
     }
@@ -111,7 +149,7 @@ export function createSession() {
     return result
   }
   return {
-    user:readonly(user), ready:readonly(ready), restoring:readonly(restoring), restoreProblem:readonly(restoreProblem), notice:readonly(notice),
+    user:readonly(user), ready:readonly(ready), restoring:readonly(restoring), restoreProblem:readonly(restoreProblem), notice:readonly(notice), loginProblem:readonly(loginProblem),
     ensureReady, restoreSession, login, logout, saveUser, saveProfile,
     listUsers: () => request('/users'), getUser: id => request(`/users/${id}`), getRoles: () => request('/users/ops'),
     getStatus: () => client.request('/api/v1/status/status')

@@ -22,6 +22,11 @@ function activate() { if (!inactive.value) emit('click', props.item) }
   <v-tooltip
     :disabled="!tooltip"
     :open-delay="300"
+    :text="tooltip"
+    location="top"
+    :offset="8"
+    :max-width="320"
+    content-class="action-tooltip-content"
   >
     <template #activator="{ props: activator }">
       <span
@@ -59,7 +64,6 @@ function activate() { if (!inactive.value) emit('click', props.item) }
         </button>
       </span>
     </template>
-    <span class="action-tooltip">{{ tooltip }}</span>
   </v-tooltip>
 </template>
 <style scoped>
@@ -70,6 +74,6 @@ function activate() { if (!inactive.value) emit('click', props.item) }
 .action-button--blue { color:#2478b8; }.action-button--green { color:#207762; }.action-button--orange { color:#a65b1c; }.action-button--red { color:#b4234d; }
 .action-button--blue.action-button--labelled { color:white; background:#2478b8; border-color:#2478b8; }
 .action-button--blue.action-button--labelled:not(:disabled):hover { color:white; background:#1d3e85; }
-.action-button:disabled { opacity:.5; cursor:not-allowed; }.action-tooltip { white-space:pre-line; }
+.action-button:disabled { opacity:.5; cursor:not-allowed; }
 @media(prefers-reduced-motion:reduce){.action-button{transition:none}}
 </style>

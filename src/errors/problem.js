@@ -20,5 +20,20 @@ export const CORE_PROBLEM_TYPES = Object.freeze({
 
 export const { INTERNAL_PROBLEM_TYPES, createInternalProblem, normalizeProblem, presentProblem, problemFieldErrors, suppressProblem } = createProblemTools({
   logger: uiLogger, suppressedEvent: EVENTS.operationSuppressed, additions: {
+    serviceUnavailable: {
+      suffix: 'service-unavailable',
+      code: 'ui_service_unavailable',
+      title: 'Сервис недоступен',
+      detail: 'Сервис недоступен. Пожалуйста, повторите позже.'
+    }
   }
 })
+
+export function hasOnlyPresentedFieldErrors(value, fields) {
+  if (!value?.errors || typeof value.errors !== 'object' || Array.isArray(value.errors)) return false
+  const presented = new Set(fields.map(field => field.toLowerCase()))
+  const entries = Object.entries(value.errors)
+  return entries.length > 0 && entries.every(([field, messages]) =>
+    presented.has(field.toLowerCase()) && Array.isArray(messages) && messages.length > 0
+  )
+}

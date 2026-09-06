@@ -42,7 +42,8 @@ For other comment-capable formats, use the same three lines with that format's n
 - Create internal problems through the centralized catalogue. Their type, code, Russian title, and safe Russian default detail are stable UI contracts; generate a unique `instance` for each occurrence.
 - Keep an internal problem's original JavaScript `cause` non-enumerable and diagnostic-only. Never render, serialize, persist, or log the cause or raw payload, especially when it may contain personal data, tokens, or browser/native error text.
 - Represent local and remote validation with structured `errors` collections and expose field messages through the shared helper instead of flattening them into a generic string.
-- Preserve single-flight token refresh and retry an authorized request at most once. Treat only the canonical invalid-refresh-token problem type as expected session expiry; distinguish network/protocol restore failures and offer an explicit retry state.
+- Preserve single-flight token refresh and retry an authorized request at most once. Treat only the canonical invalid-refresh-token problem type as expected session expiry; distinguish network restore failures and offer an explicit retry state.
+- Treat HTTP 5xx responses and invalid HTTP response formats as service unavailability. Clear the authenticated session and show `Сервис недоступен. Пожалуйста, повторите позже.` on the login screen.
 - Route intentional suppression through a named shared policy. Version lookup and server logout failures may be suppressed after normalization.
 - Add tests for every new problem type, parser validation and retry branch, structured field errors, non-serialization of causes, and intentional recovery/suppression policy. New and modified code must satisfy the repository's 95% coverage thresholds.
 
@@ -61,8 +62,9 @@ For other comment-capable formats, use the same three lines with that format's n
 ## Shared infrastructure and UI behavior
 
 - Use @sara-fan/ui-shared for problem parsing, HTTP transport, tracing and privacy-safe diagnostics. Keep identity state, runtime configuration, route allowlists, fixed event catalogues and domain-specific problems in this application.
+- Follow the Logibooks operational workspace pattern: land directly on the role's primary work screen; use a light Vuetify app bar and navigation drawer; use compact blue page headings, separators and grouped icon actions; and keep forms and tables dense. Account editors use the flat compact Logibooks row layout, edit title and double-check save action, with accessible eye/crossed-eye controls for both password fields. Use a simple, vertically centered login form with Sarafan branding and enough width for common errors.
 - Every user-relevant failure has one presentation owner. Stores reject transport/server failures; no empty catches or unobserved promise rejections. Expected suppression uses the named shared policy.
-- Render one shared page alert immediately below the heading. Put field errors beneath controls without shrinking inputs. Failed forms retain values; navigate only after success. Clear stale alerts on successful navigation.
+- Render one shared page alert immediately below the heading for failures that need page-level presentation. Omit it when all validation failures are already presented beneath visible controls. Put field errors beneath controls without shrinking inputs. Failed forms retain values; navigate only after success. Clear stale alerts on successful navigation.
 - Use shared confirmation/dialog primitives and Sarafan semantic colors, explicit action labels and keyboard-accessible controls. Color is never the only indication of meaning.
 - Add asynchronous rejection-path tests verifying propagation and visible presentation, preserved failed forms, retry behavior and duplicate-reporting prevention. Run lint, coverage and build before handoff.
 - Pin shared-package release tarball URLs and commit lockfile integrity. Do not commit sibling file dependencies. Shared changes require packed-artifact tests in both consumers.
@@ -74,6 +76,8 @@ For other comment-capable formats, use the same three lines with that format's n
 - Authorize by the stable administrator, shift-manager, senior-operator and operator codes through a deny-by-default action matrix; only administrator can manage staff.
 - Keep all account state scoped to the current session; ignore stale asynchronous responses after logout or identity change. Server authorization remains authoritative.
 - Disable rather than delete. Preserve the last-administrator protection and require login after security-relevant self-changes.
+- Route an administrator's Profile entry to `/users/{ownId}` so it uses the full staff account editor; keep `/profile` as the restricted self-service form for non-administrators.
+- Require back-office passwords to contain 8 to 18 characters and describe both limits in characters. Keep UI validation and guidance aligned with Core; do not ask users to count encoded bytes.
 - Serve on its own origin/container at sb.sw.consulting. Keep logging identity and runtime configuration independent of the customer application.
 
 ## Action buttons

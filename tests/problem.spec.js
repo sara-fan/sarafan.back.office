@@ -8,6 +8,7 @@ import {
   INTERNAL_PROBLEM_TYPES,
   ProblemError,
   createInternalProblem,
+  hasOnlyPresentedFieldErrors,
   normalizeProblem,
   presentProblem,
   problemFieldErrors,
@@ -90,6 +91,9 @@ describe('shared problem model', () => {
       errors: { phone: ['Введите номер телефона'] }
     })
     expect(problemFieldErrors(validation, 'phone')).toEqual(['Введите номер телефона'])
+    expect(hasOnlyPresentedFieldErrors(validation, ['phone'])).toBe(true)
+    expect(hasOnlyPresentedFieldErrors(validation, ['email'])).toBe(false)
+    expect(hasOnlyPresentedFieldErrors(createInternalProblem('unexpectedError'), ['phone'])).toBe(false)
     expect(suppressProblem(validation, { operation: 'validation.local', logger })).toBe(validation)
     expect(suppressProblem(new Error('hidden'), {
       detail: 'Безопасная диагностика',
