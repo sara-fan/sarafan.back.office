@@ -3,6 +3,9 @@ All rights reserved.
 This file is a part of the Sarafan application -->
 
 # Sarafan Back Office 0.0.1
+[![ci](https://github.com/sara-fan/sarafan.back.office/actions/workflows/ci.yml/badge.svg)](https://github.com/sara-fan/sarafan.back.office/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/sara-fan/sarafan.back.office/graph/badge.svg?token=u3gQ7usaRT)](https://codecov.io/gh/sara-fan/sarafan.back.office)
+
 
 Staff application for [back-office issue #1](https://github.com/sara-fan/sarafan.back.office/issues/1), using the separate identity API from [Core #13](https://github.com/sara-fan/sarafan.core/issues/13). Russian UI, Sarafan design tokens and Logibooks-style staff management and ActionButton controls.
 
