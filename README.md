@@ -1,7 +1,3 @@
-<!-- Copyright (C) 2026 Maxim [maxirmx] Samsonov (www.sw.consulting)
-All rights reserved.
-This file is a part of the Sarafan application -->
-
 # Sarafan Back Office 0.0.2
 [![ci](https://github.com/sara-fan/sarafan.back.office/actions/workflows/ci.yml/badge.svg)](https://github.com/sara-fan/sarafan.back.office/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/sara-fan/sarafan.back.office/graph/badge.svg?token=u3gQ7usaRT)](https://codecov.io/gh/sara-fan/sarafan.back.office)
@@ -50,4 +46,4 @@ container build. Use a recent Docker Compose v2 supporting `--wait` and
 
 ## Legal documents and privacy requests
 
-The coordinated implementation follows [spec v1.16 §4.18](https://github.com/sara-fan/sarafan.spec/issues/30). [Core API and rollout guide](https://github.com/sara-fan/sarafan.core/blob/v008/docs/customer-consents.md); [contract and text templates](https://github.com/sara-fan/sarafan.spec/blob/consents/spec/Consent%20implementation%20contract.md). Legal text must be prepared and published by an Administrator before registration can process personal data; no consent is silently granted to existing customers.
+The coordinated implementation follows [spec v1.16 §4.18](https://github.com/sara-fan/sarafan.spec/issues/30). [Core API and rollout guide](https://github.com/sara-fan/sarafan.core/blob/v007/docs/customer-consents.md); [contract and text templates](https://github.com/sara-fan/sarafan.spec/blob/consents/spec/Consent%20implementation%20contract.md). An Administrator previews and creates each immutable legal document once with its effective Moscow date. Numeric kind values and their Russian names come from the authorized Core `legal-documents/ops` catalogue before lists and forms render. Creation and permitted pre-effective deletion remain visible in the independent audit table; no consent is silently granted to existing customers.

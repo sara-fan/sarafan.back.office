@@ -9,7 +9,8 @@ import LoginView from './views/LoginView.vue'
 import UsersView from './views/UsersView.vue'
 import AccountView from './views/AccountView.vue'
 import LegalDocumentsView from './views/LegalDocumentsView.vue'
-import CustomerConsentsView from './views/CustomerConsentsView.vue'
+import LegalDocumentView from './views/LegalDocumentView.vue'
+import LegalDocumentAuditView from './views/LegalDocumentAuditView.vue'
 import PrivacyRequestsView from './views/PrivacyRequestsView.vue'
 import StatusView from './views/StatusView.vue'
 
@@ -22,8 +23,10 @@ export function createAppRouter(history = createWebHistory(), session = useSessi
     { path:'/users/new', component:AccountView, meta:{ action:'manageUsers' } },
     { path:'/users/:id([1-9]\\d*)', component:AccountView, meta:{ action:'manageUsers' } },
     { path:'/legal-documents', component:LegalDocumentsView, meta:{ action:'manageLegalDocuments' } },
-    { path:'/customer-consents', component:CustomerConsentsView, meta:{ action:'manageLegalDocuments' } },
-    { path:'/privacy-requests', component:PrivacyRequestsView, meta:{ action:'manageLegalDocuments' } },
+    { path:'/legal-documents/new', component:LegalDocumentView, meta:{ action:'manageLegalDocuments' } },
+    { path:'/legal-documents/audit', component:LegalDocumentAuditView, meta:{ action:'manageLegalDocuments' } },
+    { path:'/legal-documents/:id([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})', component:LegalDocumentView, meta:{ action:'manageLegalDocuments' } },
+    { path:'/privacy-requests', component:PrivacyRequestsView, meta:{ action:'manageConsentWithdrawalRequests' } },
     { path:'/profile', component:AccountView },
     { path:'/forbidden', component:StatusView, props:{ forbidden:true } },
     { path:'/:pathMatch(.*)*', component:StatusView }

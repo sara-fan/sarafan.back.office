@@ -53,6 +53,8 @@ fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
 .primary-heading { margin: 0; color: var(--primary); font-family: inherit; font-size: clamp(27px, 2.4vw, 34px); font-weight: 500; line-height: 1.2; letter-spacing: 0; }
 .count { display: inline-block; padding: 3px 9px; color: var(--primary); font-size: 14px; font-weight: 650; vertical-align: middle; background: #e4f2fa; border-radius: 12px; }
 .header-actions { display: flex; align-items: center; gap: 3px; flex: 0 0 auto; padding: 5px 7px; background: #fff; border: 1px solid #9aa8b5; border-radius: 7px; box-shadow: 0 2px 5px rgb(21 50 77 / 10%); }
+.header-spinner { width: 18px; height: 18px; margin: 0 7px; border: 2px solid #c6dce9; border-top-color: var(--primary); border-radius: 50%; animation: header-spin .75s linear infinite; }
+@keyframes header-spin { to { transform: rotate(360deg); } }
 .hr { height: 2px; margin: 7px 0 20px; background: var(--primary); border: 0; }
 .filter-bar { display: grid; grid-template-columns: minmax(260px, 1fr) minmax(180px, 240px) minmax(170px, 220px); gap: 12px; align-items: stretch; margin-bottom: 14px; }
 .filter-bar .v-input, .filter-bar .v-input__control, .filter-bar .v-field { height: 100%; min-width: 0; }
@@ -88,6 +90,8 @@ fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
 .account-form-control { min-width: 0; }
 .account-form .role-options { margin: 0; }
 .account-form .protection-note { margin: 0 0 8px; }
+.editor-form { width:100%; }
+.editor-form .v-field { background:#f7f7f7; border-radius:4px; }
 .form-field label { display: block; margin-bottom: 7px; color: #38516d; font-size: 13px; }
 .field-error { display: grid; gap: 4px; margin: 5px 0; color: #b4234d; font-size: 12px; }
 .form-field input:not([type="checkbox"]), .form-field select { width: 100%; min-height: 42px; padding: 9px 11px; color: var(--ink); background: #fff; border: 1px solid #b9cad8; border-radius: 4px; }
@@ -99,9 +103,11 @@ fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
 .protection-note { padding: 9px 12px; margin: 14px 0 0; color: #7b5217; font-size: 13px; background: #fff8e8; border: 1px solid #ecd9ae; border-radius: 4px; }
 
 /* Shared feedback and confirmation surfaces */
-.page-alert, .page-notice { padding: 13px 16px; margin: 0 0 16px; font-size: 14px; line-height: 1.5; border-radius: 4px; }
+.page-alert, .page-notice { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; padding: 10px 10px 10px 16px; margin: 0 0 16px; font-size: 14px; line-height: 1.5; border-radius: 4px; }
 .page-alert { color: #902442; background: #fff0f3; border: 1px solid #f2cbd6; }
 .page-notice { color: #246b59; background: #e8f7f2; border: 1px solid #bee5d8; }
+.alert-close { display:inline-flex; align-items:center; justify-content:center; flex:0 0 auto; width:28px; height:28px; padding:0; color:inherit; background:transparent; border:0; border-radius:3px; cursor:pointer; }
+.alert-close:hover, .alert-close:focus-visible { background:rgb(255 255 255 / 55%); outline:2px solid currentColor; outline-offset:1px; }
 .confirm-card { padding: 26px; background: #fff; border-top: 4px solid var(--primary); border-radius: 4px; }
 .confirm-card h2 { margin: 0 0 10px; color: var(--primary); font-family: inherit; font-size: 23px; font-weight: 600; }
 .status-card { max-width: 820px; padding: 16px 0; }

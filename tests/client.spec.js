@@ -192,6 +192,26 @@ describe('RFC 9457 API client', () => {
     expect(logger.log).toHaveBeenCalledOnce()
   })
 
+  it.each([
+    ['/api/v1/backoffice/legal-documents/AAAAAAAA-1111-2222-3333-BBBBBBBBBBBB', '/api/v1/backoffice/legal-documents/{id}'],
+    ['/api/v1/backoffice/legal-documents/11111111-1111-1111-1111-111111111111/source', '/api/v1/backoffice/legal-documents/{id}/source'],
+    ['/api/v1/backoffice/legal-documents/a', undefined],
+    [`/api/v1/backoffice/legal-documents/${'-'.repeat(36)}`, undefined],
+    ['/api/v1/backoffice/legal-documents/11111111-1111-1111-1111-11111111111', undefined]
+  ])('normalizes only exact legal-document UUID paths: %s', async (path, expectedRoute) => {
+    const logger = { log: vi.fn() }
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(problemResponse(404, 'customer-not-found')))
+    const client = createApiClient({
+      getAccessToken: () => '',
+      refreshSession: vi.fn(),
+      logger
+    })
+
+    await expect(client.request(path)).rejects.toMatchObject({ code:'customer_not_found' })
+    expect(logger.log).toHaveBeenCalledOnce()
+    expect(logger.log.mock.calls[0][1]['http.route']).toBe(expectedRoute)
+  })
+
   it('logs an invalid access token only after its retry is exhausted', async () => {
     const logger = { log: vi.fn() }
     const fetch = vi.fn()

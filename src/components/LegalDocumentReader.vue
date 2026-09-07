@@ -6,7 +6,10 @@ import { computed, defineComponent, ref } from 'vue'
 import { documentNodes, moscowTime } from '../consentFormatting.js'
 import { presentProblem } from '../errors/problem.js'
 const root = ref(null)
-const props = defineProps({ document: { type:Object, required:true } })
+const props = defineProps({
+  document: { type:Object, required:true },
+  contentOnly: { type:Boolean, default:false }
+})
 defineEmits(['download'])
 const parsed = computed(() => {
   try { return { nodes:documentNodes(props.document.html), problem:null } }
@@ -27,7 +30,7 @@ function printDocument() {
     ref="root"
     class="legal-document"
   >
-    <header>
+    <header v-if="!props.contentOnly">
       <h2>{{ document.title }}</h2>
       <p>Версия {{ document.displayVersion }} · {{ moscowTime(document.effectiveAt) }}</p>
       <div class="legal-document__actions">

@@ -6,23 +6,69 @@ import { createSession } from '../src/stores/session.js'
 import { problemResponse, response } from './fixtures/http.js'
 
 const identity = { id:1, email:'admin@example.test', firstName:'Иван', lastName:'Иванов', patronymic:null, roles:['administrator'], isActive:true }
+const cookieCategories = [{ value:0, name:'Обязательные', required:true }]
+const legalOps = { kinds:[{ value:0, name:'Согласие на куки', routeAlias:'cookie-consent' }], cookieCategories }
 const auth = (user = identity) => response(200, { accessToken:'staff-token', expiresAt:'2026-10-01T00:00:00Z', user })
 const deferred = () => { let resolve; const promise = new Promise(r => { resolve = r }); return { promise, resolve } }
 afterEach(() => vi.unstubAllGlobals())
 
 describe('staff session boundary', () => {
+  it.each([
+    '/legal-documents/a',
+    '/legal-documents/-',
+    `/legal-documents/${'-'.repeat(36)}`,
+    '/legal-documents/11111111-1111-1111-1111-11111111111',
+    '/legal-documents/11111111-1111-1111-1111-11111111111/source'
+  ])('rejects malformed legal-document identifier path %s', async path => {
+    const fetch = vi.fn().mockResolvedValueOnce(auth())
+    vi.stubGlobal('fetch', fetch)
+    const s = createSession(); await s.login('admin@example.test','password')
+    expect(() => s.consentRequest(path)).toThrow()
+    expect(fetch).toHaveBeenCalledOnce()
+  })
   it('keeps legal forms recoverable, rejects non-staff paths and downloads exact source', async () => {
     const fetch = vi.fn().mockResolvedValueOnce(auth()).mockResolvedValueOnce(problemResponse(503,'service-unavailable')).mockResolvedValueOnce(response(200, []))
     vi.stubGlobal('fetch',fetch)
     const s = createSession(); await s.login('admin@example.test','password')
     expect(() => s.consentRequest('/users')).toThrow()
+    expect(() => s.consentRequest('/consents/customers/7')).toThrow()
+    expect(() => s.consentRequest('/legal-documents/11111111-1111-1111-1111-111111111111/publish')).toThrow()
     await expect(s.consentRequest('/legal-documents')).rejects.toBeDefined()
     expect(s.user.value).toEqual(identity)
-    await s.consentRequest('/consents/rights')
+    await s.consentRequest('/consents/withdrawal-requests')
+    expect(() => s.consentRequest('/consents/withdrawal-requests/7')).toThrow()
+    fetch.mockResolvedValueOnce(response(200,legalOps))
+    expect(await s.getLegalDocumentOps()).toEqual(legalOps)
+    expect(await s.getLegalDocumentOps()).toEqual(legalOps)
+    expect(fetch.mock.calls.filter(([url]) => url === '/api/v1/backoffice/legal-documents/ops')).toHaveLength(1)
+    fetch.mockResolvedValueOnce(response(200,{ items:[], page:1, pageSize:25, total:0 }))
+    await s.consentRequest('/legal-documents/audit?page=1&pageSize=25')
     fetch.mockResolvedValueOnce(new globalThis.Response('# Текст', { status:200, headers:{'Content-Type':'text/markdown'} }))
     const blob = await s.consentRequest('/legal-documents/11111111-1111-1111-1111-111111111111/source', { headers:{Accept:'text/markdown, application/problem+json'} }, 'blob')
     expect(await blob.text()).toBe('# Текст')
     expect(fetch.mock.calls.at(-1)[1].headers.get('Authorization')).toBe('Bearer staff-token')
+  })
+  it.each([null, {}, { kinds:[], cookieCategories }, { kinds:[{ value:'0', name:'Куки', routeAlias:'cookie-consent' }], cookieCategories },
+    { kinds:[{ value:0, name:'', routeAlias:'cookie-consent' }], cookieCategories }, { kinds:[{ value:0, name:'Куки', routeAlias:'Bad alias' }], cookieCategories },
+    { kinds:[{ value:0, name:'One', routeAlias:'one' }, { value:0, name:'Two', routeAlias:'two' }], cookieCategories },
+    { kinds:[{ value:0, name:'One', routeAlias:'same' }, { value:1, name:'Two', routeAlias:'same' }], cookieCategories }])('rejects malformed legal-document ops metadata %j', async value => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(auth()).mockResolvedValueOnce(response(200,value)))
+    const s = createSession(); await s.login('admin@example.test','password')
+    await expect(s.getLegalDocumentOps()).rejects.toMatchObject({ code:'ui_protocol_error' })
+    expect(s.legalDocumentOps.value).toBeNull()
+  })
+  it.each([
+    undefined,
+    [],
+    [{ value:'0', name:'Обязательные', required:true }],
+    [{ value:0, name:'', required:true }],
+    [{ value:0, name:'Обязательные', required:'yes' }],
+    [{ value:0, name:'Первая', required:true }, { value:0, name:'Вторая', required:false }],
+    [{ value:0, name:'Необязательные', required:false }]
+  ])('rejects malformed куки category metadata %j', async value => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(auth()).mockResolvedValueOnce(response(200,{ ...legalOps, cookieCategories:value })))
+    const s = createSession(); await s.login('admin@example.test','password')
+    await expect(s.getLegalDocumentOps()).rejects.toMatchObject({ code:'ui_protocol_error' })
   })
   it('authorizes supplementary status, preserves the shell on failure and rejects stale results', async () => {
     const wait = deferred()

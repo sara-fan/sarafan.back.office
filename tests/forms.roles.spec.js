@@ -8,18 +8,21 @@ const valid = () => ({ firstName:' Иван ', lastName:'Иванов', patronym
 describe('staff forms and permissions',()=>{
   it('explicitly grants the four known roles and rejects unknown roles/actions',()=>{
     for(const code of Object.keys(ROLES)) {
-      const u={roles:[code]}; expect(can(u,'access')).toBe(true); expect(can(u,'manageUsers')).toBe(code==='administrator'); expect(roleLabel(code)).toBe(ROLES[code]); expect(landing(u)).toBe(code==='administrator'?'/users':'/profile')
+      const u={roles:[code]}; expect(can(u,'access')).toBe(true); expect(can(u,'manageUsers')).toBe(code==='administrator'); expect(can(u,'manageConsentWithdrawalRequests')).toBe(['administrator','shift-manager','senior-operator'].includes(code)); expect(roleLabel(code)).toBe(ROLES[code]); expect(landing(u)).toBe(code==='administrator'?'/users':code==='senior-operator'?'/privacy-requests':'/profile')
     }
     expect(can(null,'access')).toBe(false); expect(can({roles:'administrator'},'access')).toBe(false); expect(can({roles:['unknown']},'access')).toBe(false); expect(can({roles:['administrator']},'unknown')).toBe(false)
     expect(roleLabel('shift-manager')).toBe('Старший смены')
     expect(can({roles:['operator','administrator']},'manageUsers')).toBe(true); expect(roleLabel('unknown')).toBe('Неизвестная роль'); expect(fullName(null)).toBe(''); expect(fullName({firstName:'Иван',lastName:'Иванов',patronymic:'Иванович'})).toBe('Иванов Иван Иванович')
   })
   it('accepts only authorized internal return paths',()=>{
-    const admin={id:7,roles:['administrator']}, operator={id:8,roles:['operator']}
+    const admin={id:7,roles:['administrator']}, senior={id:9,roles:['senior-operator']}, shift={id:10,roles:['shift-manager']}, operator={id:8,roles:['operator']}
     for(const path of ['/users','/users/new','/users/123']) { expect(safeReturn(path,admin)).toBe(path); expect(safeReturn(path,operator)).toBe('/profile') }
+    for(const path of ['/legal-documents','/legal-documents/new','/legal-documents/audit','/legal-documents/11111111-1111-1111-1111-111111111111']) { expect(safeReturn(path,admin)).toBe(path); expect(safeReturn(path,senior)).toBe('/privacy-requests'); expect(safeReturn(path,operator)).toBe('/profile') }
+    expect(safeReturn('/privacy-requests',admin)).toBe('/privacy-requests'); expect(safeReturn('/privacy-requests',senior)).toBe('/privacy-requests'); expect(safeReturn('/privacy-requests',shift)).toBe('/privacy-requests'); expect(safeReturn('/privacy-requests',operator)).toBe('/profile')
+    expect(safeReturn('/privacy-requests/11111111-1111-1111-1111-111111111111',admin)).toBe('/users')
     expect(profileRoute(admin)).toBe('/users/7');expect(profileRoute(operator)).toBe('/profile');expect(profileRoute({...admin,id:0})).toBe('/profile')
     expect(safeReturn('/home',admin)).toBe('/users');expect(safeReturn('/home',operator)).toBe('/profile');expect(safeReturn('/profile',admin)).toBe('/users/7');expect(safeReturn('/profile',operator)).toBe('/profile')
-    for(const path of [null,[], '//evil.test','https://evil.test','/users/0','/users?token=secret','/login']) expect(safeReturn(path,admin)).toBe('/users')
+    for(const path of [null,[], '//evil.test','https://evil.test','/users/0','/users?token=secret','/legal-documents/bad','/privacy-requests/bad','/customer-consents','/login']) expect(safeReturn(path,admin)).toBe('/users')
   })
   it('sends only allowed account fields and omits empty password and confirmation',()=>{
     expect(accountPayload(valid())).toEqual({firstName:'Иван',lastName:'Иванов',patronymic:null,email:'a@b.test',roles:['operator'],isActive:true})

@@ -5,15 +5,18 @@
 import { h } from 'vue'
 import { createInternalProblem } from './errors/problem.js'
 
-export const DOCUMENT_KINDS = Object.freeze({
-  'cookie-consent':'Согласие на cookies', 'personal-data-consent':'Согласие на обработку персональных данных',
-  'user-agreement':'Пользовательское соглашение', 'order-rules':'Правила заказа товаров', 'privacy-policy':'Политика обработки персональных данных'
+export const LEGAL_DOCUMENT_KIND = Object.freeze({
+  COOKIE_CONSENT:0,
+  PERSONAL_DATA_CONSENT:1,
+  USER_AGREEMENT:2,
+  ORDER_RULES:3,
+  PRIVACY_POLICY:4
 })
+export const AUDIT_ACTIONS = Object.freeze({ created:'Создан', deleted:'Удалён' })
 export const CONSENT_STATUSES = Object.freeze({ current:'Актуально', missing:'Не принято', 'renewal-required':'Требуется новое согласие',
   withdrawn:'Отозвано', refused:'Отказ', unavailable:'Документ недоступен',
-  grant:'Принято', refuse:'Отказ', withdraw:'Отозвано', draft:'Черновик', scheduled:'Запланирован', effective:'Действует',
-  open:'Получено', 'in-progress':'В работе', completed:'Завершено', published:'Опубликован', superseded:'Заменён', cancelled:'Отменён', disposed:'Срок хранения истёк' })
-export const CATEGORY_LABELS = Object.freeze({ analytics:'Аналитика', marketing:'Маркетинг' })
+  grant:'Принято', refuse:'Отказ', withdraw:'Отозвано',
+  open:'Получено', 'in-progress':'В работе', completed:'Завершено' })
 const tags = new Set(['p','h1','h2','h3','h4','h5','h6','ul','ol','li','strong','em','a','br','table','thead','tbody','tr','th','td'])
 export const isDocumentId = value => typeof value === 'string' && /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/iu.test(value)
 export function moscowTime(value) {
@@ -21,6 +24,20 @@ export function moscowTime(value) {
   const date = new Date(value)
   if (!Number.isFinite(date.getTime())) return '—'
   return `${new Intl.DateTimeFormat('ru-RU', { dateStyle:'short', timeStyle:'short', timeZone:'Europe/Moscow' }).format(date)} МСК`
+}
+export function moscowDate(value) {
+  if (!value) return '—'
+  const date = new Date(value)
+  if (!Number.isFinite(date.getTime())) return '—'
+  return new Intl.DateTimeFormat('ru-RU', { dateStyle:'short', timeZone:'Europe/Moscow' }).format(date)
+}
+export function moscowDateInput(value = new Date()) {
+  const date = value instanceof Date ? value : new Date(value)
+  if (!Number.isFinite(date.getTime())) return ''
+  const parts = Object.fromEntries(new Intl.DateTimeFormat('en', {
+    timeZone:'Europe/Moscow', year:'numeric', month:'2-digit', day:'2-digit'
+  }).formatToParts(date).map(part => [part.type, part.value]))
+  return `${parts.year}-${parts.month}-${parts.day}`
 }
 export function documentNodes(html) {
   if (typeof html !== 'string' || html.length > 2 * 1024 * 1024) throw createInternalProblem('protocolError')
