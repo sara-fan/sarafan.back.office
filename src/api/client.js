@@ -9,24 +9,26 @@ import { uiLogger } from '../observability/logger.js'
 import { isHandled, markHandled } from '../observability/deduplication.js'
 export { JSON_ACCEPT } from '@sara-fan/ui-shared/http'
 export const PHOTO_ACCEPT = 'image/avif, image/webp, image/png, image/jpeg, application/problem+json'
+export const UUID_PATH_PATTERN = '[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}'
+
+const LEGAL_DOCUMENT_ROUTE_PATTERN = new RegExp(`(/legal-documents/)${UUID_PATH_PATTERN}(?=/source$|$)`, 'iu')
 
 const API_ROUTE_TEMPLATES = new Set([
   '/api/v1/backoffice/legal-documents',
+  '/api/v1/backoffice/legal-documents/ops',
   '/api/v1/backoffice/legal-documents/{id}',
-  '/api/v1/backoffice/legal-documents/{id}/publish',
-  '/api/v1/backoffice/legal-documents/{id}/cancel',
-  '/api/v1/backoffice/legal-documents/{id}/audit',
+  '/api/v1/backoffice/legal-documents/preview',
+  '/api/v1/backoffice/legal-documents/audit',
   '/api/v1/backoffice/legal-documents/{id}/source',
-  '/api/v1/backoffice/consents/customers/{id}',
-  '/api/v1/backoffice/consents/rights',
-  '/api/v1/backoffice/consents/rights/{id}',
+  '/api/v1/backoffice/consents/withdrawal-requests',
+  '/api/v1/backoffice/consents/withdrawal-requests/processed',
   '/api/v1/backoffice/auth/login', '/api/v1/backoffice/auth/refresh', '/api/v1/backoffice/auth/logout', '/api/v1/backoffice/auth/me',
   '/api/v1/backoffice/users', '/api/v1/backoffice/users/me', '/api/v1/backoffice/users/ops', '/api/v1/backoffice/users/{id}', '/api/v1/backoffice/status'
 ])
 
 function routeTemplate(path) {
   try {
-    const pathname = new globalThis.URL(path, 'https://sarafan.invalid').pathname.replace(/(\/legal-documents\/|\/consents\/rights\/)[0-9a-f-]{36}(?=\/(?:publish|cancel|audit|source)$|$)/iu, '$1{id}').replace(/(\/consents\/customers\/)\d+$/u, '$1{id}').replace(/(\/backoffice\/users\/)\d+$/u, '$1{id}')
+    const pathname = new globalThis.URL(path, 'https://sarafan.invalid').pathname.replace(LEGAL_DOCUMENT_ROUTE_PATTERN, '$1{id}').replace(/(\/backoffice\/users\/)\d+$/u, '$1{id}')
     return API_ROUTE_TEMPLATES.has(pathname) ? pathname : undefined
   } catch {
     return undefined

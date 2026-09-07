@@ -3,12 +3,13 @@
 // This file is a part of the Sarafan application
 
 import { readonly, ref } from 'vue'
-import { createApiClient } from '../api/client.js'
+import { UUID_PATH_PATTERN, createApiClient } from '../api/client.js'
 import { CORE_PROBLEM_TYPES, INTERNAL_PROBLEM_TYPES, createInternalProblem, suppressProblem } from '../errors/problem.js'
 import { can } from '../roles.js'
 
 const BASE = '/api/v1/backoffice'
 const json = (method, body) => ({ method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+const CONSENT_REQUEST_PATH_PATTERN = new RegExp(`^/(legal-documents(?:/(?:ops|preview|audit|${UUID_PATH_PATTERN}(?:/source)?))?|consents/withdrawal-requests(?:/processed)?)$`, 'iu')
 
 function isServiceUnavailable(problem) {
   return problem?.type === INTERNAL_PROBLEM_TYPES.protocolError
@@ -29,10 +30,12 @@ export function createSession() {
   const restoreProblem = ref(null)
   const notice = ref('')
   const loginProblem = ref(null)
+  const legalDocumentOps = ref(null)
   let token = ''
   let epoch = 0
   let refreshing = null
   let initialization = null
+  let legalDocumentOpsRequest = null
   const client = createApiClient({ getAccessToken: () => token, refreshSession })
 
   function clearSession(message = '', problem = null) {
@@ -41,6 +44,8 @@ export function createSession() {
     user.value = null
     notice.value = message
     loginProblem.value = problem
+    legalDocumentOps.value = null
+    legalDocumentOpsRequest = null
   }
   function forceLogoff(problem) {
     const unavailable = serviceUnavailableProblem(problem)
@@ -148,11 +153,46 @@ export function createSession() {
     else user.value = result
     return result
   }
+  function validateLegalDocumentOps(value) {
+    if (!value || !Array.isArray(value.kinds) || value.kinds.length === 0
+      || !Array.isArray(value.cookieCategories) || value.cookieCategories.length === 0) throw createInternalProblem('protocolError')
+    const values = new Set()
+    const aliases = new Set()
+    for (const item of value.kinds) {
+      if (!item || !Number.isInteger(item.value) || item.value < 0 || typeof item.name !== 'string' || !item.name.trim()
+        || typeof item.routeAlias !== 'string' || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/u.test(item.routeAlias)
+        || values.has(item.value) || aliases.has(item.routeAlias)) throw createInternalProblem('protocolError')
+      values.add(item.value)
+      aliases.add(item.routeAlias)
+    }
+    const categoryValues = new Set()
+    for (const item of value.cookieCategories) {
+      if (!item || !Number.isInteger(item.value) || item.value < 0 || typeof item.name !== 'string' || !item.name.trim()
+        || typeof item.required !== 'boolean' || categoryValues.has(item.value)) throw createInternalProblem('protocolError')
+      categoryValues.add(item.value)
+    }
+    if (!value.cookieCategories.some(item => item.required)) throw createInternalProblem('protocolError')
+    return {
+      kinds:value.kinds.map(item => ({ value:item.value, name:item.name, routeAlias:item.routeAlias })),
+      cookieCategories:value.cookieCategories.map(item => ({ value:item.value, name:item.name, required:item.required }))
+    }
+  }
+  async function getLegalDocumentOps() {
+    if (legalDocumentOps.value) return legalDocumentOps.value
+    if (!legalDocumentOpsRequest) {
+      const pending = request('/legal-documents/ops', {}, { supplementary:true })
+        .then(value => { legalDocumentOps.value = validateLegalDocumentOps(value); return legalDocumentOps.value })
+        .finally(() => { if (legalDocumentOpsRequest === pending) legalDocumentOpsRequest = null })
+      legalDocumentOpsRequest = pending
+    }
+    return legalDocumentOpsRequest
+  }
   return {
-    user:readonly(user), ready:readonly(ready), restoring:readonly(restoring), restoreProblem:readonly(restoreProblem), notice:readonly(notice), loginProblem:readonly(loginProblem),
-    ensureReady, restoreSession, login, logout, saveUser, saveProfile,
+    user:readonly(user), ready:readonly(ready), restoring:readonly(restoring), restoreProblem:readonly(restoreProblem), notice:readonly(notice), loginProblem:readonly(loginProblem), legalDocumentOps:readonly(legalDocumentOps),
+    ensureReady, restoreSession, login, logout, saveUser, saveProfile, getLegalDocumentOps,
     consentRequest: (path, options = {}, responseType = 'json') => {
-      if (!/^\/(legal-documents(?:\/[0-9a-f-]+(?:\/(?:publish|cancel|audit|source))?)?|consents\/(?:customers\/[1-9]\d*|rights(?:\/[0-9a-f-]+)?))$/i.test(path)) throw createInternalProblem('invalidInput')
+      const pathname = typeof path === 'string' ? path.split('?')[0] : ''
+      if (!CONSENT_REQUEST_PATH_PATTERN.test(pathname)) throw createInternalProblem('invalidInput')
       return request(path, options, { supplementary:true, responseType })
     },
     listUsers: () => request('/users'), getUser: id => request(`/users/${id}`), getRoles: () => request('/users/ops'),

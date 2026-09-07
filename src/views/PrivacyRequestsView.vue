@@ -2,123 +2,175 @@
 // Copyright (C) 2026 Maxim [maxirmx] Samsonov (www.sw.consulting)
 // All rights reserved.
 // This file is a part of the Sarafan application
-import { onMounted, ref } from 'vue'
-import { useSession } from '../stores/session.js'
-import { normalizeProblem } from '../errors/problem.js'
-import { moscowTime } from '../consentFormatting.js'
-import PageAlertRegion from '../components/PageAlertRegion.vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import ActionButton from '../components/ActionButton.vue'
-import ConfirmDialog from '../components/ConfirmDialog.vue'
+import PageAlertRegion from '../components/PageAlertRegion.vue'
+import { moscowTime } from '../consentFormatting.js'
+import { normalizeProblem } from '../errors/problem.js'
+import { useSession } from '../stores/session.js'
+
 const session = useSession()
 const rows = ref([])
-const selected = ref(null)
+const search = ref('')
+const processed = ref('')
+const page = ref(1)
+const itemsPerPage = ref(10)
+const sortBy = ref([{ key:'processed', order:'asc' }, { key:'requestedAt', order:'desc' }])
 const busy = ref(false)
+const processingKey = ref('')
 const problem = ref(null)
-const confirm = ref(false)
-const states = [{value:'open',title:'Получено'}, {value:'in-progress',title:'В работе'}, {value:'completed',title:'Завершено'}]
-const stateLabel = value => states.find(x => x.value === value)?.title || value
-async function perform(action) {
-  busy.value = true; problem.value = null
-  try { await action() } catch (error) { problem.value = normalizeProblem(error) }
+const statusItems = [
+  { title:'Все статусы', value:'' },
+  { title:'Ожидают обработки', value:'false' },
+  { title:'Обработанные', value:'true' }
+]
+const headers = [
+  { title:'Действия', key:'actions', sortable:false, width:'150px' },
+  { title:'Покупатель', key:'customerId' },
+  { title:'Время запроса', key:'requestedAt' },
+  { title:'Статус', key:'processed' }
+]
+const rowKey = request => `${request.customerId}:${request.requestedAt}`
+const filtered = computed(() => rows.value.filter(request =>
+  String(request.customerId).includes(search.value.trim()) &&
+  (!processed.value || String(request.processed) === processed.value)
+))
+
+watch([search, processed], () => { page.value = 1 })
+async function load() {
+  busy.value = true
+  problem.value = null
+  try { rows.value = await session.consentRequest('/consents/withdrawal-requests') }
+  catch (value) { rows.value = []; page.value = 1; problem.value = normalizeProblem(value) }
   finally { busy.value = false }
 }
-async function load() { await perform(async () => { rows.value = await session.consentRequest('/consents/rights') }) }
-function edit(row) { selected.value = { ...row, extend:false }; problem.value = null }
-async function save() {
-  confirm.value = false
-  await perform(async () => {
-    const value = selected.value
-    const payload = { revision:value.revision, state:value.state, responsibleStaffId:value.responsibleStaffId || null, retentionBasis:value.retentionBasis, completionEvidence:value.completionEvidence, extend:value.extend, extensionReason:value.extensionReason }
-    const result = await session.consentRequest(`/consents/rights/${value.id}`, { method:'PUT', headers:{ 'Content-Type':'application/json' }, body:JSON.stringify(payload) })
-    selected.value = { ...result, extend:false }
-    rows.value = await session.consentRequest('/consents/rights')
-  })
+async function process(request) {
+  if (!request || request.processed) return
+  processingKey.value = rowKey(request)
+  problem.value = null
+  try {
+    const result = await session.consentRequest('/consents/withdrawal-requests/processed', {
+      method:'PUT',
+      headers:{ 'Content-Type':'application/json' },
+      body:JSON.stringify({ customerId:request.customerId, requestedAt:request.requestedAt })
+    })
+    rows.value = rows.value.map(item => rowKey(item) === rowKey(request) ? result : item)
+  } catch (value) { problem.value = normalizeProblem(value) }
+  finally { processingKey.value = '' }
 }
 onMounted(load)
 </script>
+
 <template>
   <section class="settings table-wide">
     <header class="header-with-actions">
       <h1 class="primary-heading">
-        Обращения по персональным данным
-      </h1><ActionButton
+        Запросы на удаление персональных данных <span class="count">{{ rows.length }}</span>
+      </h1>
+      <div class="header-actions">
+        <span
+          v-if="busy"
+          class="header-spinner"
+          role="status"
+          aria-label="Загрузка"
+        />
+        <ActionButton
+          icon="$refresh"
+          tooltip-text="Обновить обращения"
+          :disabled="busy || Boolean(processingKey)"
+          @click="load"
+        />
+      </div>
+    </header>
+    <hr class="hr">
+    <PageAlertRegion :problem="problem" />
+    <fieldset
+      class="filter-bar"
+      :disabled="busy || Boolean(processingKey)"
+    >
+      <v-text-field
+        id="privacy-request-search"
+        v-model="search"
+        class="filter-control filter-search"
+        label="Поиск по номеру покупателя"
+        prepend-inner-icon="$search"
+        variant="solo"
+        density="compact"
+        active
+        hide-details
+        clearable
+      />
+      <v-select
+        v-model="processed"
+        class="filter-control"
+        :items="statusItems"
+        label="Статус"
+        variant="solo"
+        density="compact"
+        active
+        hide-details
+      />
+    </fieldset>
+    <div
+      v-if="problem && !rows.length"
+      class="empty-state"
+    >
+      <ActionButton
         icon="$refresh"
-        tooltip-text="Обновить обращения"
-        :disabled="busy"
+        label="Повторить загрузку"
+        tooltip-text="Повторить загрузку"
         @click="load"
       />
-    </header><hr class="hr"><PageAlertRegion :problem="problem" />
-    <p>Проверьте прекращение операций, удаления у обработчиков и основания сохранения. Завершение обращения фиксирует результат работы; само по себе оно не удаляет данные. Результат и причина продления видны покупателю.</p>
-    <v-table density="compact">
-      <thead><tr><th>Покупатель</th><th>Вид</th><th>Получено</th><th>Срок (Москва)</th><th>Статус</th><th>Действия</th></tr></thead><tbody>
-        <tr
-          v-for="row in rows"
-          :key="row.id"
-        >
-          <td>{{ row.customerId }}</td><td>{{ row.kind === 'withdrawal' ? 'Отзыв согласия' : 'Прекращение обработки' }}</td><td>{{ moscowTime(row.receivedAt) }}</td><td>{{ moscowTime(row.dueAt) }} <strong v-if="row.state !== 'completed' && Date.parse(row.dueAt) < Date.now()">Просрочено</strong></td><td>{{ stateLabel(row.state) }}</td><td>
-            <ActionButton
-              icon="$edit"
-              tooltip-text="Открыть обращение"
-              :disabled="busy"
-              @click="edit(row)"
-            />
-          </td>
-        </tr>
-      </tbody>
-    </v-table>
-    <form
-      v-if="selected"
-      @submit.prevent="confirm = true"
+    </div>
+    <v-card
+      v-else
+      class="table-card"
     >
-      <h2>Обращение № {{ selected.id }}</h2>
-      <fieldset :disabled="busy || !!selected.completedAt">
-        <v-select
-          v-model="selected.state"
-          :items="states"
-          label="Статус"
-        />
-        <v-text-field
-          v-model.number="selected.responsibleStaffId"
-          label="Номер ответственного администратора"
-          type="number"
-          min="1"
-        />
-        <v-textarea
-          v-model="selected.retentionBasis"
-          label="Какие данные сохраняются, цель, законное основание и срок"
-          maxlength="2000"
-        />
-        <v-textarea
-          v-model="selected.completionEvidence"
-          label="Выполненные действия и доказательства (обязательно для завершения)"
-          maxlength="2000"
-        />
-        <template v-if="selected.kind === 'stop-processing' && !selected.extended">
-          <v-checkbox
-            v-model="selected.extend"
-            label="Продлить на 5 рабочих дней (однократно, до истечения срока)"
-          /><v-textarea
-            v-if="selected.extend"
-            v-model="selected.extensionReason"
-            label="Мотивированная причина продления для покупателя"
-            maxlength="1000"
-          />
+      <v-data-table
+        v-model:page="page"
+        v-model:items-per-page="itemsPerPage"
+        v-model:sort-by="sortBy"
+        :headers="headers"
+        :items="filtered"
+        :loading="busy"
+        :item-value="rowKey"
+        items-per-page-text="Обращений на странице"
+        page-text="{0}-{1} из {2}"
+        no-data-text="Обращения не найдены."
+        density="compact"
+        class="interlaced-table privacy-requests-table"
+        height="var(--staff-table-height)"
+        fixed-header
+      >
+        <template #[`item.actions`]="{ item }">
+          <div class="actions-container">
+            <ActionButton
+              :item="item"
+              icon="$saveChanges"
+              label="Выполнить"
+              tooltip-text="Отметить запрос как обработанный"
+              variant="blue"
+              :loading="processingKey === rowKey(item)"
+              :disabled="busy || Boolean(processingKey) || item.processed"
+              @click="process"
+            />
+          </div>
         </template>
-        <ActionButton
-          type="submit"
-          icon="$save"
-          label="Сохранить результат"
-          tooltip-text="Сохранить обработку обращения"
-          variant="blue"
-          :disabled="busy || !!selected.completedAt"
-        />
-      </fieldset>
-    </form>
-    <ConfirmDialog
-      :open="confirm"
-      message="Сохранить результат обработки? Покупатель увидит основание хранения, результат и причину продления. Завершённое обращение нельзя изменить."
-      @cancel="confirm = false"
-      @confirm="save"
-    />
+        <template #[`item.customerId`]="{ item }">
+          <span class="customer-id">№ {{ item.customerId }}</span>
+        </template>
+        <template #[`item.requestedAt`]="{ item }">
+          {{ moscowTime(item.requestedAt) }}
+        </template>
+        <template #[`item.processed`]="{ item }">
+          <span :class="['status-pill', { inactive:item.processed }]">{{ item.processed ? 'Обработан' : 'Ожидает ручной обработки' }}</span>
+        </template>
+      </v-data-table>
+    </v-card>
   </section>
 </template>
+
+<style scoped>
+.privacy-requests-table { --staff-table-height:max(320px, calc(100vh - 300px)); }
+.customer-id { color:#203c58; font-weight:650; }
+</style>

@@ -13,6 +13,7 @@ import UsersView from '../src/views/UsersView.vue'
 import AccountView from '../src/views/AccountView.vue'
 import ActionButton from '../src/components/ActionButton.vue'
 import ConfirmDialog from '../src/components/ConfirmDialog.vue'
+import PageAlertRegion from '../src/components/PageAlertRegion.vue'
 import App from '../src/App.vue'
 import { version } from '../package.json'
 
@@ -70,6 +71,18 @@ describe('ActionButton pattern',()=>{
     w.findComponent({name:'VDialog'}).vm.$emit('update:modelValue',false)
     w.findComponent({name:'VDialog'}).vm.$emit('update:modelValue',true)
     expect(w.emitted('cancel')).toHaveLength(2);expect(w.emitted('confirm')).toHaveLength(1)
+  })
+  it('lets users dismiss shared errors and notices and presents later feedback',async()=>{
+    const w=render(PageAlertRegion,{props:{problem:failure()}})
+    expect(w.find('[role=alert]').exists()).toBe(true)
+    expect(w.get('[data-icon="$close"]').attributes('aria-hidden')).toBe('true')
+    await button(w,'Закрыть сообщение').trigger('click')
+    expect(w.find('[role=alert]').exists()).toBe(false)
+    await w.setProps({problem:null,message:'Изменения сохранены'})
+    expect(w.get('[role=status]').text()).toBe('Изменения сохранены')
+    expect(w.get('[data-icon="$close"]').attributes('aria-hidden')).toBe('true')
+    await button(w,'Закрыть сообщение').trigger('click')
+    expect(w.find('[role=status]').exists()).toBe(false)
   })
 })
 describe('staff views',()=>{
@@ -196,7 +209,7 @@ describe('staff views',()=>{
     h.session.ready.value=false;const w=render(App);await flushPromises();expect(w.text()).toContain('Восстановление сеанса')
     h.session.ready.value=true;h.session.restoreProblem.value=failure();await nextTick();expect(w.get('[role=alert]').exists()).toBe(true)
     await button(w,'Повторить').trigger('click');await flushPromises();expect(h.router.replace).not.toHaveBeenCalled()
-    h.session.restoreSession.mockImplementationOnce(()=>{h.session.restoreProblem.value=null;return Promise.resolve()});await button(w,'Повторить').trigger('click');await flushPromises();expect(h.router.replace).toHaveBeenCalledWith('/users');expect(w.text()).toContain('Сервер 0.0.6');expect(w.text()).toContain(`Клиент ${version}`);expect(w.text()).toContain('Иванов Иван');expect(w.find('nav a[href="/users"] i').attributes('data-icon')).toBe('$staff');expect(w.find('nav a[href="/users/1"] i').attributes('data-icon')).toBe('$profile')
+    h.session.restoreSession.mockImplementationOnce(()=>{h.session.restoreProblem.value=null;return Promise.resolve()});await button(w,'Повторить').trigger('click');await flushPromises();expect(h.router.replace).toHaveBeenCalledWith('/users');expect(w.text()).toContain('Сервер 0.0.6');expect(w.text()).toContain(`Клиент ${version}`);expect(w.text()).toContain('Иванов Иван');expect(w.find('nav a[href="/users"] i').attributes('data-icon')).toBe('$staff');expect(w.find('nav a[href="/legal-documents"] i').attributes('data-icon')).toBe('$legalDocuments');expect(w.find('nav a[href="/customer-consents"]').exists()).toBe(false);expect(w.find('nav a[href="/users/1"] i').attributes('data-icon')).toBe('$profile')
     const drawer=w.findComponent({name:'VNavigationDrawer'});expect(drawer.props('permanent')).toBe(true);const initiallyOpen=drawer.props('modelValue');await button(w,'Открыть меню').trigger('click');expect(drawer.props('modelValue')).toBe(!initiallyOpen)
     Object.defineProperty(globalThis.window,'innerWidth',{configurable:true,writable:true,value:390});globalThis.window.dispatchEvent(new globalThis.Event('resize'));await nextTick();expect(drawer.props('temporary')).toBe(true);expect(drawer.props('modelValue')).toBe(false);await button(w,'Открыть меню').trigger('click');expect(drawer.props('modelValue')).toBe(true);h.router.currentRoute.value={fullPath:'/profile'};await nextTick();expect(drawer.props('modelValue')).toBe(false);Object.defineProperty(globalThis.window,'innerWidth',{configurable:true,writable:true,value:1024});globalThis.window.dispatchEvent(new globalThis.Event('resize'));await nextTick()
     expect(w.find('nav a[href="/users"]').exists()).toBe(true);h.session.user.value={...identity,roles:['operator']};await nextTick();expect(w.find('nav a[href="/users"]').exists()).toBe(false);expect(w.find('nav a[href="/profile"]').exists()).toBe(true)
