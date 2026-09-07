@@ -12,7 +12,7 @@ export const PHOTO_ACCEPT = 'image/avif, image/webp, image/png, image/jpeg, appl
 
 const API_ROUTE_TEMPLATES = new Set([
   '/api/v1/backoffice/auth/login', '/api/v1/backoffice/auth/refresh', '/api/v1/backoffice/auth/logout', '/api/v1/backoffice/auth/me',
-  '/api/v1/backoffice/users', '/api/v1/backoffice/users/me', '/api/v1/backoffice/users/ops', '/api/v1/backoffice/users/{id}', '/api/v1/status/status'
+  '/api/v1/backoffice/users', '/api/v1/backoffice/users/me', '/api/v1/backoffice/users/ops', '/api/v1/backoffice/users/{id}', '/api/v1/backoffice/status'
 ])
 
 function routeTemplate(path) {

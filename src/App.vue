@@ -3,7 +3,7 @@
 // All rights reserved.
 // This file is a part of the Sarafan application
 import ActionButton from './components/ActionButton.vue'
-import { onMounted, ref, watch } from 'vue'
+import { ref, watch } from 'vue'
 import { useDisplay } from 'vuetify'
 import { useRouter } from 'vue-router'
 import { version } from '../package.json'
@@ -11,12 +11,14 @@ import { can, fullName, landing, profileRoute } from './roles.js'
 import { useSession } from './stores/session.js'
 import { suppressProblem } from './errors/problem.js'
 import PageAlertRegion from './components/PageAlertRegion.vue'
+import ExchangeRateDisplay from './components/ExchangeRateDisplay.vue'
 const session = useSession()
 const { user, ready, restoring, restoreProblem } = session
 const router = useRouter()
 const { mdAndUp } = useDisplay()
 const drawer = ref(mdAndUp.value)
 const coreVersion = ref('')
+const exchangeRates = ref([])
 async function retry() {
   await session.restoreSession()
   if (!restoreProblem.value) await router.replace(user.value ? landing(user.value) : '/login')
@@ -25,10 +27,19 @@ async function signOut() { await session.logout(); await router.replace('/login'
 watch(user, value => { if (!value && ready.value && !restoreProblem.value) router.replace('/login') })
 watch(mdAndUp, value => { drawer.value = value })
 watch(() => router.currentRoute.value.fullPath, () => { if (!mdAndUp.value) drawer.value = false })
-onMounted(async () => {
-  try { const result = await session.getStatus(); coreVersion.value = result.appVersion || '' }
-  catch (problem) { suppressProblem(problem, { operation:'status.version.load' }) }
-})
+watch(() => user.value?.id, async (id, _previous, onCleanup) => {
+  let active = true
+  onCleanup(() => { active = false })
+  exchangeRates.value = []
+  coreVersion.value = ''
+  if (!id) return
+  try {
+    const result = await session.getStatus()
+    if (!active) return
+    coreVersion.value = typeof result?.appVersion === 'string' ? result.appVersion : ''
+    exchangeRates.value = Array.isArray(result?.exchangeRates) ? result.exchangeRates : []
+  } catch (problem) { if (active) suppressProblem(problem, { operation:'status.version.load' }) }
+}, { immediate:true, flush:'sync' })
 </script>
 <template>
   <v-app class="sarafan-app">
@@ -72,6 +83,7 @@ onMounted(async () => {
         <v-app-bar-title class="app-title">
           <span class="app-user">{{ fullName(user) }}</span>
         </v-app-bar-title>
+        <ExchangeRateDisplay :rates="exchangeRates" />
       </v-app-bar>
       <v-navigation-drawer
         v-model="drawer"

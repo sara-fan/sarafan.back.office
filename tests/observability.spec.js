@@ -3,6 +3,7 @@
 // This file is a part of the Sarafan application
 
 import { describe, expect, it, vi } from 'vitest'
+import { version } from '../package.json'
 
 import { installErrorBoundaries, reportBoundaryFailure } from '../src/observability/boundaries.js'
 import { EVENTS, SEVERITY, isCatalogueEvent } from '../src/observability/catalogue.js'
@@ -62,7 +63,7 @@ describe('UI observability', () => {
     expect(logger.log(EVENTS.applicationError)).toBe(true)
     expect(logger.log({ ...EVENTS.applicationError })).toBe(false)
     expect(records[0].resource['service.name']).toBe('sarafan.back.office')
-    expect(records[0].resource['service.version']).toBe('0.0.1')
+    expect(records[0].resource['service.version']).toBe(version)
   })
   it('defines immutable OpenTelemetry severities and stable catalogue events', () => {
     expect(SEVERITY).toMatchObject({
@@ -146,7 +147,7 @@ describe('UI observability', () => {
       spanId: SPAN_ID,
       resource: {
         'service.name': 'sarafan.back.office',
-        'service.version': '0.0.1',
+        'service.version': version,
         'deployment.environment.name': 'test'
       },
       instrumentationScope: 'sarafan.back.office.observability'

@@ -112,7 +112,7 @@ export function createSession() {
     try { await client.request(`${BASE}/auth/logout`, { method:'POST' }) }
     catch (problem) { suppressProblem(problem, { operation:'session.logout' }) }
   }
-  async function request(path, options = {}) {
+  async function request(path, options = {}, { supplementary = false } = {}) {
     const generation = epoch
     try {
       const result = await client.request(`${BASE}${path}`, options, { authorize:true })
@@ -120,7 +120,7 @@ export function createSession() {
       return result
     } catch (problem) {
       if (generation === epoch) {
-        if (isServiceUnavailable(problem)) {
+        if (!supplementary && isServiceUnavailable(problem)) {
           throw forceLogoff(problem)
         }
         if ([CORE_PROBLEM_TYPES.invalidAccessToken, CORE_PROBLEM_TYPES.invalidRefreshToken].includes(problem.type)) {
@@ -152,7 +152,7 @@ export function createSession() {
     user:readonly(user), ready:readonly(ready), restoring:readonly(restoring), restoreProblem:readonly(restoreProblem), notice:readonly(notice), loginProblem:readonly(loginProblem),
     ensureReady, restoreSession, login, logout, saveUser, saveProfile,
     listUsers: () => request('/users'), getUser: id => request(`/users/${id}`), getRoles: () => request('/users/ops'),
-    getStatus: () => client.request('/api/v1/status/status')
+    getStatus: () => request('/status', {}, { supplementary:true })
   }
 }
 const session = createSession()
