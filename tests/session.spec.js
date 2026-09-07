@@ -11,6 +11,19 @@ const deferred = () => { let resolve; const promise = new Promise(r => { resolve
 afterEach(() => vi.unstubAllGlobals())
 
 describe('staff session boundary', () => {
+  it('keeps legal forms recoverable, rejects non-staff paths and downloads exact source', async () => {
+    const fetch = vi.fn().mockResolvedValueOnce(auth()).mockResolvedValueOnce(problemResponse(503,'service-unavailable')).mockResolvedValueOnce(response(200, []))
+    vi.stubGlobal('fetch',fetch)
+    const s = createSession(); await s.login('admin@example.test','password')
+    expect(() => s.consentRequest('/users')).toThrow()
+    await expect(s.consentRequest('/legal-documents')).rejects.toBeDefined()
+    expect(s.user.value).toEqual(identity)
+    await s.consentRequest('/consents/rights')
+    fetch.mockResolvedValueOnce(new globalThis.Response('# Текст', { status:200, headers:{'Content-Type':'text/markdown'} }))
+    const blob = await s.consentRequest('/legal-documents/11111111-1111-1111-1111-111111111111/source', { headers:{Accept:'text/markdown, application/problem+json'} }, 'blob')
+    expect(await blob.text()).toBe('# Текст')
+    expect(fetch.mock.calls.at(-1)[1].headers.get('Authorization')).toBe('Bearer staff-token')
+  })
   it('authorizes supplementary status, preserves the shell on failure and rejects stale results', async () => {
     const wait = deferred()
     const fetch = vi.fn().mockResolvedValueOnce(auth())

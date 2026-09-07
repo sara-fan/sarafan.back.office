@@ -112,6 +112,23 @@ watch(() => user.value?.id, async (id, _previous, onCleanup) => {
             prepend-icon="$staff"
             title="Пользователи"
           />
+          <template v-if="can(user, 'manageLegalDocuments')">
+            <v-list-item
+              to="/legal-documents"
+              title="Правовые документы"
+              class="drawer-link"
+            />
+            <v-list-item
+              to="/customer-consents"
+              title="Согласия покупателей"
+              class="drawer-link"
+            />
+            <v-list-item
+              to="/privacy-requests"
+              title="Обращения по данным"
+              class="drawer-link"
+            />
+          </template>
           <v-list-item
             :to="profileRoute(user)"
             class="drawer-link"

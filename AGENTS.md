@@ -93,3 +93,12 @@ For other comment-capable formats, use the same three lines with that format's n
 ## GitHub Actions conventions
 
 - Pin reusable actions to published version tags and give every workflow step a descriptive name.
+
+## Versioned customer consent
+
+- Consent history contains only versioned events with a document ID and content digest. Do not add legacy record labels or fallbacks; pre-versioned records are deleted by the Core consent migration, and existing customers without a new receipt have missing consent.
+
+- Spec v1.16 §4.18 / back.office #6 govern the legal-document and privacy-request screens. Only `manageLegalDocuments` (Administrator) may use them; all requests stay under `/api/v1/backoffice`. Customer consent never authorizes staff identity.
+- Legal and rights requests retain failed forms and the current staff session on transport/protocol/5xx failures, an explicit exception to the general service-unavailability rule. Authentication/refresh failures retain their normal identity policy. Ignore stale responses after a session change.
+- Upload UTF-8 `.md` up to 256 KiB; preview the Core canonical artifact before confirming publication. Date-only activation is 00:00 Europe/Moscow. Published/scheduled content is immutable; cancel a future schedule and create a replacement. Use optimistic revisions and explicit confirmation.
+- Keep the safe reader/formatting contract identical to the customer reader. Customer histories are read-only; no staff acceptance, evidence edit or generic artifact deletion. Completing a rights case records verified operational actions and any lawful retention basis; it does not itself delete customer/order data.

@@ -47,3 +47,7 @@ Workflow actions are pinned to verified upstream commit SHAs. Update pins in a
 reviewed pull request after checking the upstream release and running CI and the
 container build. Use a recent Docker Compose v2 supporting `--wait` and
 `--wait-timeout` for Core deployment commands.
+
+## Legal documents and privacy requests
+
+The coordinated implementation follows [spec v1.16 §4.18](https://github.com/sara-fan/sarafan.spec/issues/30). [Core API and rollout guide](https://github.com/sara-fan/sarafan.core/blob/v008/docs/customer-consents.md); [contract and text templates](https://github.com/sara-fan/sarafan.spec/blob/consents/spec/Consent%20implementation%20contract.md). Legal text must be prepared and published by an Administrator before registration can process personal data; no consent is silently granted to existing customers.

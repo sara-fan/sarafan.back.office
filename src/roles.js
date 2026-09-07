@@ -8,7 +8,7 @@ export const ROLES = Object.freeze({
   'senior-operator': 'Старший оператор',
   operator: 'Оператор'
 })
-const permissions = Object.freeze({ access: Object.keys(ROLES), manageUsers: ['administrator'] })
+const permissions = Object.freeze({ access: Object.keys(ROLES), manageUsers: ['administrator'], manageLegalDocuments: ['administrator'] })
 export function can(user, action) {
   return Array.isArray(user?.roles) && user.roles.some(role => permissions[action]?.includes(role))
 }
@@ -27,5 +27,6 @@ export function safeReturn(value, user) {
   if (value === '/home') return landing(user)
   if (value === '/profile') return profileRoute(user)
   if (can(user, 'manageUsers') && /^\/users(?:\/(?:new|[1-9]\d*))?$/u.test(value)) return value
+  if (can(user, 'manageLegalDocuments') && ['/legal-documents', '/customer-consents', '/privacy-requests'].includes(value)) return value
   return landing(user)
 }
