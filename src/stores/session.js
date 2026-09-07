@@ -112,10 +112,10 @@ export function createSession() {
     try { await client.request(`${BASE}/auth/logout`, { method:'POST' }) }
     catch (problem) { suppressProblem(problem, { operation:'session.logout' }) }
   }
-  async function request(path, options = {}, { supplementary = false } = {}) {
+  async function request(path, options = {}, { supplementary = false, responseType = 'json' } = {}) {
     const generation = epoch
     try {
-      const result = await client.request(`${BASE}${path}`, options, { authorize:true })
+      const result = await client.request(`${BASE}${path}`, options, { authorize:true, responseType })
       if (generation !== epoch) throw createInternalProblem('sessionRestoreUnavailable')
       return result
     } catch (problem) {
@@ -151,6 +151,10 @@ export function createSession() {
   return {
     user:readonly(user), ready:readonly(ready), restoring:readonly(restoring), restoreProblem:readonly(restoreProblem), notice:readonly(notice), loginProblem:readonly(loginProblem),
     ensureReady, restoreSession, login, logout, saveUser, saveProfile,
+    consentRequest: (path, options = {}, responseType = 'json') => {
+      if (!/^\/(legal-documents(?:\/[0-9a-f-]+(?:\/(?:publish|cancel|audit|source))?)?|consents\/(?:customers\/[1-9]\d*|rights(?:\/[0-9a-f-]+)?))$/i.test(path)) throw createInternalProblem('invalidInput')
+      return request(path, options, { supplementary:true, responseType })
+    },
     listUsers: () => request('/users'), getUser: id => request(`/users/${id}`), getRoles: () => request('/users/ops'),
     getStatus: () => request('/status', {}, { supplementary:true })
   }

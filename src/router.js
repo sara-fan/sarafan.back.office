@@ -8,6 +8,9 @@ import { useSession } from './stores/session.js'
 import LoginView from './views/LoginView.vue'
 import UsersView from './views/UsersView.vue'
 import AccountView from './views/AccountView.vue'
+import LegalDocumentsView from './views/LegalDocumentsView.vue'
+import CustomerConsentsView from './views/CustomerConsentsView.vue'
+import PrivacyRequestsView from './views/PrivacyRequestsView.vue'
 import StatusView from './views/StatusView.vue'
 
 export function createAppRouter(history = createWebHistory(), session = useSession()) {
@@ -18,6 +21,9 @@ export function createAppRouter(history = createWebHistory(), session = useSessi
     { path:'/users', component:UsersView, meta:{ action:'manageUsers' } },
     { path:'/users/new', component:AccountView, meta:{ action:'manageUsers' } },
     { path:'/users/:id([1-9]\\d*)', component:AccountView, meta:{ action:'manageUsers' } },
+    { path:'/legal-documents', component:LegalDocumentsView, meta:{ action:'manageLegalDocuments' } },
+    { path:'/customer-consents', component:CustomerConsentsView, meta:{ action:'manageLegalDocuments' } },
+    { path:'/privacy-requests', component:PrivacyRequestsView, meta:{ action:'manageLegalDocuments' } },
     { path:'/profile', component:AccountView },
     { path:'/forbidden', component:StatusView, props:{ forbidden:true } },
     { path:'/:pathMatch(.*)*', component:StatusView }
