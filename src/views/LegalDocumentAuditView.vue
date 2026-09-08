@@ -3,44 +3,107 @@
 // All rights reserved.
 // This file is a part of the Sarafan application
 
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import ActionButton from '../components/ActionButton.vue'
 import PageAlertRegion from '../components/PageAlertRegion.vue'
-import { AUDIT_ACTIONS, moscowDate, moscowTime } from '../consentFormatting.js'
+import { AUDIT_ACTIONS, LEGAL_DOCUMENT_KIND, moscowDate, moscowTime } from '../consentFormatting.js'
 import { createInternalProblem, normalizeProblem } from '../errors/problem.js'
 import { useSession } from '../stores/session.js'
+import { isPageResult, PAGE_SIZE_OPTIONS, readViewState, writeViewState } from '../viewState.js'
+
+const VIEW_KEY = 'legal-document-audit'
+const SORT_KEYS = ['at', 'action', 'title', 'displayVersion', 'effectiveAt', 'actorName']
+const KIND_VALUES = Object.values(LEGAL_DOCUMENT_KIND)
+const defaults = {
+  page:1,
+  pageSize:25,
+  sortBy:[{ key:'at', order:'desc' }],
+  filters:{ search:'', kind:null, action:'' }
+}
+const normalizeFilters = value => typeof value?.search === 'string' && value.search.length <= 200
+  && (value?.kind === null || KIND_VALUES.includes(value?.kind))
+  && (value?.action === '' || Object.hasOwn(AUDIT_ACTIONS, value?.action))
+  ? { search:value.search, kind:value.kind, action:value.action }
+  : null
 
 const session = useSession()
 const router = useRouter()
+const restored = readViewState({
+  userId:session.user.value?.id,
+  viewKey:VIEW_KEY,
+  defaults,
+  allowedSortKeys:SORT_KEYS,
+  normalizeFilters
+})
 const rows = ref([])
 const ops = ref(null)
 const total = ref(0)
-const page = ref(1)
-const pageSize = ref(25)
-const search = ref('')
-const kind = ref(null)
-const action = ref('')
+const page = ref(restored.state.page)
+const pageSize = ref(restored.state.pageSize)
+const sortBy = ref(restored.state.sortBy)
+const search = ref(restored.state.filters.search)
+const kind = ref(restored.state.filters.kind)
+const action = ref(restored.state.filters.action)
 const busy = ref(false)
 const problem = ref(null)
+const preferenceProblem = ref(restored.unavailable ? createInternalProblem('viewPreferencesUnavailable') : null)
+const visibleProblem = computed(() => problem.value ?? preferenceProblem.value)
 let loadVersion = 0
+let searchTimer = null
+
 const kindItems = computed(() => [{ title:'Все типы', value:null }, ...(ops.value?.kinds || []).map(item => ({ value:item.value, title:item.name }))])
 const kindName = value => ops.value?.kinds.find(item => item.value === value)?.name
 const actionItems = [{ title:'Все действия', value:'' }, ...Object.entries(AUDIT_ACTIONS).map(([value,title]) => ({ value,title }))]
+const pageSizeItems = PAGE_SIZE_OPTIONS.map(value => ({ value, title:String(value) }))
 const headers = [
-  { title:'Дата и время', key:'at', sortable:false, width:'170px' },
-  { title:'Действие', key:'action', sortable:false, width:'120px' },
-  { title:'Документ', key:'title', sortable:false },
-  { title:'Версия', key:'displayVersion', sortable:false, width:'120px' },
-  { title:'Дата начала действия', key:'effectiveAt', sortable:false, width:'170px' },
-  { title:'Администратор', key:'actorName', sortable:false, width:'220px' }
+  { title:'Дата и время', key:'at', width:'170px' },
+  { title:'Действие', key:'action', width:'120px' },
+  { title:'Документ', key:'title' },
+  { title:'Версия', key:'displayVersion', width:'120px' },
+  { title:'Дата начала действия', key:'effectiveAt', width:'170px' },
+  { title:'Администратор', key:'actorName', width:'220px' }
 ]
+const auditIsValid = item => Number.isInteger(item?.id) && item.id > 0
+  && typeof item.documentId === 'string'
+  && Number.isInteger(item.kind)
+  && Number.isInteger(item.actorId)
+  && typeof item.actorName === 'string'
+  && typeof item.action === 'string' && typeof item.at === 'string'
+  && typeof item.title === 'string' && typeof item.displayVersion === 'string'
+  && typeof item.effectiveAt === 'string'
+const activeSort = () => {
+  const candidate = sortBy.value?.[0]
+  return SORT_KEYS.includes(candidate?.key) && ['asc', 'desc'].includes(candidate?.order)
+    ? candidate
+    : defaults.sortBy[0]
+}
+
+function persistState() {
+  const saved = writeViewState({
+    userId:session.user.value?.id,
+    viewKey:VIEW_KEY,
+    state:{
+      page:page.value,
+      pageSize:pageSize.value,
+      sortBy:[{ ...activeSort() }],
+      filters:{ search:search.value, kind:kind.value, action:action.value }
+    }
+  })
+  if (!saved && !preferenceProblem.value) preferenceProblem.value = createInternalProblem('viewPreferencesUnavailable')
+}
 
 async function load() {
   const version = ++loadVersion
   busy.value = true
   problem.value = null
-  const query = new globalThis.URLSearchParams({ page:String(page.value), pageSize:String(pageSize.value) })
+  const sorting = activeSort()
+  const query = new globalThis.URLSearchParams({
+    page:String(page.value),
+    pageSize:String(pageSize.value),
+    sortBy:sorting.key,
+    sortOrder:sorting.order
+  })
   if (search.value.trim()) query.set('search', search.value.trim())
   if (kind.value !== null) query.set('kind', String(kind.value))
   if (action.value) query.set('action', action.value)
@@ -51,9 +114,22 @@ async function load() {
     ])
     if (version !== loadVersion) return
     ops.value = catalogue
-    if (!Array.isArray(result?.items) || result.items.some(item => !Number.isInteger(item.kind) || !kindName(item.kind))) throw createInternalProblem('protocolError')
+    if (!isPageResult(result, SORT_KEYS, auditIsValid)
+      || result.items.some(item => !kindName(item.kind))
+      || result.pagination.currentPage !== page.value
+      || result.pagination.pageSize !== pageSize.value
+      || result.sorting.sortBy !== sorting.key || result.sorting.sortOrder !== sorting.order
+      || (result.search ?? '') !== search.value.trim()) {
+      throw createInternalProblem('protocolError')
+    }
+    const lastPage = Math.max(1, result.pagination.totalPages)
+    if (page.value > lastPage) {
+      page.value = lastPage
+      persistState()
+      return load()
+    }
     rows.value = result.items
-    total.value = result.total
+    total.value = result.pagination.totalCount
   } catch (value) {
     if (version !== loadVersion) return
     rows.value = []
@@ -64,20 +140,60 @@ async function load() {
   }
 }
 
-function previousPage() {
-  if (page.value > 1) page.value -= 1
-}
-
-function nextPage() {
-  if (page.value * pageSize.value < total.value) page.value += 1
-}
-
-watch([search, kind, action], () => {
+function onSearchInput(value) {
+  search.value = String(value ?? '').slice(0, 200)
   page.value = 1
+  if (searchTimer) globalThis.clearTimeout(searchTimer)
+  searchTimer = globalThis.setTimeout(() => {
+    searchTimer = null
+    persistState()
+    load()
+  }, 300)
+}
+
+function onKindChange(value) {
+  kind.value = value === null || KIND_VALUES.includes(value) ? value : null
+  page.value = 1
+  persistState()
   load()
-})
-watch([page, pageSize], load)
+}
+
+function onActionChange(value) {
+  action.value = value === '' || Object.hasOwn(AUDIT_ACTIONS, value) ? value : ''
+  page.value = 1
+  persistState()
+  load()
+}
+
+function onPageChange(value) {
+  if (!Number.isInteger(value) || value < 1 || value === page.value) return
+  page.value = value
+  persistState()
+  load()
+}
+
+function onPageSizeChange(value) {
+  if (!PAGE_SIZE_OPTIONS.includes(value) || value === pageSize.value) return
+  pageSize.value = value
+  page.value = 1
+  persistState()
+  load()
+}
+
+function onSortChange(value) {
+  const candidate = value?.[0]
+  if (!SORT_KEYS.includes(candidate?.key) || !['asc', 'desc'].includes(candidate?.order)) return
+  sortBy.value = [{ key:candidate.key, order:candidate.order }]
+  page.value = 1
+  persistState()
+  load()
+}
+
 onMounted(load)
+onUnmounted(() => {
+  loadVersion += 1
+  if (searchTimer) globalThis.clearTimeout(searchTimer)
+})
 </script>
 
 <template>
@@ -108,13 +224,13 @@ onMounted(load)
       </div>
     </header>
     <hr class="hr">
-    <PageAlertRegion :problem="problem" />
+    <PageAlertRegion :problem="visibleProblem" />
     <fieldset
       class="filter-bar"
       :disabled="busy"
     >
       <v-text-field
-        v-model="search"
+        :model-value="search"
         class="filter-control filter-search"
         label="Поиск по документу, версии или идентификатору"
         prepend-inner-icon="$search"
@@ -123,9 +239,10 @@ onMounted(load)
         active
         hide-details
         clearable
+        @update:model-value="onSearchInput"
       />
       <v-select
-        v-model="kind"
+        :model-value="kind"
         class="filter-control"
         :items="kindItems"
         label="Тип документа"
@@ -133,9 +250,10 @@ onMounted(load)
         density="compact"
         active
         hide-details
+        @update:model-value="onKindChange"
       />
       <v-select
-        v-model="action"
+        :model-value="action"
         class="filter-control"
         :items="actionItems"
         label="Действие"
@@ -143,6 +261,7 @@ onMounted(load)
         density="compact"
         active
         hide-details
+        @update:model-value="onActionChange"
       />
     </fieldset>
     <div
@@ -160,18 +279,27 @@ onMounted(load)
       v-else
       class="table-card"
     >
-      <v-data-table
+      <v-data-table-server
+        :page="page"
+        :items-per-page="pageSize"
+        :sort-by="sortBy"
         :headers="headers"
         :items="rows"
+        :items-length="total"
         :loading="busy"
-        :items-per-page="-1"
+        :items-per-page-options="pageSizeItems"
+        items-per-page-text="Записей на странице"
+        page-text="{0}-{1} из {2}"
         item-value="id"
-        hide-default-footer
         no-data-text="Записи журнала не найдены."
         density="compact"
+        must-sort
         class="interlaced-table audit-table"
         height="var(--staff-table-height)"
         fixed-header
+        @update:page="onPageChange"
+        @update:items-per-page="onPageSizeChange"
+        @update:sort-by="onSortChange"
       >
         <template #[`item.at`]="{ item }">
           {{ moscowTime(item.at) }}
@@ -190,30 +318,14 @@ onMounted(load)
         <template #[`item.actorName`]="{ item }">
           {{ item.actorName || `ID ${item.actorId}` }}
         </template>
-      </v-data-table>
-      <footer class="audit-pagination">
-        <ActionButton
-          icon="$previous"
-          tooltip-text="Предыдущая страница"
-          :disabled="busy || page <= 1"
-          @click="previousPage"
-        />
-        <span>Страница {{ page }} · {{ rows.length }} из {{ total }}</span>
-        <ActionButton
-          icon="$next"
-          tooltip-text="Следующая страница"
-          :disabled="busy || page * pageSize >= total"
-          @click="nextPage"
-        />
-      </footer>
+      </v-data-table-server>
     </v-card>
   </section>
 </template>
 
 <style scoped>
-.audit-table { --staff-table-height:max(320px, calc(100vh - 390px)); }
+.audit-table { --staff-table-height:max(320px, calc(100vh - 340px)); }
 .document-title { display:block; color:#203c58; font-weight:650; }
 .document-kind, .document-id { display:block; margin-top:2px; color:#6b7f92; font-size:11px; }
 .document-id { font-family:ui-monospace, SFMono-Regular, Consolas, monospace; }
-.audit-pagination { display:flex; align-items:center; justify-content:flex-end; gap:10px; min-height:48px; padding:6px 12px; color:#526a80; font-size:12px; border-top:1px solid #dbe5ee; }
 </style>

@@ -29,24 +29,49 @@ const audit = { id:1, documentId:id, actorId:1, actorName:'Иванов Иван
 const withdrawalRequest = { customerId:7, requestedAt:'2026-09-01T09:00:00Z', processed:false }
 const failure = () => createInternalProblem('networkUnavailable')
 let wrapper
+let withdrawalRows
 const vm = () => wrapper.vm.$.setupState
 function render(view, route = { path:'/', params:{}, query:{} }) { h.route = route; wrapper = mount(view, { global:{ plugins:[createSarafanVuetify()], stubs:{ VDialog:{ props:['modelValue'], template:'<section v-if="modelValue"><slot /></section>' }, RouterLink:{ props:['to'], template:'<a :href="to"><slot /></a>' } } } }); return wrapper }
 async function click(label) { await wrapper.get(`button[aria-label="${label}"]`).trigger('click'); await flushPromises() }
 async function confirm() { wrapper.findComponent(ConfirmDialog).vm.$emit('confirm'); await flushPromises() }
 function upload() { return { name:'consent.md', size:10, arrayBuffer:async () => new globalThis.TextEncoder().encode('# Текст').buffer } }
+function pageResult(items, path, { total=items.length, defaultPageSize=25, defaultSortBy='at', defaultSortOrder='desc' } = {}) {
+  const params = new globalThis.URL(path, 'https://sarafan.test').searchParams
+  const currentPage = Number(params.get('page') || 1)
+  const pageSize = Number(params.get('pageSize') || defaultPageSize)
+  const totalPages = total === 0 ? 0 : Math.ceil(total / pageSize)
+  return {
+    items,
+    pagination:{ currentPage, pageSize, totalCount:total, totalPages, hasNextPage:currentPage < totalPages, hasPreviousPage:currentPage > 1 },
+    sorting:{ sortBy:params.get('sortBy') || defaultSortBy, sortOrder:params.get('sortOrder') || defaultSortOrder },
+    search:params.get('search')
+  }
+}
 beforeEach(() => {
+  globalThis.localStorage.clear()
   h.router = { push:vi.fn(), replace:vi.fn() }
   h.session.user = ref({ id:1, roles:['administrator'] })
   h.session.getLegalDocumentOps = vi.fn().mockResolvedValue(ops)
   h.session.consentRequest = vi.fn(async path => {
     if (path === '/legal-documents') return [{ ...doc }]
-    if (path.startsWith('/legal-documents/audit?')) return { items:[{ ...audit }], page:1, pageSize:25, total:1 }
+    if (path.startsWith('/legal-documents/audit?')) return pageResult([{ ...audit }], path)
     if (path === '/legal-documents/preview') return { html:doc.html }
     if (path.endsWith('/source')) return new globalThis.Blob(['# Текст'])
-    if (path === '/consents/withdrawal-requests') return [{ ...withdrawalRequest }, { customerId:8, requestedAt:'2026-08-01T09:00:00Z', processed:true }]
-    if (path === '/consents/withdrawal-requests/processed') return { ...withdrawalRequest, processed:true }
+    if (path.startsWith('/consents/withdrawal-requests?')) {
+      const params = new globalThis.URL(path, 'https://sarafan.test').searchParams
+      const search = params.get('search') || ''
+      const processed = params.get('processed')
+      const filtered = withdrawalRows.filter(item => String(item.customerId).includes(search)
+        && (processed === null || String(item.processed) === processed))
+      return pageResult(filtered, path, { defaultPageSize:10, defaultSortBy:'processed', defaultSortOrder:'asc' })
+    }
+    if (path === '/consents/withdrawal-requests/processed') {
+      withdrawalRows = withdrawalRows.map(item => item.customerId === withdrawalRequest.customerId ? { ...item, processed:true } : item)
+      return { ...withdrawalRequest, processed:true }
+    }
     return { ...doc }
   })
+  withdrawalRows = [{ ...withdrawalRequest }, { customerId:8, requestedAt:'2026-08-01T09:00:00Z', processed:true }]
   globalThis.URL.createObjectURL = vi.fn(() => 'blob:test'); globalThis.URL.revokeObjectURL = vi.fn()
   vi.spyOn(globalThis.HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
 })
@@ -151,7 +176,8 @@ it('loads, filters, paginates and returns from the legal-document audit table', 
   render(LegalDocumentAuditView); await flushPromises()
   expect(wrapper.text()).toContain('Иванов Иван')
   expect(wrapper.text()).toContain('Создан')
-  await wrapper.get('.filter-search input').setValue('Отдельное'); await flushPromises()
+  await wrapper.get('.filter-search input').setValue('Отдельное')
+  await new Promise(resolve => globalThis.setTimeout(resolve, 310)); await flushPromises()
   const filters = wrapper.get('.filter-bar').findAllComponents({name:'VSelect'})
   filters[0].vm.$emit('update:modelValue',LEGAL_DOCUMENT_KIND.PERSONAL_DATA_CONSENT)
   filters[1].vm.$emit('update:modelValue','deleted')
@@ -164,17 +190,192 @@ it('retries audit failures and enforces pagination boundaries', async () => {
   h.session.consentRequest.mockRejectedValueOnce(failure())
   render(LegalDocumentAuditView); await flushPromises()
   expect(wrapper.find('.page-alert').exists()).toBe(true)
-  vm().previousPage()
-  vm().nextPage()
-  expect(vm().page).toBe(1)
-  h.session.consentRequest.mockResolvedValueOnce({ items:[{ ...audit, actorName:'', action:'legacy' }], page:1, pageSize:25, total:30 })
+  h.session.consentRequest.mockImplementationOnce(path => Promise.resolve(pageResult(
+    [{ ...audit, actorName:'', action:'legacy' }], path, { total:30 })))
   await click('Повторить загрузку')
   expect(wrapper.text()).toContain('ID 1')
   expect(wrapper.text()).toContain('legacy')
-  vm().nextPage(); await flushPromises()
+  const table = wrapper.findComponent({name:'VDataTableServer'})
+  h.session.consentRequest.mockImplementationOnce(path => Promise.resolve(pageResult([{ ...audit }], path, { total:30 })))
+  table.vm.$emit('update:page',2); await flushPromises()
   expect(vm().page).toBe(2)
-  vm().previousPage(); await flushPromises()
+  h.session.consentRequest.mockImplementationOnce(path => Promise.resolve(pageResult([{ ...audit }], path, { total:30 })))
+  table.vm.$emit('update:page',1); await flushPromises()
   expect(vm().page).toBe(1)
+})
+it('restores server-table state across fresh mounts and corrects a stale last page once', async () => {
+  const key = 'sarafan.backoffice.view-state.v1.1.privacy-requests'
+  globalThis.localStorage.setItem(key, JSON.stringify({
+    version:1,
+    page:2,
+    pageSize:25,
+    sortBy:[{ key:'customerId', order:'desc' }],
+    filters:{ search:'7', processed:'false' }
+  }))
+  h.session.consentRequest.mockImplementation(async path => {
+    if (path.startsWith('/consents/withdrawal-requests?')) {
+      return pageResult([{ ...withdrawalRequest }], path,
+        { total:50, defaultPageSize:10, defaultSortBy:'processed', defaultSortOrder:'asc' })
+    }
+    return { ...doc }
+  })
+
+  render(PrivacyRequestsView); await flushPromises()
+  expect(h.session.consentRequest).toHaveBeenCalledWith(expect.stringContaining('page=2&pageSize=25&sortBy=customerId&sortOrder=desc'))
+  expect(h.session.consentRequest).toHaveBeenCalledWith(expect.stringContaining('search=7&processed=false'))
+  h.session.user.value = null
+  await nextTick()
+  expect(globalThis.localStorage.getItem(key)).not.toBeNull()
+  h.session.user.value = { id:1, roles:['administrator'] }
+  wrapper.unmount()
+  h.session.consentRequest.mockClear()
+  render(PrivacyRequestsView); await flushPromises()
+  expect(h.session.consentRequest).toHaveBeenCalledWith(expect.stringContaining('page=2&pageSize=25&sortBy=customerId&sortOrder=desc'))
+
+  wrapper.unmount()
+  globalThis.localStorage.setItem('sarafan.backoffice.view-state.v1.1.legal-document-audit', JSON.stringify({
+    version:1,
+    page:4,
+    pageSize:25,
+    sortBy:[{ key:'at', order:'desc' }],
+    filters:{ search:'', kind:null, action:'' }
+  }))
+  h.session.consentRequest.mockImplementation(async path => path.startsWith('/legal-documents/audit?')
+    ? pageResult(new globalThis.URL(path, 'https://sarafan.test').searchParams.get('page') === '1' ? [{ ...audit }] : [], path, { total:1 })
+    : { ...doc })
+  render(LegalDocumentAuditView); await flushPromises()
+  const auditCalls = h.session.consentRequest.mock.calls.map(([path]) => path).filter(path => path.startsWith('/legal-documents/audit?'))
+  expect(auditCalls).toHaveLength(2)
+  expect(auditCalls[0]).toContain('page=4')
+  expect(auditCalls[1]).toContain('page=1')
+  expect(vm().page).toBe(1)
+  expect(JSON.parse(globalThis.localStorage.getItem('sarafan.backoffice.view-state.v1.1.legal-document-audit')).page).toBe(1)
+})
+it('ignores stale list results and rejects malformed page envelopes', async () => {
+  const pending = []
+  h.session.consentRequest.mockImplementation(path => {
+    if (!path.startsWith('/consents/withdrawal-requests?')) return Promise.resolve({ ...doc })
+    return new Promise(resolve => pending.push({ path, resolve }))
+  })
+  render(PrivacyRequestsView); await nextTick()
+  wrapper.findComponent({name:'VSelect'}).vm.$emit('update:modelValue','false'); await nextTick()
+  expect(pending).toHaveLength(2)
+  pending[1].resolve(pageResult([{ ...withdrawalRequest }], pending[1].path,
+    { defaultPageSize:10, defaultSortBy:'processed', defaultSortOrder:'asc' }))
+  await flushPromises()
+  pending[0].resolve(pageResult([{ customerId:99, requestedAt:withdrawalRequest.requestedAt, processed:true }], pending[0].path,
+    { defaultPageSize:10, defaultSortBy:'processed', defaultSortOrder:'asc' }))
+  await flushPromises()
+  expect(vm().rows.map(item => item.customerId)).toEqual([7])
+
+  wrapper.unmount()
+  h.session.consentRequest.mockResolvedValueOnce({ items:[], pagination:{ currentPage:1 } })
+  render(PrivacyRequestsView); await flushPromises()
+  expect(wrapper.find('.page-alert').exists()).toBe(true)
+  expect(vm().rows).toEqual([])
+})
+it('keeps tables usable and shows one safe notice when local preferences are unavailable', async () => {
+  vi.stubGlobal('localStorage', {
+    getItem:vi.fn(() => { throw new globalThis.DOMException('private preference contents') }),
+    setItem:vi.fn(() => { throw new globalThis.DOMException('private preference contents') }),
+    removeItem:vi.fn()
+  })
+  const warn = vi.spyOn(globalThis.console, 'warn').mockImplementation(() => {})
+  const error = vi.spyOn(globalThis.console, 'error').mockImplementation(() => {})
+
+  render(PrivacyRequestsView); await flushPromises()
+
+  expect(wrapper.findComponent({name:'VDataTableServer'}).exists()).toBe(true)
+  expect(wrapper.text()).toContain('Список доступен, но браузер не может сохранить его параметры')
+  expect(wrapper.findAll('.page-alert')).toHaveLength(1)
+  expect(warn).not.toHaveBeenCalled()
+  expect(error).not.toHaveBeenCalled()
+})
+it('validates and persists every audit and queue server-table event', async () => {
+  h.session.consentRequest.mockImplementation(async path => {
+    if (path.startsWith('/legal-documents/audit?')) return pageResult([{ ...audit }], path, { total:100 })
+    if (path.startsWith('/consents/withdrawal-requests?')) {
+      return pageResult([{ ...withdrawalRequest }], path,
+        { total:100, defaultPageSize:10, defaultSortBy:'processed', defaultSortOrder:'asc' })
+    }
+    return { ...doc }
+  })
+  render(LegalDocumentAuditView); await flushPromises()
+  const initialAuditCalls = h.session.consentRequest.mock.calls.length
+  for (const invalid of [null, 0, 1]) vm().onPageChange(invalid)
+  vm().onPageSizeChange(12)
+  vm().onPageSizeChange(25)
+  vm().onSortChange(null)
+  vm().onSortChange([{ key:'unknown', order:'asc' }])
+  vm().onSortChange([{ key:'title', order:'sideways' }])
+  await nextTick()
+  expect(h.session.consentRequest.mock.calls).toHaveLength(initialAuditCalls)
+  vm().onPageChange(2); await flushPromises()
+  vm().onPageSizeChange(50); await flushPromises()
+  vm().onSortChange([{ key:'title', order:'asc' }]); await flushPromises()
+  vm().onKindChange(99); await flushPromises()
+  vm().onActionChange('unknown'); await flushPromises()
+  vm().onSearchInput('first')
+  vm().onSearchInput('second')
+  await new Promise(resolve => globalThis.setTimeout(resolve, 310)); await flushPromises()
+  expect(JSON.parse(globalThis.localStorage.getItem('sarafan.backoffice.view-state.v1.1.legal-document-audit')))
+    .toMatchObject({ page:1, pageSize:50, sortBy:[{ key:'title', order:'asc' }], filters:{ search:'second', kind:null, action:'' } })
+
+  wrapper.unmount()
+  render(PrivacyRequestsView); await flushPromises()
+  vm().sortBy = []
+  vm().persistState()
+  expect(JSON.parse(globalThis.localStorage.getItem('sarafan.backoffice.view-state.v1.1.privacy-requests')).sortBy)
+    .toEqual([{ key:'processed', order:'asc' }])
+  vm().sortBy = [{ key:'processed', order:'asc' }]
+  const initialQueueCalls = h.session.consentRequest.mock.calls.length
+  for (const invalid of [null, 0, 1]) vm().onPageChange(invalid)
+  vm().onItemsPerPageChange(12)
+  vm().onItemsPerPageChange(10)
+  vm().onSortChange(null)
+  vm().onSortChange([{ key:'unknown', order:'asc' }])
+  vm().onSortChange([{ key:'customerId', order:'sideways' }])
+  await nextTick()
+  expect(h.session.consentRequest.mock.calls).toHaveLength(initialQueueCalls)
+  vm().onPageChange(2); await flushPromises()
+  vm().onItemsPerPageChange(25); await flushPromises()
+  vm().onSortChange([{ key:'customerId', order:'desc' }]); await flushPromises()
+  vm().onProcessedChange('unknown'); await flushPromises()
+  vm().onSearchInput(null)
+  vm().onSearchInput('customer 1234567890123')
+  await new Promise(resolve => globalThis.setTimeout(resolve, 310)); await flushPromises()
+  expect(JSON.parse(globalThis.localStorage.getItem('sarafan.backoffice.view-state.v1.1.privacy-requests')))
+    .toMatchObject({ page:1, pageSize:25, sortBy:[{ key:'customerId', order:'desc' }], filters:{ search:'1234567890', processed:'' } })
+})
+it('corrects queue underflow and patches a processed row before authoritative refresh', async () => {
+  globalThis.localStorage.setItem('sarafan.backoffice.view-state.v1.1.privacy-requests', JSON.stringify({
+    version:1,
+    page:3,
+    pageSize:10,
+    sortBy:[{ key:'processed', order:'asc' }],
+    filters:{ search:'', processed:'' }
+  }))
+  render(PrivacyRequestsView); await flushPromises()
+  expect(vm().page).toBe(1)
+  expect(JSON.parse(globalThis.localStorage.getItem('sarafan.backoffice.view-state.v1.1.privacy-requests')).page).toBe(1)
+  await vm().process(null)
+  await vm().process({ ...withdrawalRequest, processed:true })
+  await vm().process({ ...withdrawalRequest })
+  expect(vm().rows.find(item => item.customerId === withdrawalRequest.customerId)?.processed).toBe(true)
+  expect(h.session.consentRequest.mock.calls.filter(([path]) => path.startsWith('/consents/withdrawal-requests?')).length).toBeGreaterThanOrEqual(3)
+})
+it('rejects a malformed audit envelope and cancels pending search loads on unmount', async () => {
+  h.session.consentRequest.mockResolvedValueOnce({ items:[], sorting:{ sortBy:'at', sortOrder:'desc' } })
+  render(LegalDocumentAuditView); await flushPromises()
+  expect(wrapper.find('.page-alert').exists()).toBe(true)
+  wrapper.unmount()
+
+  render(PrivacyRequestsView); await flushPromises()
+  const calls = h.session.consentRequest.mock.calls.length
+  vm().onSearchInput('7')
+  wrapper.unmount()
+  await new Promise(resolve => globalThis.setTimeout(resolve, 310)); await flushPromises()
+  expect(h.session.consentRequest.mock.calls).toHaveLength(calls)
 })
 it('lists, filters and directly processes customer withdrawal requests', async () => {
   render(PrivacyRequestsView); await flushPromises()
@@ -184,10 +385,11 @@ it('lists, filters and directly processes customer withdrawal requests', async (
   expect(initialActions).toHaveLength(2)
   expect(initialActions[1].attributes('disabled')).toBeDefined()
   await wrapper.get('.filter-search input').setValue('7')
+  await new Promise(resolve => globalThis.setTimeout(resolve, 310)); await flushPromises()
   const filters = wrapper.get('.filter-bar').findAllComponents({name:'VSelect'})
   expect(filters).toHaveLength(1)
-  filters[0].vm.$emit('update:modelValue','false'); await nextTick()
-  const table = wrapper.findComponent({name:'VDataTable'}); table.vm.$emit('update:page',1); table.vm.$emit('update:itemsPerPage',25); table.vm.$emit('update:sortBy',[{key:'customerId',order:'desc'}]); await nextTick()
+  filters[0].vm.$emit('update:modelValue','false'); await flushPromises()
+  const table = wrapper.findComponent({name:'VDataTableServer'}); table.vm.$emit('update:itemsPerPage',25); await flushPromises(); table.vm.$emit('update:sortBy',[{key:'customerId',order:'desc'}]); await flushPromises()
   expect(table.props()).toMatchObject({ fixedHeader:true, density:'compact' })
   const actions = wrapper.findAll('button[aria-label="Отметить запрос как обработанный"]')
   expect(actions).toHaveLength(1)
@@ -195,8 +397,8 @@ it('lists, filters and directly processes customer withdrawal requests', async (
   await actions[0].trigger('click'); await flushPromises()
   const call = h.session.consentRequest.mock.calls.find(([path, options]) => path === '/consents/withdrawal-requests/processed' && options?.method === 'PUT')
   expect(JSON.parse(call[1].body)).toEqual({ customerId:7, requestedAt:'2026-09-01T09:00:00Z' })
-  expect(vm().rows.every(item => item.processed)).toBe(true)
-  filters[0].vm.$emit('update:modelValue',''); await nextTick()
+  expect(vm().rows).toHaveLength(0)
+  filters[0].vm.$emit('update:modelValue',''); await flushPromises()
   expect(wrapper.text()).toContain('Обработан')
 })
 it('retains the queue and shows the shared alert when processing fails', async () => {

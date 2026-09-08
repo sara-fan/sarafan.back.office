@@ -1,4 +1,4 @@
-# Sarafan Back Office 0.0.2
+# Sarafan Back Office
 [![ci](https://github.com/sara-fan/sarafan.back.office/actions/workflows/ci.yml/badge.svg)](https://github.com/sara-fan/sarafan.back.office/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/sara-fan/sarafan.back.office/graph/badge.svg?token=u3gQ7usaRT)](https://codecov.io/gh/sara-fan/sarafan.back.office)
 
