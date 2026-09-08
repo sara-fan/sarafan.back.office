@@ -31,6 +31,12 @@ export const { INTERNAL_PROBLEM_TYPES, createInternalProblem, normalizeProblem, 
       code: 'ui_service_unavailable',
       title: 'Сервис недоступен',
       detail: 'Сервис недоступен. Пожалуйста, повторите позже.'
+    },
+    viewPreferencesUnavailable: {
+      suffix: 'view-preferences-unavailable',
+      code: 'ui_view_preferences_unavailable',
+      title: 'Настройки списка не сохранены',
+      detail: 'Список доступен, но браузер не может сохранить его параметры для следующего сеанса.'
     }
   }
 })
