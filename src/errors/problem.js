@@ -20,6 +20,12 @@ export const CORE_PROBLEM_TYPES = Object.freeze({
 
 export const { INTERNAL_PROBLEM_TYPES, createInternalProblem, normalizeProblem, presentProblem, problemFieldErrors, suppressProblem } = createProblemTools({
   logger: uiLogger, suppressedEvent: EVENTS.operationSuppressed, additions: {
+    apiRouteBlocked: {
+      suffix: 'api-route-blocked',
+      code: 'ui_api_route_blocked',
+      title: 'Недопустимый адрес запроса',
+      detail: 'Приложение может обращаться только к служебному API'
+    },
     serviceUnavailable: {
       suffix: 'service-unavailable',
       code: 'ui_service_unavailable',

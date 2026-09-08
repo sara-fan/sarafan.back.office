@@ -70,6 +70,7 @@ For other comment-capable formats, use the same three lines with that format's n
 
 - Follow sara-fan/sarafan.back.office#1 and sara-fan/sarafan.core#13 for the internal back office; Product Spec v1.14 governs the customer facade.
 - Use only /api/v1/backoffice staff endpoints and separate staff credentials/cookies. Access tokens remain in memory. Never reuse customer identity, customer consent or phone verification.
+- Enforce the browser-side staff/customer boundary before `fetch`: accept only root-relative `/api/v1/backoffice/...` routes, and reject customer, non-back-office, absolute and cross-origin targets through a privacy-safe internal problem that never retains or logs the raw URL. Server authorization remains authoritative.
 - Authorize by the stable administrator, shift-manager, senior-operator and operator codes through a deny-by-default action matrix; only administrator can manage staff.
 - Keep all account state scoped to the current session; ignore stale asynchronous responses after logout or identity change. Server authorization remains authoritative.
 - Disable rather than delete. Preserve the last-administrator protection and require login after security-relevant self-changes.

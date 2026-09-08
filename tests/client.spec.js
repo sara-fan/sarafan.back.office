@@ -75,11 +75,83 @@ describe('RFC 9457 API client', () => {
     }
   })
 
+  it('allows only root-relative back-office routes, including dynamic paths and queries', async () => {
+    const paths = [
+      '/api/v1/backoffice/auth/login',
+      '/api/v1/backoffice/auth/refresh',
+      '/api/v1/backoffice/auth/logout',
+      '/api/v1/backoffice/users',
+      '/api/v1/backoffice/users/42?include=roles',
+      '/api/v1/backoffice/status'
+    ]
+    const fetch = vi.fn().mockResolvedValue(response(200, { ok: true }))
+    vi.stubGlobal('fetch', fetch)
+    const client = createApiClient({ getAccessToken: vi.fn(), refreshSession: vi.fn() })
+
+    for (const path of paths) {
+      await expect(client.request(path)).resolves.toEqual({ ok: true })
+    }
+
+    expect(fetch.mock.calls.map(([path]) => path)).toEqual(paths)
+  })
+
+  it('blocks non-staff routes before credentials, refresh, diagnostics, or network access', async () => {
+    const blockedPaths = [
+      '/api/v1/auth/refresh',
+      '/api/v1/customers',
+      '/api/v1/backoffice',
+      '/api/v1/backoffice-users',
+      'api/v1/backoffice/users',
+      'https://sb.sw.consulting/api/v1/backoffice/users?value=secret-route-value',
+      'https://example.test/api/v1/backoffice/users',
+      '//example.test/api/v1/backoffice/users',
+      '/api/v1/backoffice/../auth/refresh',
+      '/api/v1/backoffice/%2e%2e/auth/refresh',
+      '/api/v1/backoffice/%2fapi/v1/auth/refresh',
+      '/api/v1/backoffice\\auth\\refresh',
+      '/api/v1/backoffice/users\u0000private',
+      '/api/v1/backoffice/users\u007fprivate',
+      '/api/v1/backoffice/users#private-fragment',
+      null,
+      { path: '/api/v1/backoffice/users' }
+    ]
+    const fetch = vi.fn()
+    const getAccessToken = vi.fn(() => 'staff-token')
+    const refreshSession = vi.fn()
+    const logger = { log: vi.fn() }
+    vi.stubGlobal('fetch', fetch)
+    const client = createApiClient({ getAccessToken, refreshSession, logger })
+
+    for (const path of blockedPaths) {
+      const failure = await client.request(path, {}, { authorize: true }).catch(problem => problem)
+      expect(failure).toBeInstanceOf(ProblemError)
+      expect(failure).toMatchObject({
+        type: INTERNAL_PROBLEM_TYPES.apiRouteBlocked,
+        code: 'ui_api_route_blocked'
+      })
+      expect(failure).not.toHaveProperty('status')
+      expect(failure).not.toHaveProperty('cause')
+      expect(JSON.stringify(failure)).not.toMatch(/secret-route-value|private-fragment/u)
+    }
+
+    vi.stubGlobal('URL', class {
+      constructor() { throw new TypeError('private parser failure') }
+    })
+    const parserFailure = await client.request('/api/v1/backoffice/users').catch(problem => problem)
+    expect(parserFailure).toMatchObject({ type: INTERNAL_PROBLEM_TYPES.apiRouteBlocked })
+    expect(parserFailure).not.toHaveProperty('cause')
+
+    expect(fetch).not.toHaveBeenCalled()
+    expect(getAccessToken).not.toHaveBeenCalled()
+    expect(refreshSession).not.toHaveBeenCalled()
+    expect(logger.log).not.toHaveBeenCalled()
+  })
+
   it('adds JSON negotiation, credentials, bearer auth, and retries once after refresh', async () => {
     let token = 'old-token'
     let client
     const refreshSession = vi.fn(async (operationTrace) => {
-      await client.request('/refresh', { method: 'POST' }, { operationTrace })
+      await client.request('/api/v1/backoffice/auth/refresh', { method: 'POST' }, { operationTrace })
       token = 'new-token'
     })
     const fetch = vi.fn()
@@ -92,7 +164,7 @@ describe('RFC 9457 API client', () => {
     vi.stubGlobal('fetch', fetch)
     client = createApiClient({ getAccessToken: () => token, refreshSession })
 
-    await expect(client.request('/resource', {}, { authorize: true })).resolves.toEqual({ ok: true })
+    await expect(client.request('/api/v1/backoffice/users', {}, { authorize: true })).resolves.toEqual({ ok: true })
 
     expect(refreshSession).toHaveBeenCalledOnce()
     expect(fetch).toHaveBeenCalledTimes(3)
@@ -118,9 +190,9 @@ describe('RFC 9457 API client', () => {
     vi.stubGlobal('fetch', fetch)
     const client = createApiClient({ getAccessToken: () => '', refreshSession: vi.fn() })
 
-    await expect(client.request('/photo', {}, { responseType: 'blob' })).resolves.toBe(photo)
+    await expect(client.request('/api/v1/backoffice/legal-documents/11111111-1111-1111-1111-111111111111/source', {}, { responseType: 'blob' })).resolves.toBe(photo)
     expect(fetch.mock.calls[0][1].headers.get('Accept')).toBe(PHOTO_ACCEPT)
-    await expect(client.request('/empty', { method: 'DELETE' })).resolves.toBeNull()
+    await expect(client.request('/api/v1/backoffice/auth/logout', { method: 'POST' })).resolves.toBeNull()
   })
 
   it('normalizes rejected fetch and malformed success bodies', async () => {
@@ -132,10 +204,10 @@ describe('RFC 9457 API client', () => {
     vi.stubGlobal('fetch', fetch)
     const client = createApiClient({ getAccessToken: () => '', refreshSession: vi.fn() })
 
-    await expect(client.request('/offline')).rejects.toMatchObject({
+    await expect(client.request('/api/v1/backoffice/status')).rejects.toMatchObject({
       type: INTERNAL_PROBLEM_TYPES.networkUnavailable
     })
-    await expect(client.request('/malformed')).rejects.toMatchObject({
+    await expect(client.request('/api/v1/backoffice/users')).rejects.toMatchObject({
       type: INTERNAL_PROBLEM_TYPES.protocolError
     })
   })
@@ -256,7 +328,7 @@ describe('RFC 9457 API client', () => {
           503,
           'service-unavailable'
         )))
-        await refreshClient.request('/api/v1/auth/refresh', { method: 'POST' })
+        await refreshClient.request('/api/v1/backoffice/auth/refresh', { method: 'POST' })
       },
       logger
     })
@@ -279,9 +351,9 @@ describe('RFC 9457 API client', () => {
       logger
     })
 
-    await expect(client.request('/api/v1/auth/code/request', { method: 'POST' })).rejects.toBeInstanceOf(ProblemError)
-    await expect(client.request('/api/v1/auth/code/verify', { method: 'POST' })).rejects.toBeInstanceOf(ProblemError)
-    await expect(client.request('/api/v1/auth/refresh', { method: 'POST' })).rejects.toBeInstanceOf(ProblemError)
+    await expect(client.request('/api/v1/backoffice/users', { method: 'POST' })).rejects.toBeInstanceOf(ProblemError)
+    await expect(client.request('/api/v1/backoffice/auth/login', { method: 'POST' })).rejects.toBeInstanceOf(ProblemError)
+    await expect(client.request('/api/v1/backoffice/auth/refresh', { method: 'POST' })).rejects.toBeInstanceOf(ProblemError)
     expect(logger.log).not.toHaveBeenCalled()
   })
 })
