@@ -33,7 +33,8 @@ let withdrawalRows
 const vm = () => wrapper.vm.$.setupState
 function render(view, route = { path:'/', params:{}, query:{} }) { h.route = route; wrapper = mount(view, { global:{ plugins:[createSarafanVuetify()], stubs:{ VDialog:{ props:['modelValue'], template:'<section v-if="modelValue"><slot /></section>' }, RouterLink:{ props:['to'], template:'<a :href="to"><slot /></a>' } } } }); return wrapper }
 async function click(label) { await wrapper.get(`button[aria-label="${label}"]`).trigger('click'); await flushPromises() }
-async function confirm() { wrapper.findComponent(ConfirmDialog).vm.$emit('confirm'); await flushPromises() }
+function openConfirm() { return wrapper.findAllComponents(ConfirmDialog).find(dialog => dialog.props('open')) }
+async function confirm() { openConfirm().vm.$emit('confirm'); await flushPromises() }
 function upload() { return { name:'consent.md', size:10, arrayBuffer:async () => new globalThis.TextEncoder().encode('# Текст').buffer } }
 function pageResult(items, path, { total=items.length, defaultPageSize=25, defaultSortBy='at', defaultSortOrder='desc' } = {}) {
   const params = new globalThis.URL(path, 'https://sarafan.test').searchParams
@@ -115,7 +116,7 @@ it('requires a current server preview before immutable creation and preserves fa
   h.session.consentRequest.mockResolvedValueOnce({ html:doc.html })
   await vm().previewDocument()
   h.session.consentRequest.mockResolvedValueOnce({ ...doc }); await vm().save()
-  expect(h.router.replace).toHaveBeenCalledWith(`/legal-documents/${id}`)
+  expect(h.router.replace).toHaveBeenCalledWith('/legal-documents')
 })
 it('preserves source bytes when base64 conversion crosses chunk boundaries', async () => {
   const source = 'a'.repeat(32769)
@@ -128,13 +129,50 @@ it('preserves source bytes when base64 conversion crosses chunk boundaries', asy
   const previewCall = h.session.consentRequest.mock.calls.find(([path]) => path === '/legal-documents/preview')
   expect(JSON.parse(previewCall[1].body).source).toBe(globalThis.btoa(source))
 })
+it('refreshes pristine legal editors and confirms before clearing dirty source and preview state', async () => {
+  render(LegalDocumentView, { path:'/legal-documents/new', params:{}, query:{} }); await flushPromises()
+  expect(wrapper.get('button[aria-label="Сохранить документ"] .fa-check-double').exists()).toBe(true)
+  const initialLoads = h.session.getLegalDocumentOps.mock.calls.length
+  vm().busy = true; vm().requestRefresh(); vm().busy = false
+  expect(h.session.getLegalDocumentOps).toHaveBeenCalledTimes(initialLoads)
+  await click('Обновить данные')
+  expect(h.session.getLegalDocumentOps).toHaveBeenCalledTimes(initialLoads + 1)
+  expect(openConfirm()).toBeUndefined()
+
+  vm().form.title = 'Несохранённый документ'
+  vm().form.displayVersion = 'draft'
+  const source = upload()
+  vm().file = source
+  h.session.consentRequest.mockResolvedValueOnce({ html:doc.html })
+  await vm().previewDocument(); await nextTick()
+  expect(vm().preview).not.toBeNull()
+  const callsBeforeDirtyRefresh = h.session.getLegalDocumentOps.mock.calls.length
+  await click('Обновить данные')
+  expect(openConfirm().props()).toMatchObject({ action:'Сбросить и обновить', actionIcon:'$refresh' })
+  expect(wrapper.get('button[aria-label="Сбросить и обновить"]').text()).toBe('Сбросить и обновить')
+  openConfirm().vm.$emit('cancel'); await nextTick()
+  expect(vm().form.title).toBe('Несохранённый документ')
+  expect(vm().file).toMatchObject({ name:source.name, size:source.size })
+  expect(vm().preview).not.toBeNull()
+  expect(h.session.getLegalDocumentOps).toHaveBeenCalledTimes(callsBeforeDirtyRefresh)
+
+  await click('Обновить данные')
+  await confirm()
+  expect(vm().form.title).toBe('Согласие на обработку персональных данных')
+  expect(vm().form.displayVersion).toBe('')
+  expect(vm().file).toBeNull()
+  expect(vm().preview).toBeNull()
+  expect(h.session.getLegalDocumentOps).toHaveBeenCalledTimes(callsBeforeDirtyRefresh + 1)
+})
 it('shows read-only detail, confirms permitted deletion, and refreshes a boundary conflict', async () => {
   render(LegalDocumentView, { path:`/legal-documents/${id}`, params:{id}, query:{} }); await flushPromises()
   expect(wrapper.find('form').exists()).toBe(false)
+  expect(wrapper.get('button[aria-label="Создать новый документ"]').text()).toBe('')
+  expect(wrapper.get('button[aria-label="Удалить документ до даты начала действия"]').text()).toBe('')
   await wrapper.findComponent(LegalDocumentReader).vm.$emit('download'); await flushPromises()
   expect(h.session.consentRequest).toHaveBeenCalledWith(`/legal-documents/${id}/source`, expect.any(Object), 'blob')
   await click('Удалить документ до даты начала действия')
-  wrapper.findComponent(ConfirmDialog).vm.$emit('cancel'); await nextTick()
+  openConfirm().vm.$emit('cancel'); await nextTick()
   await click('Удалить документ до даты начала действия')
   const boundary = createInternalProblem('networkUnavailable')
   boundary.code = 'legal_document_already_effective'
@@ -154,7 +192,8 @@ it('shows read-only detail, confirms permitted deletion, and refreshes a boundar
 it('uses the shared legal-document list layout, routes actions, filters, and retries failures', async () => {
   h.session.consentRequest.mockRejectedValueOnce(failure()); render(LegalDocumentsView); await flushPromises()
   expect(wrapper.find('.page-alert').exists()).toBe(true)
-  await click('Повторить загрузку'); expect(wrapper.find('.page-alert').exists()).toBe(false)
+  expect(wrapper.find('button[aria-label="Повторить загрузку"]').exists()).toBe(false)
+  await click('Обновить список'); expect(wrapper.find('.page-alert').exists()).toBe(false)
   expect(wrapper.get('.count').text()).toBe('1')
   const filterBar = wrapper.get('.filter-bar')
   expect(filterBar.findComponent({name:'VTextField'}).props()).toMatchObject({ density:'compact', variant:'solo', active:true })
@@ -165,12 +204,71 @@ it('uses the shared legal-document list layout, routes actions, filters, and ret
   await wrapper.get('.filter-search input').setValue('Отдельное'); await nextTick()
   await click('Создать новый документ'); expect(h.router.push).toHaveBeenCalledWith('/legal-documents/new')
   await click('Открыть журнал действий'); expect(h.router.push).toHaveBeenCalledWith('/legal-documents/audit')
-  await click('Открыть документ'); expect(h.router.push).toHaveBeenCalledWith(`/legal-documents/${id}`)
+  const rowActions = wrapper.get('.actions-container').findAll('button')
+  expect(rowActions).toHaveLength(2)
+  expect(wrapper.get('button[aria-label="Просмотреть документ"] .fa-eye').exists()).toBe(true)
+  expect(wrapper.get('button[aria-label="Удалить документ"] .fa-trash-can').exists()).toBe(true)
+  await click('Просмотреть документ'); expect(h.router.push).toHaveBeenCalledWith(`/legal-documents/${id}`)
+
+  h.session.consentRequest.mockImplementation(async (path, options) => {
+    if (path === `/legal-documents/${id}` && options?.method === 'DELETE') return null
+    if (path === '/legal-documents') return []
+    return { ...doc }
+  })
+  await click('Удалить документ')
+  expect(openConfirm().props()).toMatchObject({ action:'Удалить документ', actionIcon:'$delete' })
+  expect(wrapper.get('button[aria-label="Удалить документ"] .fa-trash-can').exists()).toBe(true)
+  openConfirm().vm.$emit('cancel'); await nextTick()
+  expect(h.session.consentRequest).not.toHaveBeenCalledWith(`/legal-documents/${id}`, { method:'DELETE' })
+  await click('Удалить документ'); await confirm()
+  expect(h.session.consentRequest).toHaveBeenCalledWith(`/legal-documents/${id}`, { method:'DELETE' })
+  expect(wrapper.get('.count').text()).toBe('0')
+
+  wrapper.unmount()
+  h.session.consentRequest.mockImplementation(async path => path === '/legal-documents'
+    ? [{ ...doc, canDelete:false }]
+    : { ...doc, canDelete:false })
+  render(LegalDocumentsView); await flushPromises()
+  expect(wrapper.get('.actions-container').findAll('button')).toHaveLength(2)
+  const disabledDelete = wrapper.get('button[aria-label="Удаление недоступно после начала действия документа"]')
+  expect(disabledDelete.attributes('disabled')).toBeDefined()
+  await disabledDelete.trigger('click'); expect(openConfirm()).toBeUndefined()
 
   wrapper.unmount(); h.session.consentRequest.mockRejectedValueOnce(failure())
   render(LegalDocumentView, { path:`/legal-documents/${id}`, params:{id}, query:{} }); await flushPromises()
   expect(wrapper.find('.page-alert').exists()).toBe(true)
-  await click('Повторить загрузку'); expect(wrapper.find('.page-alert').exists()).toBe(false)
+  expect(wrapper.find('button[aria-label="Повторить загрузку"]').exists()).toBe(false)
+  await click('Обновить данные'); expect(wrapper.find('.page-alert').exists()).toBe(false)
+})
+it('guards list deletion and refreshes availability after deletion failures', async () => {
+  render(LegalDocumentsView); await flushPromises()
+
+  vm().confirmDeletion(null)
+  vm().confirmDeletion({ ...doc, canDelete:false })
+  vm().busy = true; vm().confirmDeletion({ ...doc }); vm().busy = false
+  expect(vm().pendingDelete).toBeNull()
+  await vm().deleteDocument()
+  vm().pendingDelete = { ...doc, canDelete:false }; await vm().deleteDocument()
+  vm().pendingDelete = { ...doc }; vm().busy = true; await vm().deleteDocument(); vm().busy = false
+
+  const boundary = failure(); boundary.code = 'legal_document_already_effective'
+  h.session.consentRequest.mockRejectedValueOnce(boundary).mockResolvedValueOnce([{ ...doc, canDelete:false }])
+  vm().pendingDelete = { ...doc }; await vm().deleteDocument()
+  expect(vm().problem.code).toBe('legal_document_already_effective')
+  expect(vm().rows[0].canDelete).toBe(false)
+
+  h.session.consentRequest.mockRejectedValueOnce(failure())
+  vm().pendingDelete = { ...doc }; await vm().deleteDocument()
+  expect(vm().problem.code).toBe('ui_network_unavailable')
+
+  const secondBoundary = failure(); secondBoundary.code = 'legal_document_already_effective'
+  h.session.consentRequest.mockRejectedValueOnce(secondBoundary).mockRejectedValueOnce(failure())
+  vm().pendingDelete = { ...doc }; await vm().deleteDocument()
+  expect(vm().problem.code).toBe('legal_document_already_effective')
+
+  h.session.consentRequest.mockResolvedValueOnce(null).mockResolvedValueOnce({ items:[] })
+  vm().pendingDelete = { ...doc }; await vm().deleteDocument()
+  expect(vm().problem.code).toBe('ui_protocol_error')
 })
 it('loads, filters, paginates and returns from the legal-document audit table', async () => {
   render(LegalDocumentAuditView); await flushPromises()
@@ -192,7 +290,8 @@ it('retries audit failures and enforces pagination boundaries', async () => {
   expect(wrapper.find('.page-alert').exists()).toBe(true)
   h.session.consentRequest.mockImplementationOnce(path => Promise.resolve(pageResult(
     [{ ...audit, actorName:'', action:'legacy' }], path, { total:30 })))
-  await click('Повторить загрузку')
+  expect(wrapper.find('button[aria-label="Повторить загрузку"]').exists()).toBe(false)
+  await click('Обновить журнал')
   expect(wrapper.text()).toContain('ID 1')
   expect(wrapper.text()).toContain('legacy')
   const table = wrapper.findComponent({name:'VDataTableServer'})
@@ -383,6 +482,8 @@ it('lists, filters and directly processes customer withdrawal requests', async (
   expect(wrapper.text()).toContain('Обработан')
   const initialActions = wrapper.findAll('button[aria-label="Отметить запрос как обработанный"]')
   expect(initialActions).toHaveLength(2)
+  expect(initialActions[0].text()).toBe('')
+  expect(initialActions[0].find('.fa-check-double').exists()).toBe(true)
   expect(initialActions[1].attributes('disabled')).toBeDefined()
   await wrapper.get('.filter-search input').setValue('7')
   await new Promise(resolve => globalThis.setTimeout(resolve, 310)); await flushPromises()

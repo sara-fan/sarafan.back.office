@@ -95,6 +95,11 @@ onMounted(load)
           aria-label="Загрузка"
         />
         <ActionButton
+          icon="$refresh"
+          tooltip-text="Обновить список пользователей"
+          :disabled="busy"
+          @click="load"
+        /><ActionButton
           variant="blue"
           icon="$addUser"
           icon-size="28"
@@ -143,19 +148,8 @@ onMounted(load)
         hide-details
       />
     </fieldset>
-    <div
-      v-if="problem"
-      class="empty-state"
-    >
-      <ActionButton
-        icon="$refresh"
-        label="Повторить загрузку"
-        tooltip-text="Повторить загрузку"
-        @click="load"
-      />
-    </div>
     <v-card
-      v-else
+      v-if="!problem"
       class="table-card"
     >
       <v-data-table

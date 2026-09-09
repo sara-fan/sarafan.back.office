@@ -43,6 +43,7 @@ const stubs={
 const wrappers=[]
 const render=(view,options={})=>{const w=mount(view,{...options,global:{plugins:[createSarafanVuetify()],stubs,mocks:{$route:h.route}}});wrappers.push(w);return w}
 const button=(w,label)=>w.get(`button[aria-label="${label}"]`)
+const openConfirm=w=>w.findAllComponents(ConfirmDialog).find(dialog=>dialog.props('open'))
 const fill=async(w,name,value)=>w.get(`[name="${name}"]`).setValue(value)
 beforeEach(()=>{
   h.route={path:'/users',params:{},query:{}}
@@ -66,7 +67,8 @@ describe('ActionButton pattern',()=>{
     await w.setProps({loading:false,disabled:true,tooltipText:'   ',type:'submit'});expect(w.findComponent(stubs.VTooltip).props('disabled')).toBe(true);expect(w.get('.action-button-activator').attributes('tabindex')).toBeUndefined();expect(w.get('button').attributes('aria-label')).toBe('Сохранить');expect(w.get('button').attributes('type')).toBe('submit')
   })
   it('supports cancellation, confirmation and outside dismissal consistently',async()=>{
-    const w=render(ConfirmDialog,{props:{open:true,message:'Проверка'}})
+    const w=render(ConfirmDialog,{props:{open:true,message:'Проверка',actionIcon:'$refresh'}})
+    expect(button(w,'Отмена').text()).toBe('Отмена');expect(button(w,'Подтвердить').text()).toBe('Подтвердить');expect(button(w,'Подтвердить').get('i').attributes('data-icon')).toBe('$refresh')
     await button(w,'Отмена').trigger('click');await button(w,'Подтвердить').trigger('click')
     w.findComponent({name:'VDialog'}).vm.$emit('update:modelValue',false)
     w.findComponent({name:'VDialog'}).vm.$emit('update:modelValue',true)
@@ -120,7 +122,7 @@ describe('staff views',()=>{
   })
   it('validates login, reveals password, preserves failed fields, and navigates only on success',async()=>{
     h.route={path:'/login',params:{},query:{return:'/users/2'}};h.session.notice.value='Войдите повторно'
-    const w=render(LoginView);await w.get('form').trigger('submit');expect(w.findAll('.field-error').some(e=>e.text())).toBe(true);expect(w.find('[role=alert]').exists()).toBe(false)
+    const w=render(LoginView);expect(button(w,'Войти').text()).toBe('Войти');await w.get('form').trigger('submit');expect(w.findAll('.field-error').some(e=>e.text())).toBe(true);expect(w.find('[role=alert]').exists()).toBe(false)
     await fill(w,'email','a@b.test');await fill(w,'password','test-password');expect(w.get('[name=password]').attributes('type')).toBe('password');expect(w.get('i[data-icon="$eye"]').exists()).toBe(true);await button(w,'Показать пароль').trigger('click');expect(w.get('[name=password]').attributes('type')).toBe('text');expect(w.get('i[data-icon="$eyeOff"]').exists()).toBe(true);await button(w,'Скрыть пароль').trigger('click');expect(w.get('[name=password]').attributes('type')).toBe('password')
     h.session.login.mockRejectedValueOnce(failure());await w.get('form').trigger('submit');await flushPromises();expect(w.get('[role=alert]').text()).toContain('Проверьте');expect(w.get('[name=password]').element.value).toBe('test-password');expect(h.router.replace).not.toHaveBeenCalled()
     h.session.login.mockClear();const wait=pending();h.session.login.mockReturnValueOnce(wait.promise);await w.get('form').trigger('submit');await w.get('form').trigger('submit');expect(h.session.login).toHaveBeenCalledTimes(1);wait.resolve(identity);await flushPromises();expect(h.router.replace).toHaveBeenCalledWith('/users/2')
@@ -139,16 +141,16 @@ describe('staff views',()=>{
     await w.get('.filter-search input').setValue('');const selects=w.findAllComponents({name:'VSelect'});selects[0].vm.$emit('update:modelValue','operator');await nextTick();expect(w.findAll('tbody tr')).toHaveLength(1)
     selects[0].vm.$emit('update:modelValue','');selects[1].vm.$emit('update:modelValue','false');await nextTick();expect(w.findAll('tbody tr')).toHaveLength(1)
     selects[1].vm.$emit('update:modelValue','');table.vm.$emit('update:sortBy',[{key:'email',order:'desc'}]);await nextTick();await w.findAll('button[aria-label="Редактировать учётную запись"]')[0].trigger('click');expect(h.router.push).toHaveBeenCalledWith('/users/10')
-    expect(button(w,'Добавить пользователя').get('i').attributes('data-icon')).toBe('$addUser');await button(w,'Добавить пользователя').trigger('click');expect(h.router.push).toHaveBeenCalledWith('/users/new')
+    expect(button(w,'Добавить пользователя').get('i').attributes('data-icon')).toBe('$addUser');expect(button(w,'Добавить пользователя').text()).toBe('');await button(w,'Добавить пользователя').trigger('click');expect(h.router.push).toHaveBeenCalledWith('/users/new')
     await w.get('.filter-search input').setValue('никого');expect(w.text()).toContain('Пользователи не найдены')
   })
   it('retries load, cancels disabling and retains errors when the server rejects disabling',async()=>{
     const operator={...identity,id:2,firstName:'Анна',email:'anna@example.test',roles:['operator'],isActive:true}
     h.session.listUsers.mockResolvedValue([{...identity},operator]);h.session.getUser.mockResolvedValue(operator)
-    h.session.listUsers.mockRejectedValueOnce(failure());const w=render(UsersView);await flushPromises();expect(w.get('[role=alert]').exists()).toBe(true);await button(w,'Повторить загрузку').trigger('click');await flushPromises()
+    h.session.listUsers.mockRejectedValueOnce(failure());const w=render(UsersView);await flushPromises();expect(w.get('[role=alert]').exists()).toBe(true);expect(w.find('button[aria-label="Повторить загрузку"]').exists()).toBe(false);await button(w,'Обновить список пользователей').trigger('click');await flushPromises()
     await button(w,'Отключить учётную запись').trigger('click');await button(w,'Отмена').trigger('click');expect(h.session.saveUser).not.toHaveBeenCalled()
     await button(w,'Отключить учётную запись').trigger('click');h.session.saveUser.mockRejectedValueOnce(failure());await button(w,'Отключить').trigger('click');await flushPromises();expect(w.get('[role=alert]').exists()).toBe(true)
-    await button(w,'Повторить загрузку').trigger('click');await flushPromises();await button(w,'Отключить учётную запись').trigger('click');await button(w,'Отключить').trigger('click');await flushPromises();expect(h.session.saveUser).toHaveBeenCalledWith(2,expect.objectContaining({isActive:false}),expect.objectContaining({id:2}))
+    await button(w,'Обновить список пользователей').trigger('click');await flushPromises();await button(w,'Отключить учётную запись').trigger('click');await button(w,'Отключить').trigger('click');await flushPromises();expect(h.session.saveUser).toHaveBeenCalledWith(2,expect.objectContaining({isActive:false}),expect.objectContaining({id:2}))
     await button(w,'Отключить учётную запись').trigger('click');h.session.saveUser.mockImplementationOnce(()=>{h.session.user.value=null;return Promise.resolve(identity)});await button(w,'Отключить').trigger('click');await flushPromises()
   })
   it('prevents disabling the last active administrator and explains why',async()=>{
@@ -166,7 +168,7 @@ describe('staff views',()=>{
     const w=render(UsersView);await flushPromises();expect(w.get('.count').text()).toBe('1')
     await button(w,'Отключить учётную запись').trigger('click');await button(w,'Отключить').trigger('click');await flushPromises()
     expect(w.get('.count').text()).toBe('0');expect(w.find('table').exists()).toBe(false);expect(w.get('[role=alert]').exists()).toBe(true)
-    await button(w,'Повторить загрузку').trigger('click');await flushPromises();expect(w.get('.count').text()).toBe('2')
+    await button(w,'Обновить список пользователей').trigger('click');await flushPromises();expect(w.get('.count').text()).toBe('2')
   })
   it('creates accounts with field validation and retains input on failed saves',async()=>{
     h.route={path:'/users/new',params:{},query:{}};const w=render(AccountView);await flushPromises();expect(w.get('.primary-heading').text()).toBe('Регистрация пользователя');expect(w.findAll('.role-options label').map(label=>label.text())).toEqual(['Администратор','Старший смены','Старший оператор','Оператор']);expect(w.text()).not.toContain('Имя и фамилия обязательны');expect(w.text()).not.toContain('Можно выбрать несколько ролей');await w.get('form').trigger('submit');expect(w.get('#firstName-error').text()).toBe('Имя обязательно');expect(w.get('#lastName-error').text()).toBe('Фамилия обязательна');expect(w.get('#roles-error').text()).toContain('Выберите');expect(w.find('[role=alert]').exists()).toBe(false)
@@ -176,12 +178,27 @@ describe('staff views',()=>{
     h.session.saveUser.mockClear();const wait=pending();h.session.saveUser.mockReturnValueOnce(wait.promise);await w.get('form').trigger('submit');await w.get('form').trigger('submit');wait.resolve(identity);await flushPromises();expect(h.session.saveUser).toHaveBeenCalledTimes(1);expect(h.router.push).toHaveBeenCalledWith('/users')
   })
   it('retries failed account loads and confirms security edits before saving',async()=>{
-    h.route={path:'/users/1',params:{id:'1'},query:{}};h.session.getRoles.mockRejectedValueOnce(failure());const w=render(AccountView);await flushPromises();expect(w.find('form').exists()).toBe(false);await button(w,'Повторить загрузку').trigger('click');await flushPromises()
+    h.route={path:'/users/1',params:{id:'1'},query:{}};h.session.getRoles.mockRejectedValueOnce(failure());const w=render(AccountView);await flushPromises();expect(w.find('form').exists()).toBe(false);expect(w.find('button[aria-label="Повторить загрузку"]').exists()).toBe(false);await button(w,'Обновить данные').trigger('click');await flushPromises()
     expect(w.get('.primary-heading').text()).toBe('Изменить информацию о пользователе');expect(button(w,'Сохранить изменения').get('i').attributes('data-icon')).toBe('$saveChanges')
     const reveal=w.findAll('button[aria-label="Показать пароль"]');expect(reveal).toHaveLength(2);expect(w.get('[name=password]').attributes('type')).toBe('password');expect(w.get('[name=confirmation]').attributes('type')).toBe('password');await reveal[0].trigger('click');expect(w.get('[name=password]').attributes('type')).toBe('text');expect(w.get('[name=confirmation]').attributes('type')).toBe('password');expect(w.get('button[aria-label="Скрыть пароль"] i').attributes('data-icon')).toBe('$eyeOff')
     await fill(w,'firstName','Пётр');await w.get('form').trigger('submit');await flushPromises();expect(h.session.saveUser).toHaveBeenCalledTimes(1)
-    await fill(w,'email','new@example.test');await w.get('form').trigger('submit');expect(w.find('[role=alertdialog]').exists()).toBe(true);await w.findComponent(ConfirmDialog).vm.$emit('cancel');await nextTick();expect(h.session.saveUser).toHaveBeenCalledTimes(1)
-    await w.get('form').trigger('submit');h.session.saveUser.mockImplementationOnce(()=>{h.session.user.value=null;return Promise.resolve(identity)});await w.findComponent(ConfirmDialog).vm.$emit('confirm');await flushPromises();expect(h.router.replace).toHaveBeenCalledWith('/login')
+    await fill(w,'email','new@example.test');await w.get('form').trigger('submit');expect(w.find('[role=alertdialog]').exists()).toBe(true);openConfirm(w).vm.$emit('cancel');await nextTick();expect(h.session.saveUser).toHaveBeenCalledTimes(1)
+    await w.get('form').trigger('submit');h.session.saveUser.mockImplementationOnce(()=>{h.session.user.value=null;return Promise.resolve(identity)});openConfirm(w).vm.$emit('confirm');await flushPromises();expect(h.router.replace).toHaveBeenCalledWith('/login')
+  })
+  it('refreshes pristine accounts directly and confirms before discarding dirty fields',async()=>{
+    h.route={path:'/users/1',params:{id:'1'},query:{}};const w=render(AccountView);await flushPromises()
+    const callsAfterLoad=h.session.getUser.mock.calls.length
+    await button(w,'Обновить данные').trigger('click');await flushPromises()
+    expect(h.session.getUser).toHaveBeenCalledTimes(callsAfterLoad+1);expect(openConfirm(w)).toBeUndefined()
+    await fill(w,'firstName','Несохранённое имя');await fill(w,'password','unsaved-password')
+    const callsBeforeDirtyRefresh=h.session.getUser.mock.calls.length
+    await button(w,'Обновить данные').trigger('click');await nextTick()
+    expect(openConfirm(w).props()).toMatchObject({action:'Сбросить и обновить',actionIcon:'$refresh'})
+    expect(button(w,'Сбросить и обновить').text()).toBe('Сбросить и обновить')
+    openConfirm(w).vm.$emit('cancel');await nextTick()
+    expect(w.get('[name=firstName]').element.value).toBe('Несохранённое имя');expect(w.get('[name=password]').element.value).toBe('unsaved-password');expect(h.session.getUser).toHaveBeenCalledTimes(callsBeforeDirtyRefresh)
+    await button(w,'Обновить данные').trigger('click');openConfirm(w).vm.$emit('confirm');await flushPromises()
+    expect(w.get('[name=firstName]').element.value).toBe('Иван');expect(w.get('[name=password]').element.value).toBe('');expect(h.session.getUser).toHaveBeenCalledTimes(callsBeforeDirtyRefresh+1)
   })
   it('locks administrator role and active status for the last active administrator',async()=>{
     h.route={path:'/users/1',params:{id:'1'},query:{}}
@@ -199,8 +216,8 @@ describe('staff views',()=>{
   })
   it('shows self roles read-only, saves names, and confirms password changes',async()=>{
     h.route={path:'/profile',params:{},query:{}};const w=render(AccountView);await flushPromises();expect(w.get('.primary-heading').text()).toBe('Профиль');expect(h.session.getRoles).not.toHaveBeenCalled();expect(w.get('[name=email]').attributes('readonly')).toBeDefined();expect(w.find('input[name=roles]').exists()).toBe(false)
-    await fill(w,'firstName','Пётр');await w.get('form').trigger('submit');await flushPromises();expect(w.get('[role=status]').text()).toBe('Данные сохранены');await button(w,'Отменить').trigger('click');expect(h.router.push).toHaveBeenCalledWith('/users')
-    await fill(w,'password','test-password');await fill(w,'confirmation','test-password');await w.get('form').trigger('submit');await w.findComponent(ConfirmDialog).vm.$emit('confirm');await flushPromises();expect(h.session.saveProfile).toHaveBeenLastCalledWith(expect.objectContaining({password:'test-password'}))
+    await fill(w,'firstName','Пётр');await w.get('form').trigger('submit');await flushPromises();expect(w.get('[role=status]').text()).toBe('Данные сохранены');await button(w,'Обновить данные').trigger('click');await flushPromises();expect(openConfirm(w)).toBeUndefined();expect(w.get('[name=firstName]').element.value).toBe('Иван');await button(w,'Отменить').trigger('click');expect(h.router.push).toHaveBeenCalledWith('/users')
+    await fill(w,'password','test-password');await fill(w,'confirmation','test-password');await w.get('form').trigger('submit');openConfirm(w).vm.$emit('confirm');await flushPromises();expect(h.session.saveProfile).toHaveBeenLastCalledWith(expect.objectContaining({password:'test-password'}))
   })
   it('discards operator profile edits when cancel returns to the same work screen',async()=>{
     h.session.user.value={...identity,roles:['operator']};h.route={path:'/profile',params:{},query:{}};const w=render(AccountView);await flushPromises();await fill(w,'firstName','Изменено');await fill(w,'password','test-password');await button(w,'Отменить').trigger('click');expect(w.get('[name=firstName]').element.value).toBe('Иван');expect(w.get('[name=password]').element.value).toBe('');expect(h.router.push).not.toHaveBeenCalled()
@@ -208,7 +225,7 @@ describe('staff views',()=>{
   it('renders loading/recovery, login and staff shell with independent versions and logout',async()=>{
     h.session.ready.value=false;const w=render(App);await flushPromises();expect(w.text()).toContain('Восстановление сеанса')
     h.session.ready.value=true;h.session.restoreProblem.value=failure();await nextTick();expect(w.get('[role=alert]').exists()).toBe(true)
-    await button(w,'Повторить').trigger('click');await flushPromises();expect(h.router.replace).not.toHaveBeenCalled()
+    expect(button(w,'Повторить').text()).toBe('');await button(w,'Повторить').trigger('click');await flushPromises();expect(h.router.replace).not.toHaveBeenCalled()
     h.session.restoreSession.mockImplementationOnce(()=>{h.session.restoreProblem.value=null;return Promise.resolve()});await button(w,'Повторить').trigger('click');await flushPromises();expect(h.router.replace).toHaveBeenCalledWith('/users');expect(w.text()).toContain('Сервер 0.0.6');expect(w.text()).toContain(`Клиент ${version}`);expect(w.text()).toContain('Иванов Иван');expect(w.find('nav a[href="/users"] i').attributes('data-icon')).toBe('$staff');expect(w.find('nav a[href="/legal-documents"] i').attributes('data-icon')).toBe('$legalDocuments');expect(w.find('nav a[href="/customer-consents"]').exists()).toBe(false);expect(w.find('nav a[href="/users/1"] i').attributes('data-icon')).toBe('$profile')
     const drawer=w.findComponent({name:'VNavigationDrawer'});expect(drawer.props('permanent')).toBe(true);const initiallyOpen=drawer.props('modelValue');await button(w,'Открыть меню').trigger('click');expect(drawer.props('modelValue')).toBe(!initiallyOpen)
     Object.defineProperty(globalThis.window,'innerWidth',{configurable:true,writable:true,value:390});globalThis.window.dispatchEvent(new globalThis.Event('resize'));await nextTick();expect(drawer.props('temporary')).toBe(true);expect(drawer.props('modelValue')).toBe(false);await button(w,'Открыть меню').trigger('click');expect(drawer.props('modelValue')).toBe(true);h.router.currentRoute.value={fullPath:'/profile'};await nextTick();expect(drawer.props('modelValue')).toBe(false);Object.defineProperty(globalThis.window,'innerWidth',{configurable:true,writable:true,value:1024});globalThis.window.dispatchEvent(new globalThis.Event('resize'));await nextTick()

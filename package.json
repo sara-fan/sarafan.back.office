@@ -16,6 +16,7 @@
     "coverage": "vitest run --coverage"
   },
   "dependencies": {
+    "@fortawesome/fontawesome-free": "6.7.2",
     "@sara-fan/ui-shared": "https://github.com/sara-fan/sarafan.ui.shared/releases/download/v0.0.1-review.3/sara-fan-ui-shared-0.0.1.tgz",
     "vue": "3.5.41",
     "vue-router": "4.6.4",

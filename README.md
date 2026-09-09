@@ -12,7 +12,7 @@ Staff application for Sarafan Project
 - All four roles can access their own names/password settings. Personal email and roles are read-only. Security-relevant changes terminate the affected sessions; the last active administrator cannot be disabled or demoted.
 - Access tokens stay in memory; Core owns its separate HttpOnly refresh cookie. Expired sessions require login. Network/protocol restoration errors offer Retry. No staff records are persisted in browser storage.
 - The browser API client permits only root-relative `/api/v1/backoffice/...` routes. Customer, unknown, absolute and cross-origin routes are rejected before a network call; Core authorization remains authoritative.
-- ActionButton emits its item payload, supplies icon/tooltip/semantic variant and prevents disabled/loading actions. Disabled explanations remain keyboard-accessible. The owning view handles navigation and confirmation.
+- Font Awesome Free supplies replaceable icons through Vuetify and centralized semantic aliases. Workspace ActionButtons are icon-only with accessible Russian tooltips; login and modal actions retain visible labels. Every workspace action header owns refresh and dirty editors confirm before discarding changes. Logibooks is a non-normative visual reference only.
 
 ## Run locally
 

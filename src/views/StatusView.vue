@@ -19,7 +19,11 @@ const returnTo = computed(() => landing(user.value))
       class="text-link"
       :to="returnTo"
     >
-      Вернуться →
+      Вернуться <v-icon
+        icon="$arrowright"
+        size="14"
+        aria-hidden="true"
+      />
     </RouterLink>
   </section>
 </template>

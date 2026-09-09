@@ -27,6 +27,8 @@ const loaded = ref(false)
 const problem = ref(null)
 const message = ref('')
 const pending = ref(null)
+const baseline = ref(null)
+const refreshConfirmation = ref(false)
 const lastAdministrator = ref(false)
 const roleErrors = computed(() => problemFieldErrors(problem.value, 'roles'))
 const presentedErrorFields = ['firstName', 'lastName', 'patronymic', 'email', 'password', 'confirmation', ...(!profile ? ['roles'] : [])]
@@ -43,10 +45,28 @@ function resetForm(value) {
     email:value?.email || '', password:'', confirmation:'', roles:[...(value?.roles || [])], isActive:value?.isActive ?? true
   })
 }
+function formState() {
+  return {
+    firstName:form.firstName,
+    lastName:form.lastName,
+    patronymic:form.patronymic,
+    email:form.email,
+    password:form.password,
+    confirmation:form.confirmation,
+    roles:[...form.roles].sort(),
+    isActive:form.isActive
+  }
+}
+function captureBaseline() {
+  baseline.value = formState()
+}
+const dirty = computed(() => loaded.value && baseline.value !== null
+  && JSON.stringify(formState()) !== JSON.stringify(baseline.value))
 async function load() {
   loaded.value = false
   busy.value = true
   problem.value = null
+  message.value = ''
   lastAdministrator.value = false
   try {
     if (profile) original.value = session.user.value
@@ -62,6 +82,7 @@ async function load() {
         && users.filter(isActiveAdministrator).length <= 1
     }
     resetForm(original.value)
+    captureBaseline()
     loaded.value = true
   } catch (value) { problem.value = normalizeProblem(value) }
   finally { busy.value = false }
@@ -75,7 +96,16 @@ async function save(payload) {
     form.password = ''; form.confirmation = ''
     if (!session.user.value) await router.replace('/login')
     else if (!profile) await router.push('/users')
-    else message.value = 'Данные сохранены'
+    else {
+      original.value = {
+        ...original.value,
+        firstName:form.firstName,
+        lastName:form.lastName,
+        patronymic:form.patronymic
+      }
+      captureBaseline()
+      message.value = 'Данные сохранены'
+    }
   } catch (value) { problem.value = normalizeProblem(value) }
   finally { busy.value = false }
 }
@@ -92,11 +122,21 @@ async function submit() {
     else await save(payload)
   } catch (value) { problem.value = normalizeProblem(value) }
 }
+function requestRefresh() {
+  if (busy.value) return
+  if (dirty.value) refreshConfirmation.value = true
+  else load()
+}
+async function confirmRefresh() {
+  refreshConfirmation.value = false
+  await load()
+}
 function cancel() {
   if (returnPath.value === route.path) {
     problem.value = null
     message.value = ''
     resetForm(original.value)
+    captureBaseline()
   } else router.push(returnPath.value)
 }
 onMounted(load)
@@ -107,11 +147,14 @@ onMounted(load)
       <h1 class="primary-heading">
         {{ title }}
       </h1>
-      <div
-        v-if="loaded"
-        class="header-actions"
-      >
+      <div class="header-actions">
         <ActionButton
+          icon="$refresh"
+          tooltip-text="Обновить данные"
+          :disabled="busy"
+          @click="requestRefresh"
+        /><ActionButton
+          v-if="loaded"
           type="submit"
           form="account-form"
           variant="blue"
@@ -120,6 +163,7 @@ onMounted(load)
           icon-size="28"
           :tooltip-text="creating ? 'Создать пользователя' : 'Сохранить изменения'"
         /><ActionButton
+          v-if="loaded"
           icon="$close"
           icon-size="28"
           tooltip-text="Отменить"
@@ -140,16 +184,8 @@ onMounted(load)
     >
       Загрузка данных…
     </p>
-    <ActionButton
-      v-else-if="!loaded"
-
-      icon="$refresh"
-      label="Повторить загрузку"
-      tooltip-text="Повторить загрузку"
-      @click="load"
-    />
     <form
-      v-else
+      v-if="loaded"
       id="account-form"
       class="account-form"
       novalidate
@@ -273,6 +309,15 @@ onMounted(load)
         </div>
       </fieldset>
     </form>
+    <ConfirmDialog
+      :open="refreshConfirmation"
+      title="Обновить данные?"
+      message="Несохранённые изменения будут потеряны."
+      action="Сбросить и обновить"
+      action-icon="$refresh"
+      @cancel="refreshConfirmation = false"
+      @confirm="confirmRefresh"
+    />
     <ConfirmDialog
       :open="Boolean(pending)"
       title="Изменить данные доступа?"

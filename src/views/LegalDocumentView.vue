@@ -31,6 +31,8 @@ const loaded = ref(false)
 const busy = ref(false)
 const problem = ref(null)
 const confirmDelete = ref(false)
+const baseline = ref(null)
+const refreshConfirmation = ref(false)
 let inputVersion = 0
 const BASE64_CHUNK_SIZE = 0x8000
 const title = computed(() => creating ? 'Новый правовой документ' : 'Правовой документ')
@@ -52,6 +54,38 @@ function invalidatePreview() {
   previewPayload.value = null
 }
 
+function selectedFile() {
+  return Array.isArray(file.value) ? file.value[0] : file.value
+}
+
+function formState() {
+  const upload = selectedFile()
+  return form.value && {
+    ...form.value,
+    file:upload ? {
+      name:upload.name,
+      size:upload.size,
+      type:upload.type,
+      lastModified:upload.lastModified
+    } : null
+  }
+}
+
+function captureBaseline() {
+  baseline.value = formState()
+}
+
+const dirty = computed(() => creating && loaded.value && baseline.value !== null
+  && JSON.stringify(formState()) !== JSON.stringify(baseline.value))
+
+function clearCreationState() {
+  form.value = null
+  file.value = null
+  preview.value = null
+  previewPayload.value = null
+  baseline.value = null
+}
+
 watch(() => form.value && [
   form.value.kind,
   form.value.locale,
@@ -70,6 +104,7 @@ async function perform(action) {
 
 async function load() {
   loaded.value = false
+  if (creating) clearCreationState()
   await perform(async () => {
     ops.value = await session.getLegalDocumentOps()
     if (creating) {
@@ -78,6 +113,7 @@ async function load() {
         ? queryKind
         : (kindName(LEGAL_DOCUMENT_KIND.PERSONAL_DATA_CONSENT) ? LEGAL_DOCUMENT_KIND.PERSONAL_DATA_CONSENT : ops.value.kinds[0].value)
       form.value = newDocument(initialKind)
+      captureBaseline()
     } else {
       selected.value = await session.consentRequest(`/legal-documents/${id}`)
       if (!Number.isInteger(selected.value?.kind) || !kindName(selected.value.kind)) throw createInternalProblem('protocolError')
@@ -91,7 +127,7 @@ function changeKind(kind) {
 }
 
 function uploadFile() {
-  const value = Array.isArray(file.value) ? file.value[0] : file.value
+  const value = selectedFile()
   if (!value) {
     throw createInternalProblem('invalidInput', {
       detail:'Загрузите файл Markdown с расширением .md.'
@@ -139,8 +175,8 @@ async function save() {
   if (busy.value || !previewPayload.value) return
   await perform(async () => {
     const payload = { ...previewPayload.value, displayVersion:form.value.displayVersion }
-    const document = await session.consentRequest('/legal-documents', json('POST', payload))
-    await router.replace(`/legal-documents/${document.id}`)
+    await session.consentRequest('/legal-documents', json('POST', payload))
+    await router.replace('/legal-documents')
   })
 }
 
@@ -179,6 +215,17 @@ function cancel() {
   router.push('/legal-documents')
 }
 
+function requestRefresh() {
+  if (busy.value) return
+  if (dirty.value) refreshConfirmation.value = true
+  else load()
+}
+
+async function confirmRefresh() {
+  refreshConfirmation.value = false
+  await load()
+}
+
 onMounted(load)
 </script>
 
@@ -190,16 +237,22 @@ onMounted(load)
       </h1>
       <div class="header-actions">
         <ActionButton
+          icon="$refresh"
+          tooltip-text="Обновить данные"
+          :disabled="busy"
+          @click="requestRefresh"
+        /><ActionButton
           v-if="creating"
           icon="$eye"
           icon-size="28"
           tooltip-text="Предварительный просмотр"
           :loading="busy"
+          :disabled="!loaded"
           @click="previewDocument"
         />
         <ActionButton
           v-if="creating"
-          icon="$save"
+          icon="$saveChanges"
           icon-size="28"
           variant="blue"
           tooltip-text="Сохранить документ"
@@ -224,18 +277,6 @@ onMounted(load)
     >
       Загрузка документа…
     </p>
-    <div
-      v-else-if="problem && !loaded"
-      class="empty-state"
-    >
-      <ActionButton
-        icon="$refresh"
-        label="Повторить загрузку"
-        tooltip-text="Повторить загрузку"
-        @click="load"
-      />
-    </div>
-
     <form
       v-if="form"
       id="legal-document-form"
@@ -339,7 +380,6 @@ onMounted(load)
       <div class="workspace-actions">
         <ActionButton
           icon="$add"
-          label="Создать новый документ"
           tooltip-text="Создать новый документ"
           :disabled="busy"
           @click="createAnother"
@@ -347,7 +387,6 @@ onMounted(load)
         <ActionButton
           v-if="selected.canDelete"
           icon="$delete"
-          label="Удалить документ"
           tooltip-text="Удалить документ до даты начала действия"
           variant="red"
           :disabled="busy"
@@ -356,8 +395,19 @@ onMounted(load)
       </div>
     </section>
     <ConfirmDialog
+      :open="refreshConfirmation"
+      title="Обновить данные?"
+      message="Несохранённые изменения будут потеряны."
+      action="Сбросить и обновить"
+      action-icon="$refresh"
+      @cancel="refreshConfirmation = false"
+      @confirm="confirmRefresh"
+    />
+    <ConfirmDialog
       :open="confirmDelete"
       message="Удалить этот документ? Действие доступно только до даты начала действия и будет записано в журнал."
+      action="Удалить документ"
+      action-icon="$delete"
       @cancel="confirmDelete = false"
       @confirm="deleteDocument"
     />
