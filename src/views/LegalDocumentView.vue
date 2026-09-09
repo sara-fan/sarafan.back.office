@@ -9,7 +9,7 @@ import ActionButton from '../components/ActionButton.vue'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
 import LegalDocumentReader from '../components/LegalDocumentReader.vue'
 import PageAlertRegion from '../components/PageAlertRegion.vue'
-import { LEGAL_DOCUMENT_KIND, downloadBytes, moscowDate, moscowDateInput, moscowTime } from '../consentFormatting.js'
+import { LEGAL_DOCUMENT_KIND, downloadBytes, moscowDate, moscowDateInput } from '../consentFormatting.js'
 import { createInternalProblem, normalizeProblem } from '../errors/problem.js'
 import { useSession } from '../stores/session.js'
 
@@ -27,6 +27,8 @@ const preview = ref(null)
 const previewPayload = ref(null)
 const form = ref(null)
 const file = ref(null)
+const reader = ref(null)
+const effectiveUntil = ref(null)
 const loaded = ref(false)
 const busy = ref(false)
 const problem = ref(null)
@@ -35,7 +37,9 @@ const baseline = ref(null)
 const refreshConfirmation = ref(false)
 let inputVersion = 0
 const BASE64_CHUNK_SIZE = 0x8000
-const title = computed(() => creating ? 'Новый правовой документ' : 'Правовой документ')
+const title = computed(() => creating
+  ? 'Новый правовой документ'
+  : (selected.value ? `${selected.value.title} · Версия ${selected.value.displayVersion}` : 'Правовой документ'))
 const json = (method, body) => ({ method, headers:{ 'Content-Type':'application/json' }, body:JSON.stringify(body) })
 
 function newDocument(kind) {
@@ -86,6 +90,25 @@ function clearCreationState() {
   baseline.value = null
 }
 
+function findEffectiveUntil(documents, document) {
+  const effectiveAt = Date.parse(document.effectiveAt)
+  if (!Array.isArray(documents) || !Number.isFinite(effectiveAt)
+    || documents.some(item => !Number.isInteger(item?.kind) || !kindName(item.kind)
+      || typeof item.locale !== 'string' || !Number.isFinite(Date.parse(item.effectiveAt)))) {
+    throw createInternalProblem('protocolError')
+  }
+  let next = null
+  let nextTime = Number.POSITIVE_INFINITY
+  for (const item of documents) {
+    const time = Date.parse(item.effectiveAt)
+    if (item.kind === document.kind && item.locale === document.locale && time > effectiveAt && time < nextTime) {
+      next = item.effectiveAt
+      nextTime = time
+    }
+  }
+  return next
+}
+
 watch(() => form.value && [
   form.value.kind,
   form.value.locale,
@@ -115,8 +138,11 @@ async function load() {
       form.value = newDocument(initialKind)
       captureBaseline()
     } else {
-      selected.value = await session.consentRequest(`/legal-documents/${id}`)
-      if (!Number.isInteger(selected.value?.kind) || !kindName(selected.value.kind)) throw createInternalProblem('protocolError')
+      const document = await session.consentRequest(`/legal-documents/${id}`)
+      if (!Number.isInteger(document?.kind) || !kindName(document.kind) || typeof document.locale !== 'string') throw createInternalProblem('protocolError')
+      const documents = await session.consentRequest(`/legal-documents?kind=${document.kind}`)
+      effectiveUntil.value = findEffectiveUntil(documents, document)
+      selected.value = document
     }
     loaded.value = true
   })
@@ -207,8 +233,8 @@ async function download(document = selected.value) {
   ))
 }
 
-function createAnother() {
-  router.push({ path:'/legal-documents/new', query:{ kind:selected.value.kind } })
+function printDocument() {
+  reader.value?.printDocument()
 }
 
 function cancel() {
@@ -237,6 +263,25 @@ onMounted(load)
       </h1>
       <div class="header-actions">
         <ActionButton
+          v-if="!creating"
+          icon="$print"
+          tooltip-text="Распечатать"
+          :disabled="busy || !selected"
+          @click="printDocument"
+        /><ActionButton
+          v-if="!creating"
+          icon="$download"
+          tooltip-text="Скачать"
+          :disabled="busy || !selected"
+          @click="download()"
+        /><ActionButton
+          v-if="!creating"
+          icon="$delete"
+          :tooltip-text="selected?.canDelete ? 'Удалить документ' : 'Удаление невозможно после начала действия документа'"
+          :disabled="busy || !selected?.canDelete"
+          variant="red"
+          @click="confirmDelete = true"
+        /><ActionButton
           icon="$refresh"
           tooltip-text="Обновить данные"
           :disabled="busy"
@@ -351,46 +396,27 @@ onMounted(load)
 
     <section
       v-if="selected"
-      class="form-surface legal-workspace"
+      class="form-surface legal-workspace saved-document"
     >
-      <header class="workspace-header document-summary">
+      <dl class="document-summary">
         <div>
-          <p class="workspace-eyebrow">
-            Сохранённый документ
-          </p>
-          <h2>{{ selected.title }}</h2>
-          <p>{{ kindName(selected.kind) }} · версия {{ selected.displayVersion }}</p>
-          <p v-if="selected.kind === LEGAL_DOCUMENT_KIND.COOKIE_CONSENT">
-            Категория куки: {{ cookieCategoryNames }}
-          </p>
+          <dt>Дата начала действия</dt>
+          <dd>{{ moscowDate(selected.effectiveAt) }}</dd>
         </div>
-      </header>
-      <dl class="document-metadata">
-        <div><dt>Идентификатор</dt><dd>{{ selected.id }}</dd></div>
-        <div><dt>Дата начала действия</dt><dd>{{ moscowDate(selected.effectiveAt) }} ({{ moscowTime(selected.effectiveAt) }})</dd></div>
-        <div><dt>SHA-256 исходника</dt><dd>{{ selected.sourceHash }}</dd></div>
-        <div><dt>SHA-256 текста</dt><dd>{{ selected.contentHash }}</dd></div>
+        <div>
+          <dt>Дата окончания действия</dt>
+          <dd>{{ moscowDate(effectiveUntil) }}</dd>
+        </div>
+        <div v-if="selected.kind === LEGAL_DOCUMENT_KIND.COOKIE_CONSENT">
+          <dt>Категория куки</dt>
+          <dd>{{ cookieCategoryNames }}</dd>
+        </div>
       </dl>
       <div class="reader-surface">
         <LegalDocumentReader
+          ref="reader"
           :document="selected"
-          @download="download"
-        />
-      </div>
-      <div class="workspace-actions">
-        <ActionButton
-          icon="$add"
-          tooltip-text="Создать новый документ"
-          :disabled="busy"
-          @click="createAnother"
-        />
-        <ActionButton
-          v-if="selected.canDelete"
-          icon="$delete"
-          tooltip-text="Удалить документ до даты начала действия"
-          variant="red"
-          :disabled="busy"
-          @click="confirmDelete = true"
+          content-only
         />
       </div>
     </section>
@@ -418,27 +444,24 @@ onMounted(load)
 .legal-workspace { padding:20px; overflow-wrap:anywhere; }
 .legal-document-form { padding:0; }
 .legal-preview-surface { padding:18px; margin-top:18px; background:#fff; border:1px solid #dbe5ee; border-radius:4px; }
-.workspace-header { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; padding-bottom:12px; margin-bottom:16px; border-bottom:1px solid #dbe5ee; }
-.workspace-header h2 { margin:0; color:#1976d2; font-size:20px; font-weight:600; }
-.workspace-header p { margin:4px 0 0; color:#64788b; font-size:13px; }
-.workspace-eyebrow { margin:0 0 4px !important; color:#587086 !important; font-size:11px !important; font-weight:700; letter-spacing:.08em; text-transform:uppercase; }
 .legal-form-grid { display:grid; grid-template-columns:minmax(340px, 1.25fr) minmax(280px, 1fr) minmax(160px, .55fr) minmax(210px, .7fr); gap:10px 12px; }
 .legal-version { max-width:140px; }
 .legal-effective-date { max-width:220px; }
 .legal-file { grid-column:1 / -1; }
 .format-note { padding:10px 12px; margin:0 0 10px; color:#526a80; font-size:12px; line-height:1.45; background:#f5f9fc; border-left:3px solid #8bc8e7; }
 .cookie-options { margin:4px 0 10px; color:#526a80; font-size:13px; }
-.workspace-actions { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-top:14px; }
-.document-metadata { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:10px 18px; margin:0 0 16px; }
-.document-metadata div { min-width:0; }
-.document-metadata dt { color:#64788b; font-size:11px; font-weight:700; text-transform:uppercase; }
-.document-metadata dd { margin:3px 0 0; color:#294a69; font-family:ui-monospace, SFMono-Regular, Consolas, monospace; font-size:12px; overflow-wrap:anywhere; }
+.document-summary { display:flex; justify-content:flex-end; gap:24px; margin:0 0 14px; }
+.document-summary div { min-width:180px; }
+.document-summary dt { color:#64788b; font-size:11px; font-weight:700; text-transform:uppercase; }
+.document-summary dd { margin:3px 0 0; color:#294a69; font-size:13px; }
 .reader-surface { padding:18px; background:#f7fafc; border:1px solid #dbe5ee; border-radius:4px; }
+.reader-surface :deep(.legal-document) { max-width:none; }
 @media (max-width:1000px) {
   .legal-form-grid { grid-template-columns:1fr 1fr; }
   .legal-version, .legal-effective-date { max-width:none; }
 }
 @media (max-width:700px) {
-  .legal-form-grid, .document-metadata { grid-template-columns:1fr; }
+  .legal-form-grid { grid-template-columns:1fr; }
+  .document-summary { justify-content:flex-start; flex-direction:column; gap:10px; }
 }
 </style>

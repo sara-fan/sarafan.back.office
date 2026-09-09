@@ -20,7 +20,7 @@ const returnTo = computed(() => landing(user.value))
       :to="returnTo"
     >
       Вернуться <v-icon
-        icon="$arrowright"
+        icon="$next"
         size="14"
         aria-hidden="true"
       />

@@ -13,6 +13,7 @@ Staff application for Sarafan Project
 - Access tokens stay in memory; Core owns its separate HttpOnly refresh cookie. Expired sessions require login. Network/protocol restoration errors offer Retry. No staff records are persisted in browser storage.
 - The browser API client permits only root-relative `/api/v1/backoffice/...` routes. Customer, unknown, absolute and cross-origin routes are rejected before a network call; Core authorization remains authoritative.
 - Font Awesome Free supplies replaceable icons through Vuetify and centralized semantic aliases. Workspace ActionButtons are icon-only with accessible Russian tooltips; login and modal actions retain visible labels. Every workspace action header owns refresh and dirty editors confirm before discarding changes. Logibooks is a non-normative visual reference only.
+- Saved legal documents return to the catalogue after creation. Their read-only view uses the document title/version heading, header print/download/delete controls, canonical body and effective start/end dates; catalogue rows also own view and delete actions.
 
 ## Run locally
 

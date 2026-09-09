@@ -184,7 +184,7 @@ onMounted(load)
             <ActionButton
               :item="item"
               icon="$delete"
-              :tooltip-text="item.canDelete ? 'Удалить документ' : 'Удаление недоступно после начала действия документа'"
+              :tooltip-text="item.canDelete ? 'Удалить документ' : 'Удаление невозможно после начала действия документа'"
               variant="red"
               :disabled="busy || !item.canDelete"
               @click="confirmDeletion"

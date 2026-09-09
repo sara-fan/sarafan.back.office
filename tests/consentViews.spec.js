@@ -24,7 +24,7 @@ const ops = { kinds:[
   { value:3, name:'Правила заказа товаров', routeAlias:'order-rules' },
   { value:4, name:'Политика обработки персональных данных', routeAlias:'privacy-policy' }
 ], cookieCategories:[{ value:0, name:'Обязательные', required:true }] }
-const doc = { id, kind:LEGAL_DOCUMENT_KIND.PERSONAL_DATA_CONSENT, title:'Отдельное согласие', displayVersion:'2', html:'<p>Правовой текст</p>', sourceHash:'b'.repeat(64), contentHash:'a'.repeat(64), cookieCategories:[], effectiveAt:'2027-09-07T21:00:00Z', canDelete:true }
+const doc = { id, kind:LEGAL_DOCUMENT_KIND.PERSONAL_DATA_CONSENT, locale:'ru', title:'Отдельное согласие', displayVersion:'2', html:'<p>Правовой текст</p>', sourceHash:'b'.repeat(64), contentHash:'a'.repeat(64), cookieCategories:[], effectiveAt:'2027-09-07T21:00:00Z', canDelete:true }
 const audit = { id:1, documentId:id, actorId:1, actorName:'Иванов Иван', action:'created', at:'2026-09-07T09:00:00Z', kind:doc.kind, title:doc.title, displayVersion:doc.displayVersion, effectiveAt:doc.effectiveAt }
 const withdrawalRequest = { customerId:7, requestedAt:'2026-09-01T09:00:00Z', processed:false }
 const failure = () => createInternalProblem('networkUnavailable')
@@ -54,6 +54,7 @@ beforeEach(() => {
   h.session.user = ref({ id:1, roles:['administrator'] })
   h.session.getLegalDocumentOps = vi.fn().mockResolvedValue(ops)
   h.session.consentRequest = vi.fn(async path => {
+    if (path.startsWith('/legal-documents?kind=')) return [{ ...doc }]
     if (path === '/legal-documents') return [{ ...doc }]
     if (path.startsWith('/legal-documents/audit?')) return pageResult([{ ...audit }], path)
     if (path === '/legal-documents/preview') return { html:doc.html }
@@ -164,31 +165,59 @@ it('refreshes pristine legal editors and confirms before clearing dirty source a
   expect(vm().preview).toBeNull()
   expect(h.session.getLegalDocumentOps).toHaveBeenCalledTimes(callsBeforeDirtyRefresh + 1)
 })
-it('shows read-only detail, confirms permitted deletion, and refreshes a boundary conflict', async () => {
+
+it('shows a minimal read-only document with header print/download actions and its derived end date', async () => {
+  const nextDocument = { ...doc, id:'22222222-2222-2222-2222-222222222222', displayVersion:'3', effectiveAt:'2028-09-07T21:00:00Z' }
+  h.session.consentRequest.mockImplementation(async path => {
+    if (path === `/legal-documents/${id}`) return { ...doc }
+    if (path.startsWith('/legal-documents?kind=')) return [{ ...nextDocument }, { ...doc }]
+    if (path.endsWith('/source')) return new globalThis.Blob(['# Текст'])
+    return { ...doc }
+  })
+  vi.stubGlobal('print', vi.fn())
   render(LegalDocumentView, { path:`/legal-documents/${id}`, params:{id}, query:{} }); await flushPromises()
+
   expect(wrapper.find('form').exists()).toBe(false)
-  expect(wrapper.get('button[aria-label="Создать новый документ"]').text()).toBe('')
-  expect(wrapper.get('button[aria-label="Удалить документ до даты начала действия"]').text()).toBe('')
-  await wrapper.findComponent(LegalDocumentReader).vm.$emit('download'); await flushPromises()
+  expect(wrapper.get('.primary-heading').text()).toBe('Отдельное согласие · Версия 2')
+  expect(wrapper.get('.document-summary').text()).toContain('Дата начала действия')
+  expect(wrapper.get('.document-summary').text()).toContain('08.09.2027')
+  expect(wrapper.get('.document-summary').text()).toContain('Дата окончания действия')
+  expect(wrapper.get('.document-summary').text()).toContain('08.09.2028')
+  expect(wrapper.text()).not.toContain('Сохранённый документ')
+  expect(wrapper.text()).not.toContain('Идентификатор')
+  expect(wrapper.text()).not.toContain('SHA-256')
+  expect(wrapper.find('button[aria-label="Создать новый документ"]').exists()).toBe(false)
+  expect(wrapper.find('button[aria-label="Удаление невозможно после начала действия документа"]').exists()).toBe(false)
+  expect(wrapper.findComponent(LegalDocumentReader).props('contentOnly')).toBe(true)
+
+  const print = wrapper.get('button[aria-label="Распечатать"]')
+  const download = wrapper.get('button[aria-label="Скачать"]')
+  const deleteAction = wrapper.get('button[aria-label="Удалить документ"]')
+  expect(print.text()).toBe(''); expect(print.find('.fa-print').exists()).toBe(true)
+  expect(download.text()).toBe(''); expect(download.find('.fa-download').exists()).toBe(true)
+  expect(deleteAction.text()).toBe(''); expect(deleteAction.find('.fa-trash-can').exists()).toBe(true)
+  await print.trigger('click'); expect(globalThis.print).toHaveBeenCalled()
+  await download.trigger('click'); await flushPromises()
   expect(h.session.consentRequest).toHaveBeenCalledWith(`/legal-documents/${id}/source`, expect.any(Object), 'blob')
-  await click('Удалить документ до даты начала действия')
+  await click('Вернуться к списку'); expect(h.router.push).toHaveBeenCalledWith('/legal-documents')
+
+  await click('Удалить документ')
+  expect(openConfirm().props()).toMatchObject({ action:'Удалить документ', actionIcon:'$delete' })
   openConfirm().vm.$emit('cancel'); await nextTick()
-  await click('Удалить документ до даты начала действия')
-  const boundary = createInternalProblem('networkUnavailable')
-  boundary.code = 'legal_document_already_effective'
-  h.session.consentRequest.mockRejectedValueOnce(boundary).mockResolvedValueOnce({ ...doc, canDelete:false })
-  await confirm()
+  expect(h.session.consentRequest).not.toHaveBeenCalledWith(`/legal-documents/${id}`, { method:'DELETE' })
+  await click('Удалить документ'); await confirm()
   expect(h.session.consentRequest).toHaveBeenCalledWith(`/legal-documents/${id}`, { method:'DELETE' })
-  expect(vm().selected.canDelete).toBe(false)
-  expect(wrapper.find('button[aria-label="Удалить документ до даты начала действия"]').exists()).toBe(false)
-  await click('Создать новый документ')
-  expect(h.router.push).toHaveBeenCalledWith({ path:'/legal-documents/new', query:{kind:LEGAL_DOCUMENT_KIND.PERSONAL_DATA_CONSENT} })
-  wrapper.unmount(); h.session.consentRequest.mockResolvedValueOnce({ ...doc, canDelete:true })
-  render(LegalDocumentView, { path:`/legal-documents/${id}`, params:{id}, query:{} }); await flushPromises()
-  await click('Удалить документ до даты начала действия')
-  h.session.consentRequest.mockResolvedValueOnce(null); await confirm()
-  expect(h.router.push).toHaveBeenCalledWith('/legal-documents')
+
+  const boundary = failure(); boundary.code = 'legal_document_already_effective'
+  h.session.consentRequest.mockRejectedValueOnce(boundary).mockResolvedValueOnce({ ...doc, canDelete:false })
+  await click('Удалить документ'); await confirm()
+  expect(vm().problem.code).toBe('legal_document_already_effective')
+  const disabledDelete = wrapper.get('button[aria-label="Удаление невозможно после начала действия документа"]')
+  expect(disabledDelete.attributes('disabled')).toBeDefined()
+  await disabledDelete.trigger('click')
+  expect(openConfirm()).toBeUndefined()
 })
+
 it('uses the shared legal-document list layout, routes actions, filters, and retries failures', async () => {
   h.session.consentRequest.mockRejectedValueOnce(failure()); render(LegalDocumentsView); await flushPromises()
   expect(wrapper.find('.page-alert').exists()).toBe(true)
@@ -225,12 +254,12 @@ it('uses the shared legal-document list layout, routes actions, filters, and ret
   expect(wrapper.get('.count').text()).toBe('0')
 
   wrapper.unmount()
-  h.session.consentRequest.mockImplementation(async path => path === '/legal-documents'
+  h.session.consentRequest.mockImplementation(async path => path === '/legal-documents' || path.startsWith('/legal-documents?kind=')
     ? [{ ...doc, canDelete:false }]
     : { ...doc, canDelete:false })
   render(LegalDocumentsView); await flushPromises()
   expect(wrapper.get('.actions-container').findAll('button')).toHaveLength(2)
-  const disabledDelete = wrapper.get('button[aria-label="Удаление недоступно после начала действия документа"]')
+  const disabledDelete = wrapper.get('button[aria-label="Удаление невозможно после начала действия документа"]')
   expect(disabledDelete.attributes('disabled')).toBeDefined()
   await disabledDelete.trigger('click'); expect(openConfirm()).toBeUndefined()
 
