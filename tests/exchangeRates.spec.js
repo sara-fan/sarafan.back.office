@@ -10,7 +10,7 @@ import ExchangeRateDisplay from '../src/components/ExchangeRateDisplay.vue'
 
 const rate = { provider:'CBR', baseCurrency:'USD', quoteCurrency:'RUB', nominal:1, officialRate:81.1234, sourceEffectiveDate:'2026-09-05', retrievedAt:'2026-09-06T21:10:00Z' }
 describe('official exchange-rate display', () => {
-  it('shows source date, four Russian decimals and Logibooks color classes without discarding older rates', () => {
+  it('shows source date and four Russian decimals without discarding older rates', () => {
     const wrapper = mount(ExchangeRateDisplay, { props:{ rates:[rate] } })
     expect(wrapper.get('time').text()).toBe('05.09.26')
     expect(wrapper.get('time').attributes('datetime')).toBe('2026-09-05')

@@ -54,7 +54,6 @@ watch(() => user.value?.id, async (id, _previous, onCleanup) => {
         <h1>Не удалось восстановить сеанс</h1><PageAlertRegion :problem="restoreProblem" /><ActionButton
           variant="blue"
           icon="$refresh"
-          label="Повторить"
           tooltip-text="Повторить"
           @click="retry"
         />

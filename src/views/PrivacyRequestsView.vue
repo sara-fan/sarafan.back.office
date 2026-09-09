@@ -251,19 +251,8 @@ onUnmounted(() => {
         @update:model-value="onProcessedChange"
       />
     </fieldset>
-    <div
-      v-if="problem && !rows.length"
-      class="empty-state"
-    >
-      <ActionButton
-        icon="$refresh"
-        label="Повторить загрузку"
-        tooltip-text="Повторить загрузку"
-        @click="load"
-      />
-    </div>
     <v-card
-      v-else
+      v-if="!problem || rows.length"
       class="table-card"
     >
       <v-data-table-server
@@ -293,7 +282,6 @@ onUnmounted(() => {
             <ActionButton
               :item="item"
               icon="$saveChanges"
-              label="Выполнить"
               tooltip-text="Отметить запрос как обработанный"
               variant="blue"
               :loading="processingKey === rowKey(item)"

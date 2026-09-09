@@ -5,6 +5,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import ActionButton from '../components/ActionButton.vue'
+import ConfirmDialog from '../components/ConfirmDialog.vue'
 import PageAlertRegion from '../components/PageAlertRegion.vue'
 import { moscowDate } from '../consentFormatting.js'
 import { createInternalProblem, normalizeProblem } from '../errors/problem.js'
@@ -21,10 +22,11 @@ const itemsPerPage = ref(10)
 const sortBy = ref([{ key:'title', order:'asc' }])
 const busy = ref(false)
 const problem = ref(null)
+const pendingDelete = ref(null)
 const kindItems = computed(() => [{ title:'Все типы', value:null }, ...(ops.value?.kinds || []).map(item => ({ value:item.value, title:item.name }))])
 const kindName = value => ops.value?.kinds.find(item => item.value === value)?.name
 const headers = [
-  { title:'', key:'actions', sortable:false, width:'64px' },
+  { title:'Действия', key:'actions', sortable:false, width:'120px' },
   { title:'Документ', key:'title' },
   { title:'Версия', key:'displayVersion' },
   { title:'Дата начала действия', key:'effectiveAt' }
@@ -51,6 +53,37 @@ async function load() {
     rows.value = documents
   } catch (value) { rows.value = []; page.value = 1; problem.value = normalizeProblem(value) }
   finally { busy.value = false }
+}
+
+function confirmDeletion(document) {
+  if (busy.value || !document?.canDelete) return
+  pendingDelete.value = document
+}
+
+async function reloadDocuments() {
+  const documents = await session.consentRequest('/legal-documents')
+  if (!Array.isArray(documents) || documents.some(document => !Number.isInteger(document.kind) || !kindName(document.kind))) throw createInternalProblem('protocolError')
+  rows.value = documents
+}
+
+async function deleteDocument() {
+  const document = pendingDelete.value
+  pendingDelete.value = null
+  if (!document?.canDelete || busy.value) return
+  busy.value = true
+  problem.value = null
+  try {
+    await session.consentRequest(`/legal-documents/${document.id}`, { method:'DELETE' })
+    await reloadDocuments()
+  } catch (value) {
+    const deletionProblem = normalizeProblem(value)
+    if (deletionProblem.code === 'legal_document_already_effective') {
+      try { await reloadDocuments() } catch { /* preserve the deletion error */ }
+    }
+    problem.value = deletionProblem
+  } finally {
+    busy.value = false
+  }
 }
 onMounted(load)
 </script>
@@ -119,19 +152,8 @@ onMounted(load)
         hide-details
       />
     </fieldset>
-    <div
-      v-if="problem"
-      class="empty-state"
-    >
-      <ActionButton
-        icon="$refresh"
-        label="Повторить загрузку"
-        tooltip-text="Повторить загрузку"
-        @click="load"
-      />
-    </div>
     <v-card
-      v-else
+      v-if="!problem"
       class="table-card"
     >
       <v-data-table
@@ -154,10 +176,18 @@ onMounted(load)
           <div class="actions-container">
             <ActionButton
               :item="item"
-              icon="$edit"
-              tooltip-text="Открыть документ"
+              icon="$eye"
+              tooltip-text="Просмотреть документ"
               :disabled="busy"
               @click="router.push(`/legal-documents/${$event.id}`)"
+            />
+            <ActionButton
+              :item="item"
+              icon="$delete"
+              :tooltip-text="item.canDelete ? 'Удалить документ' : 'Удаление недоступно после начала действия документа'"
+              variant="red"
+              :disabled="busy || !item.canDelete"
+              @click="confirmDeletion"
             />
           </div>
         </template>
@@ -170,6 +200,14 @@ onMounted(load)
         </template>
       </v-data-table>
     </v-card>
+    <ConfirmDialog
+      :open="Boolean(pendingDelete)"
+      message="Удалить этот документ? Действие доступно только до даты начала действия и будет записано в журнал."
+      action="Удалить документ"
+      action-icon="$delete"
+      @cancel="pendingDelete = null"
+      @confirm="deleteDocument"
+    />
   </section>
 </template>
 

@@ -3,7 +3,13 @@
 // All rights reserved.
 // This file is a part of the Sarafan application
 import ActionButton from './ActionButton.vue'
-defineProps({ open:Boolean, title:{ type:String, default:'Подтвердите действие' }, message:{ type:String, required:true }, action:{ type:String, default:'Подтвердить' } })
+defineProps({
+  open:Boolean,
+  title:{ type:String, default:'Подтвердите действие' },
+  message:{ type:String, required:true },
+  action:{ type:String, default:'Подтвердить' },
+  actionIcon:{ type:String, default:'$save' }
+})
 defineEmits(['confirm','cancel'])
 </script>
 <template>
@@ -33,7 +39,7 @@ defineEmits(['confirm','cancel'])
           @click="$emit('cancel')"
         /><ActionButton
           variant="orange"
-          icon="$save"
+          :icon="actionIcon"
           :label="action"
           :tooltip-text="action"
           @click="$emit('confirm')"

@@ -3,6 +3,9 @@
 // This file is a part of the Sarafan application
 
 import { createApp } from 'vue'
+import '@fortawesome/fontawesome-free/css/fontawesome.css'
+import '@fortawesome/fontawesome-free/css/regular.css'
+import '@fortawesome/fontawesome-free/css/solid.css'
 import 'vuetify/styles'
 
 import App from './App.vue'

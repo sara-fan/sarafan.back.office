@@ -109,7 +109,7 @@ describe('persistent view state', () => {
     expect(writeStorage).not.toHaveBeenCalled()
   })
 
-  it('validates complete Logibooks-style page metadata', () => {
+  it('validates complete server page metadata', () => {
     const value = {
       items:[{ id:1 }],
       pagination:{ currentPage:1, pageSize:10, totalCount:11, totalPages:2, hasNextPage:true, hasPreviousPage:false },

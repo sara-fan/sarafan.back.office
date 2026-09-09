@@ -264,19 +264,8 @@ onUnmounted(() => {
         @update:model-value="onActionChange"
       />
     </fieldset>
-    <div
-      v-if="problem"
-      class="empty-state"
-    >
-      <ActionButton
-        icon="$refresh"
-        label="Повторить загрузку"
-        tooltip-text="Повторить загрузку"
-        @click="load"
-      />
-    </div>
     <v-card
-      v-else
+      v-if="!problem"
       class="table-card"
     >
       <v-data-table-server
