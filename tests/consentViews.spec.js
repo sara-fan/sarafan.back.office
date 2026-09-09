@@ -18,7 +18,7 @@ vi.mock('../src/stores/session.js', () => ({ useSession:() => h.session }))
 vi.mock('vue-router', () => ({ useRouter:() => h.router, useRoute:() => h.route }))
 const id = '11111111-1111-1111-1111-111111111111'
 const ops = { kinds:[
-  { value:0, name:'Согласие на куки', routeAlias:'cookie-consent' },
+  { value:0, name:'Согласие на использование куки', routeAlias:'cookie-consent' },
   { value:1, name:'Согласие на обработку персональных данных', routeAlias:'personal-data-consent' },
   { value:2, name:'Пользовательское соглашение', routeAlias:'user-agreement' },
   { value:3, name:'Правила заказа товаров', routeAlias:'order-rules' },

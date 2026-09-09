@@ -7,7 +7,7 @@ import { problemResponse, response } from './fixtures/http.js'
 
 const identity = { id:1, email:'admin@example.test', firstName:'Иван', lastName:'Иванов', patronymic:null, roles:['administrator'], isActive:true }
 const cookieCategories = [{ value:0, name:'Обязательные', required:true }]
-const legalOps = { kinds:[{ value:0, name:'Согласие на куки', routeAlias:'cookie-consent' }], cookieCategories }
+const legalOps = { kinds:[{ value:0, name:'Согласие на использование куки', routeAlias:'cookie-consent' }], cookieCategories }
 const auth = (user = identity) => response(200, { accessToken:'staff-token', expiresAt:'2026-10-01T00:00:00Z', user })
 const deferred = () => { let resolve; const promise = new Promise(r => { resolve = r }); return { promise, resolve } }
 afterEach(() => vi.unstubAllGlobals())
