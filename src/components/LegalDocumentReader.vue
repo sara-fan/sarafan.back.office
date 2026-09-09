@@ -24,6 +24,7 @@ function printDocument() {
   try { globalThis.print() }
   finally { printable.remove() }
 }
+defineExpose({ printDocument })
 </script>
 <template>
   <article
