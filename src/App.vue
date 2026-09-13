@@ -19,6 +19,7 @@ const { mdAndUp } = useDisplay()
 const drawer = ref(mdAndUp.value)
 const coreVersion = ref('')
 const exchangeRates = ref([])
+const currencies = ref([])
 async function retry() {
   await session.restoreSession()
   if (!restoreProblem.value) await router.replace(user.value ? landing(user.value) : '/login')
@@ -31,6 +32,7 @@ watch(() => user.value?.id, async (id, _previous, onCleanup) => {
   let active = true
   onCleanup(() => { active = false })
   exchangeRates.value = []
+  currencies.value = []
   coreVersion.value = ''
   if (!id) return
   try {
@@ -38,6 +40,7 @@ watch(() => user.value?.id, async (id, _previous, onCleanup) => {
     if (!active) return
     coreVersion.value = typeof result?.appVersion === 'string' ? result.appVersion : ''
     exchangeRates.value = Array.isArray(result?.exchangeRates) ? result.exchangeRates : []
+    currencies.value = Array.isArray(result?.currencies) ? result.currencies : []
   } catch (problem) { if (active) suppressProblem(problem, { operation:'status.version.load' }) }
 }, { immediate:true, flush:'sync' })
 </script>
@@ -82,7 +85,10 @@ watch(() => user.value?.id, async (id, _previous, onCleanup) => {
         <v-app-bar-title class="app-title">
           <span class="app-user">{{ fullName(user) }}</span>
         </v-app-bar-title>
-        <ExchangeRateDisplay :rates="exchangeRates" />
+        <ExchangeRateDisplay
+          :rates="exchangeRates"
+          :currencies="currencies"
+        />
       </v-app-bar>
       <v-navigation-drawer
         v-model="drawer"
