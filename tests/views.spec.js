@@ -132,7 +132,7 @@ describe('staff views',()=>{
   it('returns from missing and forbidden pages to the role work screen',async()=>{
     const status=render(StatusView);expect(status.text()).toContain('Страница не найдена');expect(status.get('a').attributes('href')).toBe('/users')
     await status.setProps({forbidden:true});expect(status.text()).toContain('Недостаточно прав')
-    h.session.user.value={...identity,roles:['operator']};await nextTick();expect(status.get('a').attributes('href')).toBe('/profile')
+    h.session.user.value={...identity,roles:['operator']};await nextTick();expect(status.get('a').attributes('href')).toBe('/orders')
   })
   it('lists, searches, filters, sorts, paginates, and opens staff editing through item actions',async()=>{
     h.session.listUsers.mockResolvedValue(Array.from({length:12},(_,i)=>({...identity,id:i+1,email:`user${i}@example.test`,firstName:i===0?'Анна':`Имя ${i}`,roles:i===0?['operator']:['administrator'],isActive:i!==0})))
@@ -221,7 +221,7 @@ describe('staff views',()=>{
     await fill(w,'password','test-password');await fill(w,'confirmation','test-password');await w.get('form').trigger('submit');openConfirm(w).vm.$emit('confirm');await flushPromises();expect(h.session.saveProfile).toHaveBeenLastCalledWith(expect.objectContaining({password:'test-password'}))
   })
   it('discards operator profile edits when cancel returns to the same work screen',async()=>{
-    h.session.user.value={...identity,roles:['operator']};h.route={path:'/profile',params:{},query:{}};const w=render(AccountView);await flushPromises();await fill(w,'firstName','Изменено');await fill(w,'password','test-password');await button(w,'Отменить').trigger('click');expect(w.get('[name=firstName]').element.value).toBe('Иван');expect(w.get('[name=password]').element.value).toBe('');expect(h.router.push).not.toHaveBeenCalled()
+    h.session.user.value={...identity,roles:['operator']};h.route={path:'/profile',params:{},query:{}};const w=render(AccountView);await flushPromises();await fill(w,'firstName','Изменено');await fill(w,'password','test-password');await button(w,'Отменить').trigger('click');expect(h.router.push).toHaveBeenCalledWith('/orders')
   })
   it('renders loading/recovery, login and staff shell with independent versions and logout',async()=>{
     h.session.ready.value=false;const w=render(App);await flushPromises();expect(w.text()).toContain('Восстановление сеанса')
@@ -230,7 +230,7 @@ describe('staff views',()=>{
     h.session.restoreSession.mockImplementationOnce(()=>{h.session.restoreProblem.value=null;return Promise.resolve()});await button(w,'Повторить').trigger('click');await flushPromises();expect(h.router.replace).toHaveBeenCalledWith('/users');expect(w.text()).toContain('Сервер 0.0.6');expect(w.text()).toContain(`Клиент ${version}`);expect(w.text()).toContain('Иванов Иван');expect(w.find('nav a[href="/users"] i').attributes('data-icon')).toBe('$staff');expect(w.find('nav a[href="/legal-documents"] i').attributes('data-icon')).toBe('$legalDocuments');expect(w.find('nav a[href="/customer-consents"]').exists()).toBe(false);expect(w.find('nav a[href="/users/1"] i').attributes('data-icon')).toBe('$profile')
     const drawer=w.findComponent({name:'VNavigationDrawer'});expect(drawer.props('permanent')).toBe(true);const initiallyOpen=drawer.props('modelValue');await button(w,'Открыть меню').trigger('click');expect(drawer.props('modelValue')).toBe(!initiallyOpen)
     Object.defineProperty(globalThis.window,'innerWidth',{configurable:true,writable:true,value:390});globalThis.window.dispatchEvent(new globalThis.Event('resize'));await nextTick();expect(drawer.props('temporary')).toBe(true);expect(drawer.props('modelValue')).toBe(false);await button(w,'Открыть меню').trigger('click');expect(drawer.props('modelValue')).toBe(true);h.router.currentRoute.value={fullPath:'/profile'};await nextTick();expect(drawer.props('modelValue')).toBe(false);Object.defineProperty(globalThis.window,'innerWidth',{configurable:true,writable:true,value:1024});globalThis.window.dispatchEvent(new globalThis.Event('resize'));await nextTick()
-    expect(w.find('nav a[href="/users"]').exists()).toBe(true);h.session.user.value={...identity,roles:['operator']};await nextTick();expect(w.find('nav a[href="/users"]').exists()).toBe(false);expect(w.find('nav a[href="/profile"]').exists()).toBe(true)
+    expect(w.find('nav a[href="/users"]').exists()).toBe(true);expect(w.find('nav a[href="/orders"] i').attributes('data-icon')).toBe('$orders');h.session.user.value={...identity,roles:['operator']};await nextTick();expect(w.find('nav a[href="/users"]').exists()).toBe(false);expect(w.find('nav a[href="/orders"]').exists()).toBe(true);expect(w.find('nav a[href="/profile"]').exists()).toBe(true)
     await button(w,'Выйти').trigger('click');expect(h.session.logout).toHaveBeenCalled();await flushPromises();expect(h.router.replace).toHaveBeenCalledWith('/login')
     h.session.user.value=null;await nextTick();expect(w.find('.app-bar').exists()).toBe(false)
   })

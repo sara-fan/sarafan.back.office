@@ -5,11 +5,13 @@
 import { readonly, ref } from 'vue'
 import { UUID_PATH_PATTERN, createApiClient } from '../api/client.js'
 import { CORE_PROBLEM_TYPES, INTERNAL_PROBLEM_TYPES, createInternalProblem, suppressProblem } from '../errors/problem.js'
+import { validateOrderOps } from '../orderFormatting.js'
 import { can } from '../roles.js'
 
 const BASE = '/api/v1/backoffice'
 const json = (method, body) => ({ method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
 const CONSENT_REQUEST_PATH_PATTERN = new RegExp(`^/(legal-documents(?:/(?:ops|preview|audit|${UUID_PATH_PATTERN}(?:/source)?))?|consents/withdrawal-requests(?:/processed)?)$`, 'iu')
+const ORDER_REQUEST_PATH_PATTERN = /^\/orders(?:\/ops)?$/iu
 
 function isServiceUnavailable(problem) {
   return problem?.type === INTERNAL_PROBLEM_TYPES.protocolError
@@ -31,11 +33,13 @@ export function createSession() {
   const notice = ref('')
   const loginProblem = ref(null)
   const legalDocumentOps = ref(null)
+  const orderOps = ref(null)
   let token = ''
   let epoch = 0
   let refreshing = null
   let initialization = null
   let legalDocumentOpsRequest = null
+  let orderOpsRequest = null
   const client = createApiClient({ getAccessToken: () => token, refreshSession })
 
   function clearSession(message = '', problem = null) {
@@ -46,6 +50,8 @@ export function createSession() {
     loginProblem.value = problem
     legalDocumentOps.value = null
     legalDocumentOpsRequest = null
+    orderOps.value = null
+    orderOpsRequest = null
   }
   function forceLogoff(problem) {
     const unavailable = serviceUnavailableProblem(problem)
@@ -187,13 +193,28 @@ export function createSession() {
     }
     return legalDocumentOpsRequest
   }
+  async function getOrderOps() {
+    if (orderOps.value) return orderOps.value
+    if (!orderOpsRequest) {
+      const pending = request('/orders/ops', {}, { supplementary:true })
+        .then(value => { orderOps.value = validateOrderOps(value); return orderOps.value })
+        .finally(() => { if (orderOpsRequest === pending) orderOpsRequest = null })
+      orderOpsRequest = pending
+    }
+    return orderOpsRequest
+  }
   return {
-    user:readonly(user), ready:readonly(ready), restoring:readonly(restoring), restoreProblem:readonly(restoreProblem), notice:readonly(notice), loginProblem:readonly(loginProblem), legalDocumentOps:readonly(legalDocumentOps),
-    ensureReady, restoreSession, login, logout, saveUser, saveProfile, getLegalDocumentOps,
+    user:readonly(user), ready:readonly(ready), restoring:readonly(restoring), restoreProblem:readonly(restoreProblem), notice:readonly(notice), loginProblem:readonly(loginProblem), legalDocumentOps:readonly(legalDocumentOps), orderOps:readonly(orderOps),
+    ensureReady, restoreSession, login, logout, saveUser, saveProfile, getLegalDocumentOps, getOrderOps,
     consentRequest: (path, options = {}, responseType = 'json') => {
       const pathname = typeof path === 'string' ? path.split('?')[0] : ''
       if (!CONSENT_REQUEST_PATH_PATTERN.test(pathname)) throw createInternalProblem('invalidInput')
       return request(path, options, { supplementary:true, responseType })
+    },
+    orderRequest: path => {
+      const pathname = typeof path === 'string' ? path.split('?')[0] : ''
+      if (!ORDER_REQUEST_PATH_PATTERN.test(pathname)) throw createInternalProblem('invalidInput')
+      return request(path, {}, { supplementary:true })
     },
     listUsers: () => request('/users'), getUser: id => request(`/users/${id}`), getRoles: () => request('/users/ops'),
     getStatus: () => request('/status', {}, { supplementary:true })

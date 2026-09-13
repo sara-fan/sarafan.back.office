@@ -118,6 +118,13 @@ watch(() => user.value?.id, async (id, _previous, onCleanup) => {
             title="Пользователи"
           />
           <v-list-item
+            v-if="can(user, 'manualQuotes')"
+            to="/orders"
+            class="drawer-link"
+            prepend-icon="$orders"
+            title="Заказы"
+          />
+          <v-list-item
             v-if="can(user, 'manageLegalDocuments')"
             to="/legal-documents"
             title="Правовые документы"

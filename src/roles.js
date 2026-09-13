@@ -10,6 +10,7 @@ export const ROLES = Object.freeze({
 })
 const permissions = Object.freeze({
   access: Object.keys(ROLES),
+  manualQuotes: Object.keys(ROLES),
   manageUsers: ['administrator'],
   manageLegalDocuments: ['administrator'],
   manageConsentWithdrawalRequests: ['administrator', 'shift-manager', 'senior-operator']
@@ -20,8 +21,8 @@ export function can(user, action) {
 export function roleLabel(code) { return ROLES[code] || 'Неизвестная роль' }
 export function landing(user) {
   if (can(user, 'manageUsers')) return '/users'
-  if (Array.isArray(user?.roles) && user.roles.includes('senior-operator')) return '/privacy-requests'
-  return '/profile'
+  if (can(user, 'manualQuotes')) return '/orders'
+  return '/forbidden'
 }
 export function profileRoute(user) {
   return can(user, 'manageUsers') && Number.isInteger(user?.id) && user.id > 0
@@ -38,5 +39,6 @@ export function safeReturn(value, user) {
   if (can(user, 'manageUsers') && /^\/users(?:\/(?:new|[1-9]\d*))?$/u.test(value)) return value
   if (can(user, 'manageLegalDocuments') && /^\/legal-documents(?:\/(?:new|audit|[0-9a-fA-F]{8}-(?:[0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}))?$/u.test(value)) return value
   if (can(user, 'manageConsentWithdrawalRequests') && value === '/privacy-requests') return value
+  if (can(user, 'manualQuotes') && value === '/orders') return value
   return landing(user)
 }

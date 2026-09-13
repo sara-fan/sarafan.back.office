@@ -12,6 +12,7 @@ import LegalDocumentsView from './views/LegalDocumentsView.vue'
 import LegalDocumentView from './views/LegalDocumentView.vue'
 import LegalDocumentAuditView from './views/LegalDocumentAuditView.vue'
 import PrivacyRequestsView from './views/PrivacyRequestsView.vue'
+import OrdersView from './views/OrdersView.vue'
 import StatusView from './views/StatusView.vue'
 
 export function createAppRouter(history = createWebHistory(), session = useSession()) {
@@ -27,6 +28,7 @@ export function createAppRouter(history = createWebHistory(), session = useSessi
     { path:'/legal-documents/audit', component:LegalDocumentAuditView, meta:{ action:'manageLegalDocuments' } },
     { path:'/legal-documents/:id([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})', component:LegalDocumentView, meta:{ action:'manageLegalDocuments' } },
     { path:'/privacy-requests', component:PrivacyRequestsView, meta:{ action:'manageConsentWithdrawalRequests' } },
+    { path:'/orders', component:OrdersView, meta:{ action:'manualQuotes' } },
     { path:'/profile', component:AccountView },
     { path:'/forbidden', component:StatusView, props:{ forbidden:true } },
     { path:'/:pathMatch(.*)*', component:StatusView }
