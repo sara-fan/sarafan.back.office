@@ -22,6 +22,7 @@ vi.mock('../src/stores/session.js',()=>({useSession:()=>h.session}))
 vi.mock('vue-router',async original=>({...await original(),useRouter:()=>h.router,useRoute:()=>h.route}))
 const identity={id:1,email:'admin@example.test',firstName:'Иван',lastName:'Иванов',patronymic:null,roles:['administrator'],isActive:true}
 const roles=[{code:'operator',displayName:'Operator'},{code:'senior-operator',displayName:'Senior operator'},{code:'administrator',displayName:'Administrator'},{code:'shift-manager',displayName:'Shift manager'}]
+const currencies=[{value:643,name:'Российский рубль',routeAlias:'rub'},{value:840,name:'Доллар США',routeAlias:'usd'}]
 const failure=()=>createInternalProblem('networkUnavailable')
 const pending=()=>{let resolve;return {promise:new Promise(r=>{resolve=r}),resolve:(v)=>resolve(v)}}
 const stubs={
@@ -105,9 +106,9 @@ describe('staff views',()=>{
     h.session.user.value={...identity};await nextTick()
     expect(w.text()).toContain('USD —')
     h.session.user.value=null;h.session.user.value={...identity,id:2};await nextTick()
-    old.resolve({appVersion:'old',exchangeRates:[{provider:'CBR',baseCurrency:'USD',quoteCurrency:'RUB',nominal:1,officialRate:99,sourceEffectiveDate:'2026-09-04'}]});await flushPromises()
+    old.resolve({appVersion:'old',currencies,exchangeRates:[{provider:'CBR',baseCurrency:840,quoteCurrency:643,nominal:1,officialRate:99,sourceEffectiveDate:'2026-09-04'}]});await flushPromises()
     expect(w.text()).not.toContain('99,0000');expect(w.text()).not.toContain('Сервер old')
-    current.resolve({appVersion:'0.0.7',exchangeRates:[{provider:'CBR',baseCurrency:'USD',quoteCurrency:'RUB',nominal:1,officialRate:81.1234,sourceEffectiveDate:'2026-09-05'}]});await flushPromises()
+    current.resolve({appVersion:'0.0.7',currencies,exchangeRates:[{provider:'CBR',baseCurrency:840,quoteCurrency:643,nominal:1,officialRate:81.1234,sourceEffectiveDate:'2026-09-05'}]});await flushPromises()
     expect(w.text()).toContain('05.09.26');expect(w.text()).toContain('USD 81,1234');expect(w.text()).toContain('Сервер 0.0.7')
     h.session.getStatus.mockRejectedValueOnce(failure());h.session.user.value={...identity,id:3};await flushPromises()
     expect(w.text()).toContain('USD —');expect(w.find('.app-bar').exists()).toBe(true)

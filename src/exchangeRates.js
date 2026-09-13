@@ -6,11 +6,22 @@ export const RATE_UNAVAILABLE_MESSAGE = 'не удалось получить к
 const numberFormat = new Intl.NumberFormat('ru-RU', { minimumFractionDigits: 4, maximumFractionDigits: 4 })
 const dateFormat = new Intl.DateTimeFormat('ru-RU', { day: '2-digit', month: '2-digit', year: '2-digit', timeZone: 'UTC' })
 
-export function exchangeRateDisplay(rates) {
+function currencyByAlias(currencies, alias) {
+  if (!Array.isArray(currencies)) return null
+  const candidates = currencies.filter(currency => currency?.routeAlias === alias
+    && Number.isInteger(currency.value) && currency.value > 0
+    && typeof currency.name === 'string' && currency.name.trim())
+  return candidates.length === 1 ? candidates[0] : null
+}
+
+export function exchangeRateDisplay(rates, currencies) {
   if (!Array.isArray(rates)) return null
+  const usd = currencyByAlias(currencies, 'usd')
+  const rub = currencyByAlias(currencies, 'rub')
+  if (!usd || !rub || usd.value === rub.value) return null
   const candidates = rates.filter(rate => rate?.provider === 'CBR'
-    && typeof rate.baseCurrency === 'string' && rate.baseCurrency.toUpperCase() === 'USD'
-    && typeof rate.quoteCurrency === 'string' && rate.quoteCurrency.toUpperCase() === 'RUB')
+    && rate.baseCurrency === usd.value
+    && rate.quoteCurrency === rub.value)
   if (candidates.length !== 1) return null
   const rate = candidates[0]
   if (!Number.isInteger(rate.nominal) || rate.nominal < 1 || rate.nominal > 1_000_000
@@ -23,7 +34,7 @@ export function exchangeRateDisplay(rates) {
     date: dateFormat.format(date),
     isoDate: rate.sourceEffectiveDate,
     // Vcurs is the official RUB amount for Vnom units; do not silently label it as one USD.
-    label: rate.nominal === 1 ? 'USD' : `${rate.nominal.toLocaleString('ru-RU')} USD`,
+    label: rate.nominal === 1 ? usd.routeAlias.toUpperCase() : `${rate.nominal.toLocaleString('ru-RU')} ${usd.routeAlias.toUpperCase()}`,
     value: numberFormat.format(rate.officialRate)
   }
 }

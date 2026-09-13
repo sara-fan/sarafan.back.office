@@ -5,8 +5,11 @@
 import { computed } from 'vue'
 import { exchangeRateDisplay, RATE_UNAVAILABLE_MESSAGE } from '../exchangeRates.js'
 
-const props = defineProps({ rates: { type: Array, default: () => [] } })
-const display = computed(() => exchangeRateDisplay(props.rates))
+const props = defineProps({
+  rates: { type: Array, default: () => [] },
+  currencies: { type: Array, default: () => [] }
+})
+const display = computed(() => exchangeRateDisplay(props.rates, props.currencies))
 </script>
 
 <template>
