@@ -84,7 +84,7 @@ export function orderStatusItems(ops) {
   return [
     { title:'Все статусы', value:'' },
     ...ops.statusGroups.map(group => ({
-      title:`${group.name} — статусы ${Math.min(...group.statuses)}–${Math.max(...group.statuses)}`,
+      title:`${group.name}`,
       value:`group:${group.routeAlias}`
     })),
     ...ops.statuses.map(status => ({ title:status.name, value:`status:${status.value}` }))

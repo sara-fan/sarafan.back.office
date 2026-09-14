@@ -88,7 +88,7 @@ describe('order catalogue and formatting', () => {
   it('strictly validates Core metadata and derives selectors and labels from it', () => {
     expect(validateOrderOps(rawOps)).toEqual(rawOps)
     expect(orderStatusItems(ops).map(item => item.title)).toEqual([
-      'Все статусы', 'В работе — статусы 0–380', 'Выполняется — статусы 300–380',
+      'Все статусы', 'В работе', 'Выполняется',
       'На проверке', 'Оплачен', 'Доставка по России', 'Получен'
     ])
     expect(selectionIsKnown('', ops)).toBe(true)
@@ -155,7 +155,7 @@ describe('orders server table', () => {
       'orderNumber', 'status', 'productName', 'storeName', 'sellerPrice', 'quantity', 'createdAt', 'updatedAt'
     ])
     expect(wrapper.find('.actions-container').exists()).toBe(false)
-    expect(wrapper.findAllComponents({ name:'VSelect' })[0].props('items').map(item => item.title)).toContain('Выполняется — статусы 300–380')
+    expect(wrapper.findAllComponents({ name:'VSelect' })[0].props('items').map(item => item.title)).toContain('Выполняется')
   })
 
   it('builds exact/group/date queries and resets filter, sort and page-size changes to page one', async () => {

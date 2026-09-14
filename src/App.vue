@@ -111,25 +111,11 @@ watch(() => user.value?.id, async (id, _previous, onCleanup) => {
         </template>
         <v-list aria-label="Главная навигация">
           <v-list-item
-            v-if="can(user, 'manageUsers')"
-            to="/users"
-            class="drawer-link"
-            prepend-icon="$staff"
-            title="Пользователи"
-          />
-          <v-list-item
             v-if="can(user, 'manualQuotes')"
             to="/orders"
             class="drawer-link"
             prepend-icon="$orders"
             title="Заказы"
-          />
-          <v-list-item
-            v-if="can(user, 'manageLegalDocuments')"
-            to="/legal-documents"
-            title="Правовые документы"
-            class="drawer-link"
-            prepend-icon="$legalDocuments"
           />
           <v-list-item
             v-if="can(user, 'manageConsentWithdrawalRequests')"
@@ -139,10 +125,24 @@ watch(() => user.value?.id, async (id, _previous, onCleanup) => {
             prepend-icon="$privacyRequests"
           />
           <v-list-item
+            v-if="can(user, 'manageLegalDocuments')"
+            to="/legal-documents"
+            title="Правовые документы"
+            class="drawer-link"
+            prepend-icon="$legalDocuments"
+          />
+          <v-list-item
+            v-if="can(user, 'manageUsers')"
+            to="/users"
+            class="drawer-link"
+            prepend-icon="$staff"
+            title="Пользователи"
+          />
+          <v-list-item
             :to="profileRoute(user)"
             class="drawer-link"
             prepend-icon="$profile"
-            title="Профиль"
+            title="Мой профиль"
           />
           <v-list-item
             tag="button"
