@@ -22,6 +22,7 @@ const applicationAliases = {
   legalDocuments:'fa-file-contract',
   login:'fa-right-to-bracket',
   logout:'fa-right-from-bracket',
+  orders:'fa-cart-shopping',
   privacyRequests:'fa-clipboard-list',
   print:'fa-print',
   profile:'fa-user',

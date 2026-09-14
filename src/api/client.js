@@ -25,6 +25,8 @@ const API_ROUTE_TEMPLATES = new Set([
   '/api/v1/backoffice/legal-documents/{id}/source',
   '/api/v1/backoffice/consents/withdrawal-requests',
   '/api/v1/backoffice/consents/withdrawal-requests/processed',
+  '/api/v1/backoffice/orders',
+  '/api/v1/backoffice/orders/ops',
   '/api/v1/backoffice/auth/login', '/api/v1/backoffice/auth/refresh', '/api/v1/backoffice/auth/logout', '/api/v1/backoffice/auth/me',
   '/api/v1/backoffice/users', '/api/v1/backoffice/users/me', '/api/v1/backoffice/users/ops', '/api/v1/backoffice/users/{id}', '/api/v1/backoffice/status'
 ])

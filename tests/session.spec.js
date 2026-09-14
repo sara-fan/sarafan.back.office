@@ -8,11 +8,35 @@ import { problemResponse, response } from './fixtures/http.js'
 const identity = { id:1, email:'admin@example.test', firstName:'Иван', lastName:'Иванов', patronymic:null, roles:['administrator'], isActive:true }
 const cookieCategories = [{ value:0, name:'Обязательные', required:true }]
 const legalOps = { kinds:[{ value:0, name:'Согласие на использование куки', routeAlias:'cookie-consent' }], cookieCategories }
+const orderOps = {
+  statuses:[
+    { value:0,name:'На проверке',routeAlias:'under_review',upperStatusValue:0,upperStatusName:'На проверке',upperStatusRouteAlias:'under_review' },
+    { value:300,name:'Оплачен',routeAlias:'paid',upperStatusValue:300,upperStatusName:'Выполняется',upperStatusRouteAlias:'in_progress' }
+  ],
+  currencies:[{ value:643,name:'Российский рубль',routeAlias:'rub' }],
+  statusGroups:[
+    { routeAlias:'work',name:'В работе',statuses:[0,300] },
+    { routeAlias:'in_progress',name:'Выполняется',statuses:[300] }
+  ]
+}
 const auth = (user = identity) => response(200, { accessToken:'staff-token', expiresAt:'2026-10-01T00:00:00Z', user })
 const deferred = () => { let resolve; const promise = new Promise(r => { resolve = r }); return { promise, resolve } }
 afterEach(() => vi.unstubAllGlobals())
 
 describe('staff session boundary', () => {
+  it('loads and caches order metadata and restricts order requests to read-only list routes', async () => {
+    const fetch = vi.fn().mockResolvedValueOnce(auth()).mockResolvedValueOnce(response(200,orderOps)).mockResolvedValueOnce(response(200,{items:[]}))
+    vi.stubGlobal('fetch',fetch)
+    const s=createSession();await s.login('a@b.test','p')
+    expect(await s.getOrderOps()).toEqual(orderOps)
+    expect(await s.getOrderOps()).toEqual(orderOps)
+    expect(s.orderOps.value).toEqual(orderOps)
+    await s.orderRequest('/orders?page=1&statusGroup=work')
+    expect(fetch.mock.calls.filter(([url])=>url==='/api/v1/backoffice/orders/ops')).toHaveLength(1)
+    expect(fetch.mock.calls.at(-1)[0]).toBe('/api/v1/backoffice/orders?page=1&statusGroup=work')
+    expect(() => s.orderRequest('/orders/1')).toThrow(expect.objectContaining({code:'ui_invalid_input'}))
+    expect(() => s.orderRequest('/users')).toThrow(expect.objectContaining({code:'ui_invalid_input'}))
+  })
   it.each([
     '/legal-documents/a',
     '/legal-documents/-',
