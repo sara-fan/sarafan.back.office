@@ -10,6 +10,7 @@ describe('staff forms and permissions',()=>{
     for(const code of Object.keys(ROLES)) {
       const u={roles:[code]}; expect(can(u,'access')).toBe(true); expect(can(u,'manualQuotes')).toBe(true); expect(can(u,'manageUsers')).toBe(code==='administrator'); expect(can(u,'manageConsentWithdrawalRequests')).toBe(['administrator','shift-manager','senior-operator'].includes(code)); expect(roleLabel(code)).toBe(ROLES[code]); expect(landing(u)).toBe(code==='administrator'?'/users':'/orders')
     }
+    expect(landing({ roles: [] })).toBe('/forbidden')
     expect(can(null,'access')).toBe(false); expect(can({roles:'administrator'},'access')).toBe(false); expect(can({roles:['unknown']},'access')).toBe(false); expect(can({roles:['administrator']},'unknown')).toBe(false)
     expect(roleLabel('shift-manager')).toBe('Старший смены')
     expect(can({roles:['operator','administrator']},'manageUsers')).toBe(true); expect(roleLabel('unknown')).toBe('Неизвестная роль'); expect(fullName(null)).toBe(''); expect(fullName({firstName:'Иван',lastName:'Иванов',patronymic:'Иванович'})).toBe('Иванов Иван Иванович')
