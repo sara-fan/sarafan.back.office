@@ -152,8 +152,8 @@ describe('staff session boundary', () => {
   ])('forces logoff with a safe message after %s', async (_label, unavailable) => {
     vi.stubGlobal('fetch',vi.fn().mockResolvedValueOnce(auth()).mockResolvedValueOnce(unavailable))
     const s=createSession();await s.login('a@b.test','p')
-    await expect(s.listUsers()).rejects.toMatchObject({code:'ui_service_unavailable',detail:'Сервис недоступен. Пожалуйста, повторите позже.'})
-    expect(s.user.value).toBeNull();expect(s.notice.value).toBe('');expect(s.loginProblem.value).toMatchObject({code:'ui_service_unavailable',detail:'Сервис недоступен. Пожалуйста, повторите позже.'})
+    await expect(s.listUsers()).rejects.toMatchObject({code:'ui_service_unavailable',detail:'Сервис временно недоступен'})
+    expect(s.user.value).toBeNull();expect(s.notice.value).toBe('');expect(s.loginProblem.value).toMatchObject({code:'ui_service_unavailable',detail:'Сервис временно недоступен'})
   })
   it('shows the service notice instead of restore recovery for an HTML gateway error', async () => {
     vi.stubGlobal('fetch',vi.fn().mockResolvedValue(response(502,null,'text/html')))

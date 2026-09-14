@@ -42,6 +42,16 @@ describe('shared problem model', () => {
     expect(first.toJSON()).not.toHaveProperty('cause')
   })
 
+  it('presents transport and protocol failures with the standard service-unavailable detail', () => {
+    for (const kind of ['networkUnavailable', 'protocolError', 'sessionRestoreUnavailable']) {
+      expect(createInternalProblem(kind)).toMatchObject({
+        type: INTERNAL_PROBLEM_TYPES[kind],
+        title: 'Сервис временно недоступен',
+        detail: 'Сервис временно недоступен'
+      })
+    }
+  })
+
   it('preserves structured server problems and presents safe centralized text', () => {
     const server = new ProblemError({
       type: 'https://sarafan.sw.consulting/problems/customer-not-found',

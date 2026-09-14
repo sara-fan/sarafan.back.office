@@ -202,7 +202,7 @@ onUnmounted(() => {
   <section class="settings table-wide">
     <header class="header-with-actions">
       <h1 class="primary-heading">
-        Запросы на удаление персональных данных <span class="count">{{ total }}</span>
+        Запросы на прекращение обработки и удаление персональных данных <span class="count">{{ total }}</span>
       </h1>
       <div class="header-actions">
         <span
