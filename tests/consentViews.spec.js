@@ -18,13 +18,12 @@ vi.mock('../src/stores/session.js', () => ({ useSession:() => h.session }))
 vi.mock('vue-router', () => ({ useRouter:() => h.router, useRoute:() => h.route }))
 const id = '11111111-1111-1111-1111-111111111111'
 const ops = { kinds:[
-  { value:0, name:'Согласие на использование куки', routeAlias:'cookie-consent' },
   { value:1, name:'Согласие на обработку персональных данных', routeAlias:'personal-data-consent' },
   { value:2, name:'Пользовательское соглашение', routeAlias:'user-agreement' },
   { value:3, name:'Правила заказа товаров', routeAlias:'order-rules' },
   { value:4, name:'Политика обработки персональных данных', routeAlias:'privacy-policy' }
-], cookieCategories:[{ value:0, name:'Обязательные', required:true }] }
-const doc = { id, kind:LEGAL_DOCUMENT_KIND.PERSONAL_DATA_CONSENT, locale:'ru', title:'Отдельное согласие', displayVersion:'2', html:'<p>Правовой текст</p>', sourceHash:'b'.repeat(64), contentHash:'a'.repeat(64), cookieCategories:[], effectiveAt:'2027-09-07T21:00:00Z', canDelete:true }
+] }
+const doc = { id, kind:LEGAL_DOCUMENT_KIND.PERSONAL_DATA_CONSENT, locale:'ru', title:'Отдельное согласие', displayVersion:'2', html:'<p>Правовой текст</p>', sourceHash:'b'.repeat(64), contentHash:'a'.repeat(64), effectiveAt:'2027-09-07T21:00:00Z', canDelete:true }
 const audit = { id:1, documentId:id, actorId:1, actorName:'Иванов Иван', action:'created', at:'2026-09-07T09:00:00Z', kind:doc.kind, title:doc.title, displayVersion:doc.displayVersion, effectiveAt:doc.effectiveAt }
 const withdrawalRequest = { customerId:7, requestedAt:'2026-09-01T09:00:00Z', processed:false }
 const failure = () => createInternalProblem('networkUnavailable')
@@ -560,8 +559,21 @@ it('connects every legal-document form control to its submitted value', async ()
   expect(fields.find(x => x.props('label') === 'Дата начала действия').classes()).toContain('legal-effective-date')
   wrapper.findComponent({name:'VFileInput'}).vm.$emit('update:modelValue',[upload()])
   await nextTick(); expect(vm().form).toMatchObject({title:'Название из формы',displayVersion:'v3',effectiveDate:'2027-03-01'})
-  wrapper.findComponent({name:'VSelect'}).vm.$emit('update:modelValue',LEGAL_DOCUMENT_KIND.COOKIE_CONSENT); await nextTick()
-  expect(wrapper.text()).toContain('Категория куки: Обязательные')
+  wrapper.findComponent({name:'VSelect'}).vm.$emit('update:modelValue',LEGAL_DOCUMENT_KIND.PRIVACY_POLICY); await nextTick()
+  expect(wrapper.text()).not.toContain('Категория куки:')
   expect(vm().form).not.toHaveProperty('cookieCategories')
   h.session.consentRequest.mockResolvedValueOnce({ html:doc.html }); await vm().previewDocument(); await nextTick()
+})
+
+
+it('recovers a persisted audit filter for retired legal kind zero', async () => {
+  globalThis.localStorage.setItem('sarafan.backoffice.view-state.v1.1.legal-document-audit', JSON.stringify({
+    version:1, page:3, pageSize:50, sortBy:[{ key:'at', order:'asc' }],
+    filters:{ search:'old', kind:0, action:'created' }
+  }))
+  render(LegalDocumentAuditView)
+  await flushPromises()
+  expect(vm().kind).toBeNull()
+  expect(vm().page).toBe(1)
+  expect(h.session.consentRequest.mock.calls.some(([path]) => /[?&]kind=0(?:&|$)/u.test(path))).toBe(false)
 })

@@ -21,7 +21,6 @@ const creating = !id
 const ops = ref(null)
 const kinds = computed(() => (ops.value?.kinds || []).map(item => ({ value:item.value, title:item.name })))
 const kindName = value => ops.value?.kinds.find(item => item.value === value)?.name
-const cookieCategoryNames = computed(() => (ops.value?.cookieCategories || []).map(item => item.name).join(', '))
 const selected = ref(null)
 const preview = ref(null)
 const previewPayload = ref(null)
@@ -376,12 +375,6 @@ onMounted(load)
       <p class="format-note">
         Разрешены заголовки, абзацы, списки, выделение, ссылки и таблицы. HTML, изображения, скрипты, код и внешние стили не допускаются. После сохранения документ нельзя изменить.
       </p>
-      <p
-        v-if="form.kind === LEGAL_DOCUMENT_KIND.COOKIE_CONSENT"
-        class="cookie-options"
-      >
-        Категория куки: {{ cookieCategoryNames }}
-      </p>
     </form>
 
     <div
@@ -406,10 +399,6 @@ onMounted(load)
         <div>
           <dt>Дата окончания действия</dt>
           <dd>{{ moscowDate(effectiveUntil) }}</dd>
-        </div>
-        <div v-if="selected.kind === LEGAL_DOCUMENT_KIND.COOKIE_CONSENT">
-          <dt>Категория куки</dt>
-          <dd>{{ cookieCategoryNames }}</dd>
         </div>
       </dl>
       <div class="reader-surface">
@@ -449,7 +438,6 @@ onMounted(load)
 .legal-effective-date { max-width:220px; }
 .legal-file { grid-column:1 / -1; }
 .format-note { padding:10px 12px; margin:0 0 10px; color:#526a80; font-size:12px; line-height:1.45; background:#f5f9fc; border-left:3px solid #8bc8e7; }
-.cookie-options { margin:4px 0 10px; color:#526a80; font-size:13px; }
 .document-summary { display:flex; justify-content:flex-end; gap:24px; margin:0 0 14px; }
 .document-summary div { min-width:180px; }
 .document-summary dt { color:#64788b; font-size:11px; font-weight:700; text-transform:uppercase; }
