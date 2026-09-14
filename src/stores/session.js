@@ -196,7 +196,7 @@ export function createSession() {
   async function getOrderOps() {
     if (orderOps.value) return orderOps.value
     if (!orderOpsRequest) {
-      const pending = request('/orders/ops', {}, { supplementary:true })
+      const pending = request('/orders/ops')
         .then(value => { orderOps.value = validateOrderOps(value); return orderOps.value })
         .finally(() => { if (orderOpsRequest === pending) orderOpsRequest = null })
       orderOpsRequest = pending
@@ -214,7 +214,7 @@ export function createSession() {
     orderRequest: path => {
       const pathname = typeof path === 'string' ? path.split('?')[0] : ''
       if (!ORDER_REQUEST_PATH_PATTERN.test(pathname)) throw createInternalProblem('invalidInput')
-      return request(path, {}, { supplementary:true })
+      return request(path)
     },
     listUsers: () => request('/users'), getUser: id => request(`/users/${id}`), getRoles: () => request('/users/ops'),
     getStatus: () => request('/status', {}, { supplementary:true })

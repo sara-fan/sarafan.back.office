@@ -93,6 +93,13 @@ function persistState() {
   if (!saved && !preferenceProblem.value) preferenceProblem.value = createInternalProblem('viewPreferencesUnavailable')
 }
 
+function clearSearchTimer() {
+  if (searchTimer) {
+    globalThis.clearTimeout(searchTimer)
+    searchTimer = null
+  }
+}
+
 function statusQuery(query) {
   if (!selectedStatus.value) return
   const [kind, value] = selectedStatus.value.split(':')
@@ -164,6 +171,7 @@ async function load(options) {
 }
 
 function reloadFromFirstPage() {
+  clearSearchTimer()
   page.value = 1
   persistState()
   load()
@@ -178,6 +186,11 @@ function onSearchInput(value) {
     searchTimer = null
     load()
   }, 300)
+}
+
+function refreshList() {
+  clearSearchTimer()
+  load()
 }
 
 function onStatusChange(value) {
@@ -206,6 +219,7 @@ function onCreatedToChange(value) {
 
 function onPageChange(value) {
   if (busy.value || !Number.isInteger(value) || value < 1 || value === page.value) return
+  clearSearchTimer()
   page.value = value
   persistState()
   load()
@@ -248,7 +262,7 @@ onUnmounted(() => {
           icon="$refresh"
           tooltip-text="Обновить заказы"
           :disabled="busy"
-          @click="load"
+          @click="refreshList"
         />
       </div>
     </header>
