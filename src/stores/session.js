@@ -160,27 +160,18 @@ export function createSession() {
     return result
   }
   function validateLegalDocumentOps(value) {
-    if (!value || !Array.isArray(value.kinds) || value.kinds.length === 0
-      || !Array.isArray(value.cookieCategories) || value.cookieCategories.length === 0) throw createInternalProblem('protocolError')
+    if (!value || !Array.isArray(value.kinds) || value.kinds.length === 0) throw createInternalProblem('protocolError')
     const values = new Set()
     const aliases = new Set()
     for (const item of value.kinds) {
-      if (!item || !Number.isInteger(item.value) || item.value < 0 || typeof item.name !== 'string' || !item.name.trim()
+      if (!item || !Number.isInteger(item.value) || item.value <= 0 || typeof item.name !== 'string' || !item.name.trim()
         || typeof item.routeAlias !== 'string' || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/u.test(item.routeAlias)
         || values.has(item.value) || aliases.has(item.routeAlias)) throw createInternalProblem('protocolError')
       values.add(item.value)
       aliases.add(item.routeAlias)
     }
-    const categoryValues = new Set()
-    for (const item of value.cookieCategories) {
-      if (!item || !Number.isInteger(item.value) || item.value < 0 || typeof item.name !== 'string' || !item.name.trim()
-        || typeof item.required !== 'boolean' || categoryValues.has(item.value)) throw createInternalProblem('protocolError')
-      categoryValues.add(item.value)
-    }
-    if (!value.cookieCategories.some(item => item.required)) throw createInternalProblem('protocolError')
     return {
-      kinds:value.kinds.map(item => ({ value:item.value, name:item.name, routeAlias:item.routeAlias })),
-      cookieCategories:value.cookieCategories.map(item => ({ value:item.value, name:item.name, required:item.required }))
+      kinds:value.kinds.map(item => ({ value:item.value, name:item.name, routeAlias:item.routeAlias }))
     }
   }
   async function getLegalDocumentOps() {

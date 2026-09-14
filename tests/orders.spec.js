@@ -280,7 +280,7 @@ describe('orders server table', () => {
     h.session.orderRequest.mockResolvedValueOnce({ items:[], pagination:{} })
     await wrapper.get('button[aria-label="Обновить заказы"]').trigger('click')
     await flushPromises()
-    expect(wrapper.get('[role=alert]').text()).toContain('неподдерживаемом формате')
+    expect(wrapper.get('[role=alert]').text()).toContain('Сервис временно недоступен')
   })
 
   it('ignores invalid table events, preserves rows on retained reloads, and handles failed preference writes', async () => {

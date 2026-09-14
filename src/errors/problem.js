@@ -17,9 +17,28 @@ export const CORE_PROBLEM_TYPES = Object.freeze({
   accessDenied: `${PROBLEM_TYPE_ROOT}access-denied`,
   validationFailed: `${PROBLEM_TYPE_ROOT}validation-failed`
 })
+const SERVICE_UNAVAILABLE_MESSAGE = 'Сервис временно недоступен'
 
 export const { INTERNAL_PROBLEM_TYPES, createInternalProblem, normalizeProblem, presentProblem, problemFieldErrors, suppressProblem } = createProblemTools({
   logger: uiLogger, suppressedEvent: EVENTS.operationSuppressed, additions: {
+    networkUnavailable: {
+      suffix: 'network-unavailable',
+      code: 'ui_network_unavailable',
+      title: SERVICE_UNAVAILABLE_MESSAGE,
+      detail: SERVICE_UNAVAILABLE_MESSAGE
+    },
+    protocolError: {
+      suffix: 'protocol-error',
+      code: 'ui_protocol_error',
+      title: SERVICE_UNAVAILABLE_MESSAGE,
+      detail: SERVICE_UNAVAILABLE_MESSAGE
+    },
+    sessionRestoreUnavailable: {
+      suffix: 'session-restore-unavailable',
+      code: 'ui_session_restore_unavailable',
+      title: SERVICE_UNAVAILABLE_MESSAGE,
+      detail: SERVICE_UNAVAILABLE_MESSAGE
+    },
     apiRouteBlocked: {
       suffix: 'api-route-blocked',
       code: 'ui_api_route_blocked',
@@ -29,8 +48,8 @@ export const { INTERNAL_PROBLEM_TYPES, createInternalProblem, normalizeProblem, 
     serviceUnavailable: {
       suffix: 'service-unavailable',
       code: 'ui_service_unavailable',
-      title: 'Сервис недоступен',
-      detail: 'Сервис недоступен. Пожалуйста, повторите позже.'
+      title: SERVICE_UNAVAILABLE_MESSAGE,
+      detail: SERVICE_UNAVAILABLE_MESSAGE
     },
     viewPreferencesUnavailable: {
       suffix: 'view-preferences-unavailable',

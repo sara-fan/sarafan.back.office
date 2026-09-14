@@ -6,6 +6,13 @@ import { ref } from 'vue'
 import { createMemoryHistory } from 'vue-router'
 import { createAppRouter } from '../src/router.js'
 describe('route authorization',()=>{
+  it('chooses the landing page after the initial session restore',async()=>{
+    const s={user:ref(null),restoreProblem:ref(null),ensureReady:vi.fn(async()=>{s.user.value={id:7,roles:['administrator']}})}
+    const r=createAppRouter(createMemoryHistory(),s)
+    await r.push('/')
+    expect(r.currentRoute.value.path).toBe('/users')
+    expect(s.ensureReady).toHaveBeenCalled()
+  })
   it('restores before navigation and rejects direct access without leaking staff data',async()=>{
     const s={user:ref(null),restoreProblem:ref(null),ensureReady:vi.fn().mockResolvedValue()}
     const r=createAppRouter(createMemoryHistory(),s);await r.push('/users/3');expect(r.currentRoute.value.path).toBe('/login');expect(r.currentRoute.value.query.return).toBe('/users/3')

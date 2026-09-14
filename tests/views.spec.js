@@ -119,13 +119,13 @@ describe('staff views',()=>{
   })
   it('renders service unavailability as a red login error',async()=>{
     h.route={path:'/login',params:{},query:{}};h.session.loginProblem.value=createInternalProblem('serviceUnavailable')
-    const w=render(LoginView);expect(w.get('.page-alert').text()).toBe('Сервис недоступен. Пожалуйста, повторите позже.');expect(w.find('.page-notice').exists()).toBe(false)
+    const w=render(LoginView);expect(w.get('.page-alert').text()).toBe('Сервис временно недоступен');expect(w.find('.page-notice').exists()).toBe(false)
   })
   it('validates login, reveals password, preserves failed fields, and navigates only on success',async()=>{
     h.route={path:'/login',params:{},query:{return:'/users/2'}};h.session.notice.value='Войдите повторно'
     const w=render(LoginView);expect(button(w,'Войти').text()).toBe('Войти');await w.get('form').trigger('submit');expect(w.findAll('.field-error').some(e=>e.text())).toBe(true);expect(w.find('[role=alert]').exists()).toBe(false)
     await fill(w,'email','a@b.test');await fill(w,'password','test-password');expect(w.get('[name=password]').attributes('type')).toBe('password');expect(w.get('i[data-icon="$eye"]').exists()).toBe(true);await button(w,'Показать пароль').trigger('click');expect(w.get('[name=password]').attributes('type')).toBe('text');expect(w.get('i[data-icon="$eyeOff"]').exists()).toBe(true);await button(w,'Скрыть пароль').trigger('click');expect(w.get('[name=password]').attributes('type')).toBe('password')
-    h.session.login.mockRejectedValueOnce(failure());await w.get('form').trigger('submit');await flushPromises();expect(w.get('[role=alert]').text()).toContain('Проверьте');expect(w.get('[name=password]').element.value).toBe('test-password');expect(h.router.replace).not.toHaveBeenCalled()
+    h.session.login.mockRejectedValueOnce(failure());await w.get('form').trigger('submit');await flushPromises();expect(w.get('[role=alert]').text()).toContain('Сервис временно недоступен');expect(w.get('[name=password]').element.value).toBe('test-password');expect(h.router.replace).not.toHaveBeenCalled()
     h.session.login.mockClear();const wait=pending();h.session.login.mockReturnValueOnce(wait.promise);await w.get('form').trigger('submit');await w.get('form').trigger('submit');expect(h.session.login).toHaveBeenCalledTimes(1);wait.resolve(identity);await flushPromises();expect(h.router.replace).toHaveBeenCalledWith('/users/2')
     h.session.login.mockResolvedValueOnce(null);await w.get('form').trigger('submit');await flushPromises();expect(h.router.replace).toHaveBeenCalledTimes(1)
   })
