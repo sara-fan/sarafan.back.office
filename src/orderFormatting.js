@@ -122,8 +122,8 @@ export function orderRowIsValid(row, ops) {
     && Number.isInteger(row.quantity) && row.quantity > 0
     && (price === null || (price && typeof price.amount === 'number' && Number.isFinite(price.amount)
       && price.amount > 0 && currencyValues.has(price.currency)))
-    && typeof row.createdAt === 'string' && TIMESTAMP_PATTERN.test(row.createdAt) && Number.isFinite(created.getTime())
-    && typeof row.updatedAt === 'string' && TIMESTAMP_PATTERN.test(row.updatedAt) && Number.isFinite(updated.getTime())
+    && typeof row.createdAt === 'string' && TIMESTAMP_PATTERN.test(row.createdAt) && validDate(row.createdAt.slice(0, 10)) && Number.isFinite(created.getTime())
+    && typeof row.updatedAt === 'string' && TIMESTAMP_PATTERN.test(row.updatedAt) && validDate(row.updatedAt.slice(0, 10)) && Number.isFinite(updated.getTime())
     && updated >= created
 }
 
