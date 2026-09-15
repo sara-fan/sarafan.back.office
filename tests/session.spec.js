@@ -2,6 +2,7 @@
 // All rights reserved.
 // This file is a part of the Sarafan application
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { currencies, productLimits } from './fixtures/orderProduct.js'
 import { createSession } from '../src/stores/session.js'
 import { problemResponse, response } from './fixtures/http.js'
 
@@ -12,7 +13,7 @@ const orderOps = {
     { value:0,name:'На проверке',routeAlias:'under_review',upperStatusValue:0,upperStatusName:'На проверке',upperStatusRouteAlias:'under_review' },
     { value:300,name:'Оплачен',routeAlias:'paid',upperStatusValue:300,upperStatusName:'Выполняется',upperStatusRouteAlias:'in_progress' }
   ],
-  currencies:[{ value:643,name:'Российский рубль',routeAlias:'rub' }],
+  currencies, productLimits,
   statusGroups:[
     { routeAlias:'work',name:'В работе',statuses:[0,300] },
     { routeAlias:'in_progress',name:'Выполняется',statuses:[300] }
@@ -23,6 +24,18 @@ const deferred = () => { let resolve; const promise = new Promise(r => { resolve
 afterEach(() => vi.unstubAllGlobals())
 
 describe('staff session boundary', () => {
+  it('uses only staff detail/update endpoints and retains session on recoverable order failures', async () => {
+    const fetch = vi.fn().mockResolvedValueOnce(auth()).mockResolvedValueOnce(response(200, {}))
+      .mockResolvedValueOnce(problemResponse(503, 'order-limit-rates-unavailable'))
+    vi.stubGlobal('fetch', fetch)
+    const s = createSession(); await s.login('a@b.test', 'password')
+    await s.orderRequest('/orders/12345678-1')
+    await expect(s.orderRequest('/orders/12345678-1/product', { method:'PUT', body:'{}' })).rejects.toMatchObject({ code:'order_limit_rates_unavailable' })
+    expect(fetch.mock.calls.at(-1)[0]).toBe('/api/v1/backoffice/orders/12345678-1/product')
+    expect(fetch.mock.calls.at(-1)[1].method).toBe('PUT')
+    expect(s.user.value).toEqual(identity)
+    for (const path of ['/orders/12345678-0', '/orders/12345678-01', '/orders/12345678-1/customer', '/api/v1/orders/12345678-1']) expect(() => s.orderRequest(path)).toThrow()
+  })
   it('loads and caches order metadata and restricts order requests to read-only list routes', async () => {
     const fetch = vi.fn().mockResolvedValueOnce(auth()).mockResolvedValueOnce(response(200,orderOps)).mockResolvedValueOnce(response(200,{items:[]}))
     vi.stubGlobal('fetch',fetch)

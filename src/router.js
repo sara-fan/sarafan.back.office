@@ -12,6 +12,7 @@ import LegalDocumentsView from './views/LegalDocumentsView.vue'
 import LegalDocumentView from './views/LegalDocumentView.vue'
 import LegalDocumentAuditView from './views/LegalDocumentAuditView.vue'
 import PrivacyRequestsView from './views/PrivacyRequestsView.vue'
+import OrderView from './views/OrderView.vue'
 import OrdersView from './views/OrdersView.vue'
 import StatusView from './views/StatusView.vue'
 
@@ -29,6 +30,7 @@ export function createAppRouter(history = createWebHistory(), session = useSessi
     { path:'/legal-documents/:id([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})', component:LegalDocumentView, meta:{ action:'manageLegalDocuments' } },
     { path:'/privacy-requests', component:PrivacyRequestsView, meta:{ action:'manageConsentWithdrawalRequests' } },
     { path:'/orders', component:OrdersView, meta:{ action:'manualQuotes' } },
+    { path:'/orders/:orderNumber(\\d{8}-[1-9]\\d*)', component:OrderView, meta:{ action:'manualQuotes' } },
     { path:'/profile', component:AccountView },
     { path:'/forbidden', component:StatusView, props:{ forbidden:true } },
     { path:'/:pathMatch(.*)*', component:StatusView }
@@ -43,6 +45,7 @@ export function createAppRouter(history = createWebHistory(), session = useSessi
       const target = profileRoute(session.user.value)
       if (target !== '/profile') return target
     }
+    if (to.path === '/forbidden') return true
     if (!to.meta.public && !can(session.user.value, to.meta.action || 'access')) return '/forbidden'
     return true
   })

@@ -2,6 +2,7 @@
 // All rights reserved.
 // This file is a part of the Sarafan application
 
+import { validateProductLimits } from './orderProduct.js'
 import { createInternalProblem } from './errors/problem.js'
 
 export const ORDER_SORT_KEYS = Object.freeze([
@@ -77,7 +78,7 @@ export function validateOrderOps(value) {
     || groups[1].routeAlias !== 'in_progress' || groups[1].name !== 'Выполняется') {
     throw createInternalProblem('protocolError')
   }
-  return { statuses:statuses.result, currencies:currencies.result, statusGroups:groups }
+  return { statuses:statuses.result, currencies:currencies.result, statusGroups:groups, productLimits:validateProductLimits(value.productLimits, currencies.result) }
 }
 
 export function orderStatusItems(ops) {

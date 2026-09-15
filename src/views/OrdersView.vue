@@ -4,6 +4,7 @@
 // This file is a part of the Sarafan application
 
 import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import ActionButton from '../components/ActionButton.vue'
 import PageAlertRegion from '../components/PageAlertRegion.vue'
 import { moscowTime } from '../consentFormatting.js'
@@ -23,6 +24,7 @@ import {
 import { useSession } from '../stores/session.js'
 import { isPageResult, PAGE_SIZE_OPTIONS, readViewState, writeViewState } from '../viewState.js'
 
+const router = useRouter()
 const VIEW_KEY = 'orders'
 const defaults = {
   page:1,
@@ -65,7 +67,8 @@ const headers = [
   { title:'Цена продавца', key:'sellerPrice', align:'end' },
   { title:'Кол-во', key:'quantity', align:'end' },
   { title:'Создан', key:'createdAt' },
-  { title:'Обновлён', key:'updatedAt' }
+  { title:'Обновлён', key:'updatedAt' },
+  { title:'Действия', key:'actions', sortable:false }
 ]
 const activeSort = () => {
   const candidate = sortBy.value?.[0]
@@ -191,6 +194,11 @@ function onSearchInput(value) {
 function refreshList() {
   clearSearchTimer()
   load()
+}
+
+async function openOrder(item) {
+  try { await router.push(`/orders/${item.orderNumber}`) }
+  catch (value) { problem.value = normalizeProblem(value) }
 }
 
 function onStatusChange(value) {
@@ -348,7 +356,20 @@ onUnmounted(() => {
         @update:sort-by="onSortChange"
       >
         <template #[`item.orderNumber`]="{ item }">
-          <span class="order-number">{{ item.orderNumber }}</span>
+          <RouterLink
+            class="order-number"
+            :to="`/orders/${item.orderNumber}`"
+          >
+            {{ item.orderNumber }}
+          </RouterLink>
+        </template>
+        <template #[`item.actions`]="{ item }">
+          <ActionButton
+            icon="$edit"
+            tooltip-text="Открыть заказ"
+            :item="item"
+            @click="openOrder"
+          />
         </template>
         <template #[`item.status`]="{ item }">
           <span class="status-pill">{{ orderStatusName(item.status, ops) }}</span>

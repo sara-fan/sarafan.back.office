@@ -1,0 +1,341 @@
+<script setup>
+// Copyright (C) 2026 Maxim [maxirmx] Samsonov (www.sw.consulting)
+// All rights reserved.
+// This file is a part of the Sarafan application
+
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
+import ActionButton from '../components/ActionButton.vue'
+import ConfirmDialog from '../components/ConfirmDialog.vue'
+import FormField from '../components/FormField.vue'
+import PageAlertRegion from '../components/PageAlertRegion.vue'
+import { moscowTime } from '../consentFormatting.js'
+import { CORE_PROBLEM_TYPES, hasOnlyPresentedFieldErrors, normalizeProblem, problemFieldErrors } from '../errors/problem.js'
+import { formatOrderMoney, orderStatusName, safeOrderSource } from '../orderFormatting.js'
+import { CUSTOMER_FIELDS, PRODUCT_FIELDS, priceCents, productForm, productPayload, productValidation, validateOrderDetails } from '../orderProduct.js'
+import { can } from '../roles.js'
+import { useSession } from '../stores/session.js'
+
+const session = useSession()
+const route = useRoute()
+const router = useRouter()
+const number = route.params.orderNumber
+const details = ref(null)
+const ops = ref(null)
+const form = ref(null)
+const baseline = ref('')
+const busy = ref(false)
+const problem = ref(null)
+const confirmation = ref(false)
+const locked = ref(false)
+let version = 0
+let confirmAction = null
+const dirty = computed(() => form.value !== null && JSON.stringify(form.value) !== baseline.value)
+const editable = computed(() => details.value?.canEditProduct && can(session.user.value, 'manualQuotes') && !locked.value)
+const localProblem = computed(() => editable.value && form.value
+  ? productValidation(form.value, ops.value.productLimits, details.value.limitCheck) : null)
+const fieldProblem = computed(() => problem.value ?? localProblem.value)
+const pageProblem = computed(() => hasOnlyPresentedFieldErrors(fieldProblem.value, PRODUCT_FIELDS) ? null : fieldProblem.value)
+const total = computed(() => {
+  const cents = priceCents(form.value?.sellerPrice ?? '')
+  const quantity = Number(form.value?.quantity)
+  return cents !== null && Number.isSafeInteger(quantity) && quantity > 0
+    ? formatOrderMoney({ amount:Number(cents * BigInt(quantity)) / 100, currency:ops.value.productLimits.sellerPriceCurrency }, ops.value) : '—'
+})
+
+function apply(value) {
+  details.value = validateOrderDetails(value, ops.value, number)
+  form.value = productForm(value.product, ops.value.productLimits)
+  baseline.value = JSON.stringify(form.value)
+  locked.value = false
+}
+
+async function load() {
+  const current = ++version
+  busy.value = true
+  problem.value = null
+  try {
+    const catalog = await session.getOrderOps()
+    if (current !== version) return
+    ops.value = catalog
+    const value = await session.orderRequest(`/orders/${number}`)
+    if (current === version) apply(value)
+  } catch (value) {
+    if (current === version) problem.value = normalizeProblem(value)
+  } finally { if (current === version) busy.value = false }
+}
+
+async function save() {
+  if (busy.value || !editable.value || !details.value.limitCheck.available || localProblem.value) return
+  const current = ++version
+  busy.value = true
+  problem.value = null
+  try {
+    const result = await session.orderRequest(`/orders/${number}/product`, {
+      method:'PUT', headers:{ 'Content-Type':'application/json' },
+      body:JSON.stringify(productPayload(form.value, ops.value.productLimits, details.value.updatedAt))
+    })
+    if (current === version) apply(result)
+  } catch (value) {
+    if (current !== version) return
+    problem.value = normalizeProblem(value)
+    if ([CORE_PROBLEM_TYPES.orderUpdateConflict, CORE_PROBLEM_TYPES.orderNotEditable].includes(problem.value.type)) locked.value = true
+  } finally { if (current === version) busy.value = false }
+}
+
+function ask(action) {
+  if (!dirty.value) return action()
+  confirmation.value = true
+  confirmAction = action
+}
+function cancelConfirmation() {
+  confirmation.value = false
+  const action = confirmAction
+  confirmAction = null
+  action?.(false)
+}
+function acceptConfirmation() {
+  confirmation.value = false
+  const action = confirmAction
+  confirmAction = null
+  action?.(true)
+}
+function refresh() {
+  if (busy.value) return
+  ask(accepted => { if (accepted !== false) load() })
+}
+async function back() {
+  try { await router.push('/orders') }
+  catch (value) { problem.value = normalizeProblem(value) }
+}
+onBeforeRouteLeave(() => {
+  if (!dirty.value) return true
+  return new Promise(resolve => ask(resolve))
+})
+function beforeUnload(event) {
+  if (!dirty.value) return
+  event.preventDefault()
+  event.returnValue = ''
+}
+function clear() {
+  version += 1
+  details.value = null
+  form.value = null
+  ops.value = null
+  baseline.value = ''
+  problem.value = null
+  busy.value = false
+  cancelConfirmation()
+}
+watch(() => session.user.value?.id, clear, { flush:'sync' })
+watch(form, () => { if (!locked.value) problem.value = null }, { deep:true, flush:'sync' })
+onMounted(() => { globalThis.addEventListener('beforeunload', beforeUnload); load() })
+onUnmounted(() => { clear(); globalThis.removeEventListener('beforeunload', beforeUnload) })
+</script>
+
+<template>
+  <section class="settings table-wide">
+    <header class="header-with-actions">
+      <h1 class="primary-heading">
+        Заказ {{ number }}
+      </h1>
+      <div class="header-actions">
+        <ActionButton
+          icon="$saveChanges"
+          tooltip-text="Сохранить товар"
+          variant="blue"
+          :disabled="busy || !editable || !details?.limitCheck.available || !!localProblem || !dirty"
+          :loading="busy"
+          @click="save"
+        />
+        <ActionButton
+          icon="$refresh"
+          tooltip-text="Обновить карточку"
+          :disabled="busy"
+          @click="refresh"
+        />
+        <ActionButton
+          icon="$close"
+          tooltip-text="Назад к заказам"
+          :disabled="busy"
+          @click="back"
+        />
+      </div>
+    </header>
+    <hr class="hr">
+    <PageAlertRegion :problem="pageProblem" />
+    <p
+      v-if="busy && !details"
+      role="status"
+    >
+      Загрузка заказа…
+    </p>
+    <template v-if="details && form">
+      <div class="order-meta">
+        <span class="status-pill">{{ orderStatusName(details.status, ops) }}</span>
+        <span>Создан: {{ moscowTime(details.createdAt) }}</span>
+        <span>Обновлён: {{ moscowTime(details.updatedAt) }}</span>
+      </div>
+      <p
+        v-if="locked"
+        role="status"
+      >
+        Данные заказа изменились. Обновите карточку перед сохранением.
+      </p>
+      <p v-else-if="!editable">
+        Заказ доступен только для просмотра.
+      </p>
+      <form
+        class="editor-form order-editor"
+        novalidate
+        @submit.prevent="save"
+      >
+        <h2 class="primary-heading">
+          Товар
+        </h2>
+        <fieldset
+          class="product-grid"
+          :disabled="busy || !editable"
+        >
+          <div class="full-width">
+            <FormField
+              v-model="form.productName"
+              name="productName"
+              label="Название товара"
+              :problem="fieldProblem"
+            />
+          </div>
+          <div class="full-width source-field">
+            <span>Исходная ссылка</span>
+            <a
+              v-if="safeOrderSource(details.sourceUrl)"
+              :href="safeOrderSource(details.sourceUrl)"
+              target="_blank"
+              rel="noopener noreferrer"
+            >{{ details.sourceUrl }}</a>
+            <span v-else>Ссылка недоступна</span>
+          </div>
+          <FormField
+            v-model="form.sellerPrice"
+            name="sellerPrice"
+            label="Цена за единицу, USD"
+            inputmode="decimal"
+            :problem="fieldProblem"
+          />
+          <FormField
+            v-model="form.quantity"
+            name="quantity"
+            label="Количество"
+            inputmode="numeric"
+            :problem="fieldProblem"
+          />
+          <FormField
+            v-model="form.color"
+            name="color"
+            label="Цвет, как на сайте"
+            :problem="fieldProblem"
+          />
+          <FormField
+            v-model="form.size"
+            name="size"
+            label="Размер, как на сайте"
+            :problem="fieldProblem"
+          />
+          <div class="form-field full-width">
+            <label for="comment">Комментарий</label>
+            <textarea
+              id="comment"
+              v-model="form.comment"
+              rows="3"
+              :aria-invalid="problemFieldErrors(fieldProblem, 'comment').length > 0"
+              aria-describedby="comment-error"
+            />
+            <div
+              id="comment-error"
+              class="field-error"
+            >
+              <span
+                v-for="error in problemFieldErrors(fieldProblem, 'comment')"
+                :key="error"
+              >{{ error }}</span>
+            </div>
+          </div>
+        </fieldset>
+      </form>
+      <div class="recognition">
+        <p>Магазин: {{ details.storeName || 'Не указано' }}</p>
+        <img
+          v-if="safeOrderSource(details.imageUrl)"
+          :src="safeOrderSource(details.imageUrl)"
+          alt="Изображение товара"
+          referrerpolicy="no-referrer"
+          loading="lazy"
+        >
+        <p v-if="details.dimensions">
+          Габариты: {{ details.dimensions.lengthCm }} × {{ details.dimensions.widthCm }} × {{ details.dimensions.heightCm }} см
+        </p>
+        <dl v-if="details.characteristics">
+          <div
+            v-for="(value, key) in details.characteristics"
+            :key="key"
+          >
+            <dt>{{ key }}</dt><dd>{{ value }}</dd>
+          </div>
+        </dl>
+      </div>
+      <div class="merchandise-summary">
+        <span v-if="details.savedLimitSourceEffectiveDate">Курсы при последнем сохранении: {{ new Date(details.savedLimitSourceEffectiveDate).toLocaleDateString('ru-RU', { timeZone:'UTC' }) }}</span>
+        <span v-else>Сохранённая проверка лимита отсутствует.</span>
+        <strong>Сумма товара: {{ total }}</strong>
+        <span>Стоимость заказа уточняется. Доставка и комиссия в сумму товара не входят.</span>
+        <span>Лимит: {{ formatOrderMoney({ amount:details.limitCheck.maximumAmount, currency:details.limitCheck.currency }, ops) }}</span>
+        <span v-if="details.limitCheck.available">Проверка по курсам на {{ new Date(details.limitCheck.sourceEffectiveDate).toLocaleDateString('ru-RU', { timeZone:'UTC' }) }}</span>
+        <span
+          v-else
+          role="status"
+        >Не удалось получить общую пару курсов. Сохранение временно недоступно.</span>
+      </div>
+      <h2 class="primary-heading buyer-heading">
+        Покупатель
+      </h2>
+      <dl class="buyer-grid">
+        <div
+          v-for="(label, key) in CUSTOMER_FIELDS"
+          :key="key"
+          :class="{ 'full-width':key === 'address' || key === 'passportIssuedBy' }"
+        >
+          <dt>{{ label }}</dt><dd>{{ details.customer[key] || 'Не указано' }}</dd>
+        </div>
+      </dl>
+    </template>
+    <ConfirmDialog
+      :open="confirmation"
+      title="Отменить изменения?"
+      message="Несохранённые изменения будут потеряны."
+      action="Продолжить без сохранения"
+      @cancel="cancelConfirmation"
+      @confirm="acceptConfirmation"
+    />
+  </section>
+</template>
+
+<style scoped>
+.order-meta { display:flex; flex-wrap:wrap; align-items:center; gap:12px 24px; margin-bottom:20px; color:#526a80; }
+.product-grid, .buyer-grid { display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:10px 16px; }
+.full-width { grid-column:1 / -1; }
+.source-field { display:grid; gap:6px; margin-bottom:12px; overflow-wrap:anywhere; }
+.source-field a { color:#1976d2; }
+.order-editor textarea { width:100%; resize:vertical; min-height:80px; }
+.order-editor h2, .buyer-heading { font-size:20px; margin:12px 0; }
+.order-editor :deep(input), .order-editor textarea { min-height:36px; padding:6px 9px; background:#f7f7f7; border:1px solid #d7dce1; border-radius:4px; font:inherit; }
+.merchandise-summary { display:grid; gap:6px; margin:16px 0; padding:12px; background:#f5f9fc; border-left:3px solid #8bc8e7; }
+.buyer-heading { border-bottom:1px solid #dbe5ee; padding-bottom:8px; }
+.buyer-grid { margin-top:12px; }
+.buyer-grid dt { color:#526a80; font-size:12px; }
+.buyer-grid dd { margin:4px 0 10px; overflow-wrap:anywhere; }
+.recognition { overflow-wrap:anywhere; }
+.recognition img { max-width:160px; max-height:160px; object-fit:contain; }
+@media(max-width:900px) { .product-grid, .buyer-grid { grid-template-columns:repeat(2, minmax(0, 1fr)); } }
+@media(max-width:550px) { .product-grid, .buyer-grid { grid-template-columns:1fr; } }
+@media(max-width:550px) { .header-with-actions { flex-wrap:wrap; } .header-with-actions h1 { flex-basis:100%; } }
+</style>
