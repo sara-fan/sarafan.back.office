@@ -385,7 +385,7 @@ onUnmounted(() => {
               :href="safeOrderSource(item.sourceUrl)"
               target="_blank"
               rel="noopener noreferrer"
-            >Страница магазина</a>
+            >Страница товара</a>
           </div>
         </template>
         <template #[`item.storeName`]="{ item }">
