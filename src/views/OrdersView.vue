@@ -63,7 +63,7 @@ const headers = [
   { title:'', key:'actions', sortable:false, width:'56px' },
   { title:'Номер', key:'orderNumber' },
   { title:'Статус', key:'status' },
-  { title:'Товар / источник', key:'productName' },
+  { title:'Товар', key:'productName' },
   { title:'Магазин', key:'storeName' },
   { title:'Цена продавца', key:'sellerPrice', align:'end' },
   { title:'Кол-во', key:'quantity', align:'end' },
@@ -384,7 +384,7 @@ onUnmounted(() => {
               :href="safeOrderSource(item.sourceUrl)"
               target="_blank"
               rel="noopener noreferrer"
-            >Открыть источник</a>
+            >Страница магазина</a>
           </div>
         </template>
         <template #[`item.storeName`]="{ item }">
