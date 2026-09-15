@@ -3,7 +3,9 @@
 // This file is a part of the Sarafan application
 
 import { describe, expect, it } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { mount as baseMount } from '@vue/test-utils'
+import { createSarafanVuetify } from '../src/plugins/vuetify.js'
+const mount = (component, options = {}) => baseMount(component, { ...options, global:{ plugins:[createSarafanVuetify()] } })
 import componentSource from '../src/components/ExchangeRateDisplay.vue?raw'
 import { exchangeRateDisplay } from '../src/exchangeRates.js'
 import ExchangeRateDisplay from '../src/components/ExchangeRateDisplay.vue'
@@ -11,6 +13,24 @@ import ExchangeRateDisplay from '../src/components/ExchangeRateDisplay.vue'
 const currencies = [{ value:643,name:'Российский рубль',routeAlias:'rub' },{ value:840,name:'Доллар США',routeAlias:'usd' }]
 const rate = { provider:'CBR', baseCurrency:840, quoteCurrency:643, nominal:1, officialRate:81.1234, sourceEffectiveDate:'2026-09-05', retrievedAt:'2026-09-06T21:10:00Z' }
 describe('official exchange-rate display', () => {
+  it('shows common dates once, different dates separately and keeps valid partial rates', async () => {
+    const catalogue = [...currencies, { value:978, name:'Евро', routeAlias:'eur' }]
+    const eur = { ...rate, baseCurrency:978, officialRate:92.5, nominal:10 }
+    const wrapper = mount(ExchangeRateDisplay, { props:{ rates:[rate, eur], currencies:catalogue } })
+    expect(wrapper.findAll('time')).toHaveLength(1)
+    expect(wrapper.get('.text-purple-darken-2').text()).toContain('10 EUR 92,5000')
+    await wrapper.setProps({ rates:[rate, { ...eur, sourceEffectiveDate:'2026-09-07' }] })
+    expect(wrapper.findAll('time')).toHaveLength(2)
+    await wrapper.setProps({ rates:[eur] })
+    expect(wrapper.text()).toContain('USD —')
+    expect(wrapper.text()).toContain('EUR 92,5000')
+    await wrapper.get('button').trigger('click')
+    expect(wrapper.get('button').attributes('aria-expanded')).toBe('true')
+    expect(wrapper.get('#official-rates').classes()).toContain('expanded')
+    await wrapper.get('button').trigger('click')
+    expect(wrapper.get('button').attributes('aria-expanded')).toBe('false')
+    wrapper.unmount()
+  })
   it('shows source date and four Russian decimals without discarding older rates', () => {
     const wrapper = mount(ExchangeRateDisplay, { props:{ rates:[rate], currencies } })
     expect(wrapper.get('time').text()).toBe('05.09.26')
@@ -44,7 +64,7 @@ describe('official exchange-rate display', () => {
   })
   it('renders an accessible unavailable placeholder and updates reactively', async () => {
     const wrapper = mount(ExchangeRateDisplay)
-    expect(wrapper.get('strong').text()).toBe('USD —')
+    expect(wrapper.get('strong').text()).toContain('USD —')
     expect(wrapper.text()).toContain('не удалось получить курс')
     expect(wrapper.attributes('title')).toBe('не удалось получить курс')
     expect(wrapper.find('time').exists()).toBe(false)

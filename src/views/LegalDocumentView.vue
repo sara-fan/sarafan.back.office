@@ -324,7 +324,7 @@ onMounted(load)
     <form
       v-if="form"
       id="legal-document-form"
-      class="editor-form legal-workspace legal-document-form"
+      class="editor-form staff-form legal-workspace legal-document-form"
       @submit.prevent="previewDocument"
     >
       <fieldset

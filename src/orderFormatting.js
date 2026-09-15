@@ -2,7 +2,9 @@
 // All rights reserved.
 // This file is a part of the Sarafan application
 
+import { validateProductLimits } from './orderProduct.js'
 import { createInternalProblem } from './errors/problem.js'
+import { formatMoneyAmount } from './moneyFormatting.js'
 
 export const ORDER_SORT_KEYS = Object.freeze([
   'orderNumber', 'status', 'productName', 'storeName',
@@ -77,7 +79,7 @@ export function validateOrderOps(value) {
     || groups[1].routeAlias !== 'in_progress' || groups[1].name !== 'Выполняется') {
     throw createInternalProblem('protocolError')
   }
-  return { statuses:statuses.result, currencies:currencies.result, statusGroups:groups }
+  return { statuses:statuses.result, currencies:currencies.result, statusGroups:groups, productLimits:validateProductLimits(value.productLimits, currencies.result) }
 }
 
 export function orderStatusItems(ops) {
@@ -135,5 +137,5 @@ export function formatOrderMoney(price, ops) {
   if (!price) return '—'
   const alias = ops.currencies.find(currency => currency.value === price.currency)?.routeAlias
   if (!alias) return '—'
-  return `${new Intl.NumberFormat('ru-RU', { minimumFractionDigits:2, maximumFractionDigits:2 }).format(price.amount)} ${alias.toUpperCase()}`
+  return `${formatMoneyAmount(price.amount)} ${alias.toUpperCase()}`
 }

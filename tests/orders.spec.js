@@ -17,9 +17,11 @@ import {
   selectionIsKnown,
   validateOrderOps
 } from '../src/orderFormatting.js'
+import { currencies, productLimits } from './fixtures/orderProduct.js'
 import OrdersView from '../src/views/OrdersView.vue'
 
-const h = vi.hoisted(() => ({ session:{} }))
+const h = vi.hoisted(() => ({ session:{}, push:vi.fn() }))
+vi.mock('vue-router', () => ({ useRouter:() => ({ push:h.push }) }))
 vi.mock('../src/stores/session.js', () => ({ useSession:() => h.session }))
 
 const status = (value, name, routeAlias) => ({
@@ -30,7 +32,7 @@ const status = (value, name, routeAlias) => ({
 })
 const rawOps = {
   statuses:[status(0, 'На проверке', 'under_review'), status(300, 'Оплачен', 'paid'), status(380, 'Доставка по России', 'delivering_in_russia'), status(400, 'Получен', 'received')],
-  currencies:[{ value:643, name:'Российский рубль', routeAlias:'rub' }, { value:840, name:'Доллар США', routeAlias:'usd' }],
+  currencies, productLimits,
   statusGroups:[
     { routeAlias:'work', name:'В работе', statuses:[0, 300, 380] },
     { routeAlias:'in_progress', name:'Выполняется', statuses:[300, 380] }
@@ -73,6 +75,7 @@ const render = () => {
 
 beforeEach(() => {
   globalThis.localStorage.clear()
+  h.session.viewStateMemory = new Map()
   h.session.user = ref({ id:7, roles:['operator'] })
   h.session.getOrderOps = vi.fn().mockResolvedValue(ops)
   h.session.orderRequest = vi.fn(async path => resultFor(path))
@@ -136,7 +139,7 @@ describe('order catalogue and formatting', () => {
 })
 
 describe('orders server table', () => {
-  it('opens with the staff default, renders compact rows, and exposes no row actions', async () => {
+  it('opens with the staff default, renders compact rows, and opens the dedicated card', async () => {
     render()
     await flushPromises()
 
@@ -152,9 +155,25 @@ describe('orders server table', () => {
     const table = wrapper.findComponent({ name:'VDataTableServer' })
     expect(table.props()).toMatchObject({ fixedHeader:true, density:'compact', mustSort:true, itemsPerPage:10, itemsLength:2 })
     expect(table.props('headers').map(header => header.key)).toEqual([
-      'orderNumber', 'status', 'productName', 'storeName', 'sellerPrice', 'quantity', 'createdAt', 'updatedAt'
+      'actions', 'orderNumber', 'status', 'productName', 'storeName', 'sellerPrice', 'quantity', 'createdAt', 'updatedAt'
     ])
-    expect(wrapper.find('.actions-container').exists()).toBe(false)
+    expect(table.props('headers')[0]).toMatchObject({ title:'', sortable:false })
+    const clickableColumns = table.props('headers').filter(header => !['productName', 'actions'].includes(header.key))
+    const clickable = table.props('cellProps')({ item:rows[0], column:clickableColumns[0] })
+    for (const column of clickableColumns) {
+      expect(table.props('cellProps')({ item:rows[0], column })).toMatchObject({ class:'order-card-cell', onClick:expect.any(Function) })
+    }
+    clickable.onClick()
+    expect(h.push).toHaveBeenCalledWith('/orders/12345678-1')
+    expect(table.props('cellProps')({ item:rows[0], column:{ key:'productName' } })).toEqual({})
+    h.push.mockClear()
+    await wrapper.get('button[aria-label="Открыть заказ"]').trigger('click')
+    expect(h.push).toHaveBeenCalledExactlyOnceWith('/orders/12345678-1')
+    expect(wrapper.find('.order-number').exists()).toBe(false)
+    h.push.mockRejectedValueOnce(new Error('private'))
+    await vm().openOrder(rows[0])
+    expect(vm().problem).toBeTruthy()
+    expect(wrapper.text()).not.toContain('private')
     expect(wrapper.findAllComponents({ name:'VSelect' })[0].props('items').map(item => item.title)).toContain('Выполняется')
   })
 
@@ -228,8 +247,23 @@ describe('orders server table', () => {
       .toBe('group:work')
   })
 
+  it('restores filters, sort and page after card navigation when storage writes fail', async () => {
+    vi.spyOn(globalThis.Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('quota') })
+    h.session.orderRequest = vi.fn(async path => resultFor(path, rows, 100))
+    render(); await flushPromises()
+    vm().onSearchInput('tea'); vm().refreshList(); await flushPromises()
+    vm().onSortChange([{ key:'orderNumber', order:'asc' }]); await flushPromises()
+    vm().onPageChange(3); await flushPromises()
+    await vm().openOrder(rows[0])
+    wrapper.unmount()
+    render(); await flushPromises()
+    expect(vm().search).toBe('tea')
+    expect(vm().page).toBe(3)
+    expect(vm().sortBy).toEqual([{ key:'orderNumber', order:'asc' }])
+    expect(vm().preferenceProblem).toBeTruthy()
+  })
   it('keeps the list usable when browser storage is unavailable', async () => {
-    vi.spyOn(globalThis.Storage.prototype, 'getItem').mockImplementation(() => { throw new Error('blocked') })
+    vi.spyOn(globalThis.globalThis.Storage.prototype, 'getItem').mockImplementation(() => { throw new Error('blocked') })
     render()
     await flushPromises()
 
@@ -298,7 +332,7 @@ describe('orders server table', () => {
     vm().onStatusChange('')
     await flushPromises()
     expect(h.session.orderRequest.mock.calls.at(-1)[0]).not.toContain('status')
-    vi.spyOn(globalThis.Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('quota') })
+    vi.spyOn(globalThis.globalThis.Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('quota') })
     vm().onStatusChange('group:work')
     await flushPromises()
     expect(wrapper.get('[role=alert]').text()).toContain('браузер не может сохранить')

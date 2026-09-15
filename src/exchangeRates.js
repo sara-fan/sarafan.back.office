@@ -14,9 +14,9 @@ function currencyByAlias(currencies, alias) {
   return candidates.length === 1 ? candidates[0] : null
 }
 
-export function exchangeRateDisplay(rates, currencies) {
+export function exchangeRateDisplay(rates, currencies, alias = 'usd') {
   if (!Array.isArray(rates)) return null
-  const usd = currencyByAlias(currencies, 'usd')
+  const usd = currencyByAlias(currencies, alias)
   const rub = currencyByAlias(currencies, 'rub')
   if (!usd || !rub || usd.value === rub.value) return null
   const candidates = rates.filter(rate => rate?.provider === 'CBR'

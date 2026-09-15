@@ -25,6 +25,7 @@ export const sarafanAliases = {
   print: 'fas fa-print',
   profile: 'fas fa-user',
   refresh: 'fas fa-rotate-right',
+  rates: 'fas fa-coins',
   save: 'fas fa-floppy-disk',
   saveChanges: 'fas fa-check-double',
   search: 'fas fa-magnifying-glass',

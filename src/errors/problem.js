@@ -8,6 +8,8 @@ import { uiLogger } from '../observability/logger.js'
 export { PROBLEM_TYPE_ROOT, ProblemError } from '@sara-fan/ui-shared/problems'
 
 export const CORE_PROBLEM_TYPES = Object.freeze({
+  orderUpdateConflict: `${PROBLEM_TYPE_ROOT}order-update-conflict`,
+  orderNotEditable: `${PROBLEM_TYPE_ROOT}order-not-editable`,
   userNotFound: `${PROBLEM_TYPE_ROOT}backoffice-user-not-found`,
   invalidAccessToken: `${PROBLEM_TYPE_ROOT}invalid-backoffice-access-token`,
   invalidRefreshToken: `${PROBLEM_TYPE_ROOT}invalid-backoffice-refresh-token`,
