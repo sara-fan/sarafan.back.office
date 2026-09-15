@@ -100,7 +100,7 @@ fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
 .staff-form .v-field { min-height: 42px; background: #fff; border-radius: 4px; }
 .staff-form .v-label { color: #263d55; font-size: 14px; font-weight: 600; }
 .staff-form-value { display: flex; grid-column: 2; align-items: center; width: 100%; min-height: 42px; padding: 9px 11px; color: #263d55; background: #fff; border: 1px solid #b9cad8; border-radius: 4px; font-size: 14px; }
-.staff-form input:disabled:not([type="checkbox"]), .staff-form textarea:disabled, .staff-form-value--readonly { color: #526a80; background: #eef2f5; border-color: #d1dbe3; opacity: 1; }
+.staff-form input:disabled:not([type="checkbox"]), .staff-form textarea:disabled, .staff-form-value--readonly { color: var(--ink); background: #eef2f5; border-color: #d1dbe3; opacity: 1; }
 .staff-form input:disabled:not([type="checkbox"]), .staff-form textarea:disabled { cursor: not-allowed; }
 .editor-form { width:100%; }
 .form-field label { display: block; margin-bottom: 7px; color: #38516d; font-size: 13px; }
