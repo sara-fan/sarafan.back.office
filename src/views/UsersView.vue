@@ -82,7 +82,7 @@ async function disable() {
 onMounted(load)
 </script>
 <template>
-  <section class="settings table-wide">
+  <section class="settings staff-list">
     <header class="header-with-actions">
       <h1 class="primary-heading">
         Пользователи <span class="count">{{ users.length }}</span>

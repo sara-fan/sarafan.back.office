@@ -187,7 +187,7 @@ onMounted(load)
     <form
       v-if="loaded"
       id="account-form"
-      class="account-form"
+      class="staff-form"
       novalidate
       @submit.prevent="submit"
     >
@@ -246,9 +246,9 @@ onMounted(load)
           revealable
           :problem="problem"
         />
-        <div class="account-form-row">
-          <span class="account-form-label">Права:</span>
-          <div class="account-form-control">
+        <div class="staff-form-row">
+          <span class="staff-form-label">Права:</span>
+          <div class="staff-form-control">
             <p
               v-if="lastAdministrator"
               id="last-administrator-note"
@@ -297,9 +297,9 @@ onMounted(load)
         </div>
         <div
           v-if="!profile && !creating"
-          class="account-form-row"
+          class="staff-form-row"
         >
-          <span class="account-form-label">Статус:</span><label class="check"><input
+          <span class="staff-form-label">Статус:</span><label class="check"><input
             v-model="form.isActive"
             type="checkbox"
             name="isActive"

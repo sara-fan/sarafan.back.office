@@ -198,7 +198,7 @@ onUnmounted(() => { clear(); globalThis.removeEventListener('beforeunload', befo
         Заказ доступен только для просмотра.
       </p>
       <form
-        class="editor-form account-form order-editor"
+        class="editor-form staff-form order-editor"
         novalidate
         @submit.prevent="save"
       >
@@ -234,7 +234,7 @@ onUnmounted(() => { clear(); globalThis.removeEventListener('beforeunload', befo
               :problem="fieldProblem"
             />
           </div>
-          <div class="quantity-stack">
+          <div class="quantity-cell">
             <FormField
               v-model="form.quantity"
               name="quantity"
@@ -242,16 +242,16 @@ onUnmounted(() => { clear(); globalThis.removeEventListener('beforeunload', befo
               inputmode="numeric"
               :problem="fieldProblem"
             />
-            <div class="total-line">
-              <span>Стоимость</span>
-              <strong class="total-value">{{ total }}</strong>
-            </div>
+          </div>
+          <div class="staff-form-row total-line">
+            <span class="staff-form-label">Стоимость</span>
+            <span class="staff-form-value">{{ total }}</span>
           </div>
           <div class="color-cell">
             <FormField
               v-model="form.color"
               name="color"
-              label="Цвет, как на сайте"
+              label="Цвет"
               :problem="fieldProblem"
             />
           </div>
@@ -259,7 +259,7 @@ onUnmounted(() => { clear(); globalThis.removeEventListener('beforeunload', befo
             <FormField
               v-model="form.size"
               name="size"
-              label="Размер, как на сайте"
+              label="Размер"
               :problem="fieldProblem"
             />
           </div>
@@ -307,13 +307,18 @@ onUnmounted(() => { clear(); globalThis.removeEventListener('beforeunload', befo
       <h2 class="primary-heading buyer-heading">
         Покупатель
       </h2>
-      <dl class="buyer-grid">
+      <dl class="buyer-grid staff-form">
         <div
           v-for="(label, key) in CUSTOMER_FIELDS"
           :key="key"
-          :class="{ 'full-width':key === 'address' || key === 'passportIssuedBy' }"
+          class="staff-form-row buyer-field"
+          :class="{ 'full-width':key === 'address' }"
         >
-          <dt>{{ label }}</dt><dd>{{ details.customer[key] || 'Не указано' }}</dd>
+          <dt class="staff-form-label">
+            {{ label }}
+          </dt><dd class="staff-form-value">
+            {{ details.customer[key] || 'Не указано' }}
+          </dd>
         </div>
       </dl>
     </template>
@@ -331,33 +336,28 @@ onUnmounted(() => { clear(); globalThis.removeEventListener('beforeunload', befo
 <style scoped>
 .order-meta { display:flex; flex-wrap:wrap; align-items:center; gap:12px 24px; margin-bottom:20px; color:#526a80; }
 .product-page-link { margin-left:auto; color:#1976d2; font-weight:500; }
-.product-grid { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); grid-template-areas:"name name" "price store" "color quantity" "size quantity" "comment comment"; column-gap:24px; row-gap:16px; }
-.buyer-grid { display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:10px 16px; }
+.product-grid { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); grid-template-areas:"name name" "store price" "quantity total" "color size" "comment comment"; column-gap:24px; row-gap:16px; }
+.buyer-grid { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); column-gap:24px; }
 .full-width { grid-column:1 / -1; }
 .product-name-cell { grid-area:name; }
 .store-cell { grid-area:store; }
 .price-cell { grid-area:price; }
-.quantity-stack { grid-area:quantity; }
+.quantity-cell { grid-area:quantity; }
+.total-line { grid-area:total; }
 .color-cell { grid-area:color; }
 .size-cell { grid-area:size; }
 .comment-cell { grid-area:comment; }
-.product-grid :deep(.form-field), .total-line { display:grid; grid-template-columns:minmax(140px, 40%) minmax(0, 1fr); gap:3px 8px; align-items:center; min-width:0; margin-bottom:8px; }
-.product-name-cell :deep(.form-field), .comment-cell { grid-template-columns:minmax(180px, 18.5%) minmax(0, 1fr); }
-.product-grid :deep(.form-field label), .total-line span, .order-editor .form-field > label { overflow:hidden; margin:0; color:#263d55; font-size:14px; font-weight:600; text-overflow:ellipsis; white-space:nowrap; }
+.product-grid :deep(.form-field), .total-line, .comment-cell, .buyer-field { grid-template-columns:minmax(220px, 280px) minmax(0, 1fr); }
 .product-grid :deep(.form-field > input), .product-grid :deep(.field-error), .comment-cell textarea, .comment-cell .field-error { grid-column:2; }
-.quantity-stack { display:grid; min-width:0; gap:16px; }
-.total-value { display:flex; align-items:center; width:100%; min-height:36px; padding:6px 9px; color:#263d55; background:#f7f7f7; border:1px solid #d7dce1; border-radius:4px; font-size:14px; }
 .order-editor textarea { width:100%; resize:vertical; min-height:80px; }
 .order-editor h2, .buyer-heading { font-size:20px; margin:12px 0; }
-.order-editor :deep(input), .order-editor textarea { min-height:36px; padding:6px 9px; background:#f7f7f7; border:1px solid #d7dce1; border-radius:4px; font:inherit; }
 .buyer-heading { border-bottom:1px solid #dbe5ee; padding-bottom:8px; }
 .buyer-grid { margin-top:12px; }
-.buyer-grid dt { color:#526a80; font-size:12px; }
-.buyer-grid dd { margin:4px 0 10px; overflow-wrap:anywhere; }
+.buyer-grid dd { margin:0; overflow-wrap:anywhere; font-weight:400; }
 .recognition { overflow-wrap:anywhere; }
 .recognition img { max-width:160px; max-height:160px; object-fit:contain; }
-@media(max-width:900px) { .buyer-grid { grid-template-columns:repeat(2, minmax(0, 1fr)); } }
-@media(max-width:700px) { .product-grid { grid-template-columns:1fr; grid-template-areas:"name" "store" "price" "quantity" "color" "size" "comment"; } .buyer-grid { grid-template-columns:1fr; } .full-width { grid-column:1; } .product-page-link { flex-basis:100%; margin-left:0; } }
-@media(max-width:420px) { .product-grid :deep(.form-field), .product-name-cell :deep(.form-field), .total-line, .comment-cell { grid-template-columns:1fr; gap:5px; align-items:start; } .product-grid :deep(.form-field > input), .product-grid :deep(.field-error), .comment-cell textarea, .comment-cell .field-error { grid-column:1; } .product-grid :deep(.form-field label), .total-line span, .order-editor .form-field > label { white-space:normal; } }
+@media(max-width:1100px) { .product-grid :deep(.form-field), .total-line, .comment-cell, .buyer-field { grid-template-columns:minmax(160px, 220px) minmax(0, 1fr); } }
+@media(max-width:900px) { .product-grid { grid-template-columns:1fr; grid-template-areas:"name" "store" "price" "quantity" "total" "color" "size" "comment"; } .buyer-grid { grid-template-columns:1fr; } .full-width { grid-column:1; } .product-page-link { flex-basis:100%; margin-left:0; } }
+@media(max-width:600px) { .product-grid :deep(.form-field), .total-line, .comment-cell, .buyer-field { grid-template-columns:1fr; gap:5px; align-items:start; } .product-grid :deep(.form-field > input), .product-grid :deep(.field-error), .comment-cell textarea, .comment-cell .field-error { grid-column:1; } }
 @media(max-width:550px) { .header-with-actions { flex-wrap:wrap; } .header-with-actions h1 { flex-basis:100%; } }
 </style>

@@ -87,6 +87,14 @@ For other comment-capable formats, use the same three lines with that format's n
 - Every authenticated workspace header action group includes refresh. Do not render a second load-retry action when header refresh is available. Before refresh reloads an editor with unsaved changes, require confirmation in a labelled modal and preserve the form when confirmation is cancelled.
 - Use the Font Awesome double-check icon for actions that commit current editor changes. The login screen and modal dialogs are exempt from the icon-only and workspace-refresh rules.
 
+## Shared staff screen styles
+
+- Use exactly two default operational style sets: `staff-list` for list workspaces and `staff-form` for forms. The users list and the user editor are their visual references.
+- `staff-list` owns shared filter, table surface, density, header, interlacing and hover styles. `staff-form` owns shared horizontal labels, controls, hints, errors, password controls and narrow-screen stacking.
+- Keep feature CSS to layout and feature-specific presentation. Add reusable control or table styling to the corresponding shared set in `src/styles.css` instead of duplicating it in a view.
+- Present read-only values inside an editor with the same `staff-form` label and value alignment as editable controls. Feature views own their field order and column layout.
+- Preserve the Orders filter's wide-screen order as search, status, creation start and creation end in one four-column row. Shared list rules must not replace that feature layout.
+
 - Application logger adapters fix service/version identity, event catalogue, severities and catalogue validation after configurable test/runtime options; callers cannot override these invariants.
 
 ## GitHub Actions conventions

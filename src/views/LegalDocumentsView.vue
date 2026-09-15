@@ -89,7 +89,7 @@ onMounted(load)
 </script>
 
 <template>
-  <section class="settings table-wide">
+  <section class="settings staff-list">
     <header class="header-with-actions">
       <h1 class="primary-heading">
         Правовые документы <span class="count">{{ rows.length }}</span>

@@ -50,7 +50,7 @@ async function submit() {
         alt=""
       ><span>САРАФАН<small>ОФИС</small></span></a>
       <form
-        class="login-card"
+        class="login-card staff-form"
         novalidate
         @submit.prevent="submit"
       >

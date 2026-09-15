@@ -263,7 +263,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <section class="settings table-wide">
+  <section class="settings staff-list">
     <header class="header-with-actions">
       <h1 class="primary-heading">
         Заказы <span class="count">{{ total }}</span>
@@ -406,18 +406,18 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
-.orders-filter-bar { grid-template-columns:minmax(260px, 1fr) minmax(240px, 320px) minmax(150px, 190px) minmax(150px, 190px); }
+.staff-list .orders-filter-bar { grid-template-columns:minmax(260px, 1fr) minmax(240px, 320px) minmax(150px, 190px) minmax(150px, 190px); }
 .orders-table { --staff-table-height:max(320px, calc(100vh - 300px)); }
 .orders-table :deep(td.order-card-cell) { cursor:pointer; }
 .order-product { display:grid; gap:2px; min-width:200px; }
 .order-product a { color:#176da5; font-size:12px; text-decoration:underline; text-underline-offset:2px; }
 .order-product a:hover { color:#1d3e85; }
 @media (max-width:1100px) {
-  .orders-filter-bar { grid-template-columns:1fr 1fr; }
-  .orders-filter-bar .filter-search { grid-column:1 / -1; }
+  .staff-list .orders-filter-bar { grid-template-columns:1fr 1fr; }
+  .staff-list .orders-filter-bar .filter-search { grid-column:1 / -1; }
 }
 @media (max-width:600px) {
-  .orders-filter-bar { grid-template-columns:1fr; }
-  .orders-filter-bar .filter-search { grid-column:auto; }
+  .staff-list .orders-filter-bar { grid-template-columns:1fr; }
+  .staff-list .orders-filter-bar .filter-search { grid-column:auto; }
 }
 </style>

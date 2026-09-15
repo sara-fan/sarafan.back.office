@@ -37,6 +37,12 @@ describe('staff order card', () => {
     expect(wrapper.get('img').attributes('referrerpolicy')).toBe('no-referrer')
     expect(wrapper.get('.product-page-link').text()).toBe('Страница товара')
     expect(wrapper.get('.product-page-link').attributes('rel')).toBe('noopener noreferrer')
+    expect(wrapper.findAll('.product-grid label').map(label => label.text())).toEqual([
+      'Название товара', 'Магазин', 'Цена за единицу, USD', 'Количество', 'Цвет', 'Размер', 'Комментарий'
+    ])
+    expect(wrapper.text()).not.toContain('как на сайте')
+    expect(wrapper.findAll('.buyer-field')).toHaveLength(Object.keys(details.customer).length)
+    expect(wrapper.findAll('.buyer-field .staff-form-value').at(-1).text()).toBe('Не указано')
     await wrapper.get('#productName').setValue(' Новое название ')
     await wrapper.get('#storeName').setValue(' Новый магазин ')
     expect(wrapper.get('.total-line').text()).toContain('Стоимость40,00 USD')
