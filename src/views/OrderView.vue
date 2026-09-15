@@ -45,7 +45,7 @@ const total = computed(() => {
 
 function apply(value) {
   details.value = validateOrderDetails(value, ops.value, number)
-  form.value = productForm(value.product, ops.value.productLimits)
+  form.value = productForm(value.product, value.storeName, ops.value.productLimits)
   baseline.value = JSON.stringify(form.value)
   locked.value = false
 }
@@ -175,6 +175,18 @@ onUnmounted(() => { clear(); globalThis.removeEventListener('beforeunload', befo
         <span class="status-pill">{{ orderStatusName(details.status, ops) }}</span>
         <span>Создан: {{ moscowTime(details.createdAt) }}</span>
         <span>Обновлён: {{ moscowTime(details.updatedAt) }}</span>
+        <a
+          v-if="safeOrderSource(details.sourceUrl)"
+          class="product-page-link"
+          :href="safeOrderSource(details.sourceUrl)"
+          :title="details.sourceUrl"
+          target="_blank"
+          rel="noopener noreferrer"
+        >Страница товара</a>
+        <span
+          v-else
+          class="product-page-link"
+        >Страница товара недоступна</span>
       </div>
       <p
         v-if="locked"
@@ -186,7 +198,7 @@ onUnmounted(() => { clear(); globalThis.removeEventListener('beforeunload', befo
         Заказ доступен только для просмотра.
       </p>
       <form
-        class="editor-form order-editor"
+        class="editor-form account-form order-editor"
         novalidate
         @submit.prevent="save"
       >
@@ -197,7 +209,7 @@ onUnmounted(() => { clear(); globalThis.removeEventListener('beforeunload', befo
           class="product-grid"
           :disabled="busy || !editable"
         >
-          <div class="full-width">
+          <div class="product-name-cell">
             <FormField
               v-model="form.productName"
               name="productName"
@@ -205,43 +217,53 @@ onUnmounted(() => { clear(); globalThis.removeEventListener('beforeunload', befo
               :problem="fieldProblem"
             />
           </div>
-          <div class="full-width source-field">
-            <span>Исходная ссылка</span>
-            <a
-              v-if="safeOrderSource(details.sourceUrl)"
-              :href="safeOrderSource(details.sourceUrl)"
-              target="_blank"
-              rel="noopener noreferrer"
-            >{{ details.sourceUrl }}</a>
-            <span v-else>Ссылка недоступна</span>
+          <div class="store-cell">
+            <FormField
+              v-model="form.storeName"
+              name="storeName"
+              label="Магазин"
+              :problem="fieldProblem"
+            />
           </div>
-          <FormField
-            v-model="form.sellerPrice"
-            name="sellerPrice"
-            label="Цена за единицу, USD"
-            inputmode="decimal"
-            :problem="fieldProblem"
-          />
-          <FormField
-            v-model="form.quantity"
-            name="quantity"
-            label="Количество"
-            inputmode="numeric"
-            :problem="fieldProblem"
-          />
-          <FormField
-            v-model="form.color"
-            name="color"
-            label="Цвет, как на сайте"
-            :problem="fieldProblem"
-          />
-          <FormField
-            v-model="form.size"
-            name="size"
-            label="Размер, как на сайте"
-            :problem="fieldProblem"
-          />
-          <div class="form-field full-width">
+          <div class="price-cell">
+            <FormField
+              v-model="form.sellerPrice"
+              name="sellerPrice"
+              label="Цена за единицу, USD"
+              inputmode="decimal"
+              :problem="fieldProblem"
+            />
+          </div>
+          <div class="quantity-stack">
+            <FormField
+              v-model="form.quantity"
+              name="quantity"
+              label="Количество"
+              inputmode="numeric"
+              :problem="fieldProblem"
+            />
+            <div class="total-line">
+              <span>Стоимость</span>
+              <strong class="total-value">{{ total }}</strong>
+            </div>
+          </div>
+          <div class="color-cell">
+            <FormField
+              v-model="form.color"
+              name="color"
+              label="Цвет, как на сайте"
+              :problem="fieldProblem"
+            />
+          </div>
+          <div class="size-cell">
+            <FormField
+              v-model="form.size"
+              name="size"
+              label="Размер, как на сайте"
+              :problem="fieldProblem"
+            />
+          </div>
+          <div class="form-field comment-cell">
             <label for="comment">Комментарий</label>
             <textarea
               id="comment"
@@ -263,7 +285,6 @@ onUnmounted(() => { clear(); globalThis.removeEventListener('beforeunload', befo
         </fieldset>
       </form>
       <div class="recognition">
-        <p>Магазин: {{ details.storeName || 'Не указано' }}</p>
         <img
           v-if="safeOrderSource(details.imageUrl)"
           :src="safeOrderSource(details.imageUrl)"
@@ -282,18 +303,6 @@ onUnmounted(() => { clear(); globalThis.removeEventListener('beforeunload', befo
             <dt>{{ key }}</dt><dd>{{ value }}</dd>
           </div>
         </dl>
-      </div>
-      <div class="merchandise-summary">
-        <span v-if="details.savedLimitSourceEffectiveDate">Курсы при последнем сохранении: {{ new Date(details.savedLimitSourceEffectiveDate).toLocaleDateString('ru-RU', { timeZone:'UTC' }) }}</span>
-        <span v-else>Сохранённая проверка лимита отсутствует.</span>
-        <strong>Сумма товара: {{ total }}</strong>
-        <span>Стоимость заказа уточняется. Доставка и комиссия в сумму товара не входят.</span>
-        <span>Лимит: {{ formatOrderMoney({ amount:details.limitCheck.maximumAmount, currency:details.limitCheck.currency }, ops) }}</span>
-        <span v-if="details.limitCheck.available">Проверка по курсам на {{ new Date(details.limitCheck.sourceEffectiveDate).toLocaleDateString('ru-RU', { timeZone:'UTC' }) }}</span>
-        <span
-          v-else
-          role="status"
-        >Не удалось получить общую пару курсов. Сохранение временно недоступно.</span>
       </div>
       <h2 class="primary-heading buyer-heading">
         Покупатель
@@ -321,21 +330,34 @@ onUnmounted(() => { clear(); globalThis.removeEventListener('beforeunload', befo
 
 <style scoped>
 .order-meta { display:flex; flex-wrap:wrap; align-items:center; gap:12px 24px; margin-bottom:20px; color:#526a80; }
-.product-grid, .buyer-grid { display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:10px 16px; }
+.product-page-link { margin-left:auto; color:#1976d2; font-weight:500; }
+.product-grid { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); grid-template-areas:"name name" "price store" "color quantity" "size quantity" "comment comment"; column-gap:24px; row-gap:16px; }
+.buyer-grid { display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:10px 16px; }
 .full-width { grid-column:1 / -1; }
-.source-field { display:grid; gap:6px; margin-bottom:12px; overflow-wrap:anywhere; }
-.source-field a { color:#1976d2; }
+.product-name-cell { grid-area:name; }
+.store-cell { grid-area:store; }
+.price-cell { grid-area:price; }
+.quantity-stack { grid-area:quantity; }
+.color-cell { grid-area:color; }
+.size-cell { grid-area:size; }
+.comment-cell { grid-area:comment; }
+.product-grid :deep(.form-field), .total-line { display:grid; grid-template-columns:minmax(140px, 40%) minmax(0, 1fr); gap:3px 8px; align-items:center; min-width:0; margin-bottom:8px; }
+.product-name-cell :deep(.form-field), .comment-cell { grid-template-columns:minmax(180px, 18.5%) minmax(0, 1fr); }
+.product-grid :deep(.form-field label), .total-line span, .order-editor .form-field > label { overflow:hidden; margin:0; color:#263d55; font-size:14px; font-weight:600; text-overflow:ellipsis; white-space:nowrap; }
+.product-grid :deep(.form-field > input), .product-grid :deep(.field-error), .comment-cell textarea, .comment-cell .field-error { grid-column:2; }
+.quantity-stack { display:grid; min-width:0; gap:16px; }
+.total-value { display:flex; align-items:center; width:100%; min-height:36px; padding:6px 9px; color:#263d55; background:#f7f7f7; border:1px solid #d7dce1; border-radius:4px; font-size:14px; }
 .order-editor textarea { width:100%; resize:vertical; min-height:80px; }
 .order-editor h2, .buyer-heading { font-size:20px; margin:12px 0; }
 .order-editor :deep(input), .order-editor textarea { min-height:36px; padding:6px 9px; background:#f7f7f7; border:1px solid #d7dce1; border-radius:4px; font:inherit; }
-.merchandise-summary { display:grid; gap:6px; margin:16px 0; padding:12px; background:#f5f9fc; border-left:3px solid #8bc8e7; }
 .buyer-heading { border-bottom:1px solid #dbe5ee; padding-bottom:8px; }
 .buyer-grid { margin-top:12px; }
 .buyer-grid dt { color:#526a80; font-size:12px; }
 .buyer-grid dd { margin:4px 0 10px; overflow-wrap:anywhere; }
 .recognition { overflow-wrap:anywhere; }
 .recognition img { max-width:160px; max-height:160px; object-fit:contain; }
-@media(max-width:900px) { .product-grid, .buyer-grid { grid-template-columns:repeat(2, minmax(0, 1fr)); } }
-@media(max-width:550px) { .product-grid, .buyer-grid { grid-template-columns:1fr; } }
+@media(max-width:900px) { .buyer-grid { grid-template-columns:repeat(2, minmax(0, 1fr)); } }
+@media(max-width:700px) { .product-grid { grid-template-columns:1fr; grid-template-areas:"name" "store" "price" "quantity" "color" "size" "comment"; } .buyer-grid { grid-template-columns:1fr; } .full-width { grid-column:1; } .product-page-link { flex-basis:100%; margin-left:0; } }
+@media(max-width:420px) { .product-grid :deep(.form-field), .product-name-cell :deep(.form-field), .total-line, .comment-cell { grid-template-columns:1fr; gap:5px; align-items:start; } .product-grid :deep(.form-field > input), .product-grid :deep(.field-error), .comment-cell textarea, .comment-cell .field-error { grid-column:1; } .product-grid :deep(.form-field label), .total-line span, .order-editor .form-field > label { white-space:normal; } }
 @media(max-width:550px) { .header-with-actions { flex-wrap:wrap; } .header-with-actions h1 { flex-basis:100%; } }
 </style>

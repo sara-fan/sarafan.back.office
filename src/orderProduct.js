@@ -4,7 +4,7 @@
 
 import { createInternalProblem } from './errors/problem.js'
 
-export const PRODUCT_FIELDS = ['productName', 'sellerPrice', 'quantity', 'color', 'size', 'comment']
+export const PRODUCT_FIELDS = ['productName', 'storeName', 'sellerPrice', 'quantity', 'color', 'size', 'comment']
 export const CUSTOMER_FIELDS = Object.freeze({
   lastName:'Фамилия', firstName:'Имя', patronymic:'Отчество', inn:'ИНН',
   phone:'Телефон', email:'Email', passportSeries:'Серия паспорта', passportNumber:'Номер паспорта',
@@ -31,7 +31,7 @@ export function limitIsValid(value, currencies) {
 }
 
 export function validateProductLimits(value, currencies) {
-  if (!value || !['minimumQuantity', 'maximumQuantity', 'defaultQuantity', 'productNameMaximumLength',
+  if (!value || !['minimumQuantity', 'maximumQuantity', 'defaultQuantity', 'storeNameMaximumLength', 'productNameMaximumLength',
     'colorMaximumLength', 'sizeMaximumLength', 'commentMaximumLength'].every(key => Number.isSafeInteger(value[key]) && value[key] > 0)
     || value.minimumQuantity > value.defaultQuantity || value.defaultQuantity > value.maximumQuantity
     || !positive(value.maximumUnitPrice) || value.priceDecimalPlaces !== 2
@@ -57,7 +57,7 @@ export function validateOrderDetails(value, ops, number) {
     || !value.customer || !Object.keys(CUSTOMER_FIELDS).every(key => key === 'passportIssueDate'
       ? value.customer[key] === null || dateIsValid(value.customer[key]) : text(value.customer[key], 2000))
     || typeof value.customer.phone !== 'string' || !value.customer.phone
-    || !text(value.storeName, 200) || !text(value.imageUrl, 2048)
+    || !text(value.storeName, ops.productLimits.storeNameMaximumLength) || !text(value.imageUrl, 2048)
     || !(value.savedLimitSourceEffectiveDate === null || dateIsValid(value.savedLimitSourceEffectiveDate))
     || !(value.dimensions === null || (value.dimensions && ['lengthCm', 'widthCm', 'heightCm'].every(key => positive(value.dimensions[key]))))
     || !(value.characteristics === null || (typeof value.characteristics === 'object' && !Array.isArray(value.characteristics)
@@ -69,8 +69,8 @@ export function validateOrderDetails(value, ops, number) {
   return value
 }
 
-export function productForm(product, limits) {
-  return { productName:product.productName ?? '',
+export function productForm(product, storeName, limits) {
+  return { productName:product.productName ?? '', storeName:storeName ?? '',
     sellerPrice:product.sellerPrice?.currency === limits.sellerPriceCurrency ? String(product.sellerPrice.amount) : '',
     quantity:String(product.quantity), color:product.color ?? '', size:product.size ?? '', comment:product.comment ?? '' }
 }
@@ -86,7 +86,7 @@ export function priceCents(value) {
 export function productValidation(form, limits, limit) {
   const errors = {}
   if (!form.productName.trim()) errors.productName = ['Укажите название товара.']
-  for (const [key, max] of [['productName', limits.productNameMaximumLength], ['color', limits.colorMaximumLength],
+  for (const [key, max] of [['productName', limits.productNameMaximumLength], ['storeName', limits.storeNameMaximumLength], ['color', limits.colorMaximumLength],
     ['size', limits.sizeMaximumLength], ['comment', limits.commentMaximumLength]]) {
     if (form[key].trim().length > max) errors[key] = [`Не более ${max} символов.`]
   }
@@ -103,7 +103,7 @@ export function productValidation(form, limits, limit) {
 }
 
 export function productPayload(form, limits, expectedUpdatedAt) {
-  return { expectedUpdatedAt, productName:form.productName.trim(),
+  return { expectedUpdatedAt, storeName:form.storeName.trim() || null, productName:form.productName.trim(),
     sellerPrice:{ amount:Number(priceCents(form.sellerPrice)) / 100, currency:limits.sellerPriceCurrency },
     quantity:Number(form.quantity), color:form.color.trim() || null, size:form.size.trim() || null, comment:form.comment.trim() || null }
 }

@@ -11,8 +11,8 @@ describe('order product contracts', () => {
     expect(validateOrderDetails(details, ops, details.orderNumber)).toBe(details)
     const legacy = { ...details, product:{ ...product, productName:null, sellerPrice:null }, storeName:null, imageUrl:null, dimensions:null, characteristics:null, savedLimitSourceEffectiveDate:null }
     expect(validateOrderDetails(legacy, ops, details.orderNumber)).toBe(legacy)
-    expect(productForm(legacy.product, productLimits).sellerPrice).toBe('')
-    expect(productForm(legacy.product, productLimits).productName).toBe('')
+    expect(productForm(legacy.product, legacy.storeName, productLimits).sellerPrice).toBe('')
+    expect(productForm(legacy.product, legacy.storeName, productLimits).productName).toBe('')
     expect(validateProductLimits(productLimits, currencies)).toBe(productLimits)
     expect(limitIsValid({ ...limit, available:false, sourceEffectiveDate:null, maximumTotalUsd:null }, currencies)).toBe(true)
   })
@@ -50,7 +50,7 @@ describe('order product contracts', () => {
 
 describe('form rules and payload', () => {
   it('compares integer cents, keeps the exact boundary and uses Core message', () => {
-    const form = { ...productForm(product, productLimits), sellerPrice:'281,25', quantity:'4' }
+    const form = { ...productForm(product, details.storeName, productLimits), sellerPrice:'281,25', quantity:'4' }
     expect(productValidation(form, productLimits, limit)).toBeNull()
     expect(priceCents(' 1,1 ')).toBe(110n)
     expect(priceCents('1')).toBe(100n)
@@ -62,8 +62,8 @@ describe('form rules and payload', () => {
     expect(productValidation(form, productLimits, limit)).toBeNull()
   })
   it('preserves invalid input and reports all fields', () => {
-    const form = { productName:'', sellerPrice:'abc', quantity:'1.5', color:'c'.repeat(201), size:'s'.repeat(201), comment:'x'.repeat(2001) }
-    expect(Object.keys(productValidation(form, productLimits, limit).errors)).toHaveLength(6)
+    const form = { productName:'', storeName:'m'.repeat(201), sellerPrice:'abc', quantity:'1.5', color:'c'.repeat(201), size:'s'.repeat(201), comment:'x'.repeat(2001) }
+    expect(Object.keys(productValidation(form, productLimits, limit).errors)).toHaveLength(7)
     expect(form.quantity).toBe('1.5')
     for (const quantity of ['0', '-1', 'abc', '999999999999999999999999']) expect(productValidation({ ...form, quantity }, productLimits, limit).errors.quantity).toBeDefined()
     expect(productValidation({ ...form, quantity:'5' }, productLimits, limit).errors.quantity).toEqual(['Такое количество товара может быть признано коммерческой партией и запрещено к ввозу'])
@@ -71,12 +71,12 @@ describe('form rules and payload', () => {
     expect(productValidation({ ...form, productName:'x'.repeat(501) }, productLimits, limit).errors.productName).toEqual(['Не более 500 символов.'])
   })
   it('whitelists payload and keeps server version verbatim', () => {
-    const form = { ...productForm(product, productLimits), productName:' Чайник ', sellerPrice:'40,01', comment:' note ', size:' L ', sourceUrl:'evil' }
+    const form = { ...productForm(product, details.storeName, productLimits), productName:' Чайник ', storeName:' Магазин 2 ', sellerPrice:'40,01', comment:' note ', size:' L ', sourceUrl:'evil' }
     expect(productPayload(form, productLimits, details.updatedAt)).toEqual({
-      expectedUpdatedAt:details.updatedAt, productName:'Чайник', sellerPrice:{ amount:40.01, currency:840 },
+      expectedUpdatedAt:details.updatedAt, storeName:'Магазин 2', productName:'Чайник', sellerPrice:{ amount:40.01, currency:840 },
       quantity:1, color:'Красный', size:'L', comment:'note'
     })
-    expect(productPayload({ ...form, color:' ', size:'', comment:'' }, productLimits, details.updatedAt)).toMatchObject({ color:null, size:null, comment:null })
-    expect(productForm({ ...product, color:null, sellerPrice:{ amount:1, currency:978 } }, productLimits).sellerPrice).toBe('')
+    expect(productPayload({ ...form, storeName:' ', color:' ', size:'', comment:'' }, productLimits, details.updatedAt)).toMatchObject({ storeName:null, color:null, size:null, comment:null })
+    expect(productForm({ ...product, color:null, sellerPrice:{ amount:1, currency:978 } }, null, productLimits).sellerPrice).toBe('')
   })
 })

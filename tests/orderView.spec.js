@@ -28,20 +28,24 @@ beforeEach(() => {
 afterEach(() => { wrapper?.unmount(); wrapper = null; vi.restoreAllMocks() })
 
 describe('staff order card', () => {
-  it('shows profile and recognition read-only; sends only allowed fields with exact timestamp', async () => {
+  it('shows profile and recognition, edits store and sends only allowed fields with exact timestamp', async () => {
     await render()
     expect(wrapper.text()).toContain('Иванов')
     expect(wrapper.text()).toContain('Не указано')
     expect(wrapper.text()).toContain('Габариты: 1 × 2 × 3 см')
     expect(wrapper.text()).toContain('Материал')
     expect(wrapper.get('img').attributes('referrerpolicy')).toBe('no-referrer')
-    expect(wrapper.get('a').attributes('rel')).toBe('noopener noreferrer')
+    expect(wrapper.get('.product-page-link').text()).toBe('Страница товара')
+    expect(wrapper.get('.product-page-link').attributes('rel')).toBe('noopener noreferrer')
     await wrapper.get('#productName').setValue(' Новое название ')
-    const result = { ...details, product:{ ...details.product, productName:'Новое название' }, updatedAt:'2026-09-15T12:00:00.123456Z' }
+    await wrapper.get('#storeName').setValue(' Новый магазин ')
+    expect(wrapper.get('.total-line').text()).toContain('Стоимость40,00 USD')
+    expect(wrapper.find('.merchandise-summary').exists()).toBe(false)
+    const result = { ...details, storeName:'Новый магазин', product:{ ...details.product, productName:'Новое название' }, updatedAt:'2026-09-15T12:00:00.123456Z' }
     h.session.orderRequest.mockResolvedValueOnce(result)
     await vm().save()
     expect(JSON.parse(h.session.orderRequest.mock.calls.at(-1)[1].body)).toEqual({
-      expectedUpdatedAt:details.updatedAt, productName:'Новое название', sellerPrice:{ amount:40, currency:840 }, quantity:1, color:'Красный', size:null, comment:null
+      expectedUpdatedAt:details.updatedAt, storeName:'Новый магазин', productName:'Новое название', sellerPrice:{ amount:40, currency:840 }, quantity:1, color:'Красный', size:null, comment:null
     })
     expect(vm().dirty).toBe(false)
     expect(vm().details.updatedAt).toBe(result.updatedAt)
@@ -133,7 +137,8 @@ describe('staff order card', () => {
     await render()
     expect(wrapper.find('img').exists()).toBe(false)
     expect(wrapper.find('a').exists()).toBe(false)
-    expect(wrapper.text()).toContain('Сохранение временно недоступно')
+    expect(wrapper.get('.product-page-link').text()).toBe('Страница товара недоступна')
+    expect(wrapper.find('.header-actions button').attributes('disabled')).toBeDefined()
     await wrapper.get('#size').setValue('XL')
     await vm().save()
     expect(h.session.orderRequest).toHaveBeenCalledTimes(1)
