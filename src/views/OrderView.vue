@@ -5,13 +5,13 @@
 
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
-import ActionButton from '../components/ActionButton.vue'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
+import EditorHeaderActions from '../components/EditorHeaderActions.vue'
 import FormField from '../components/FormField.vue'
 import PageAlertRegion from '../components/PageAlertRegion.vue'
 import { moscowTime } from '../consentFormatting.js'
 import { CORE_PROBLEM_TYPES, hasOnlyPresentedFieldErrors, normalizeProblem, problemFieldErrors } from '../errors/problem.js'
-import { formatOrderMoney, orderStatusName, safeOrderSource } from '../orderFormatting.js'
+import { orderStatusName, safeOrderSource } from '../orderFormatting.js'
 import { CUSTOMER_FIELDS, PRODUCT_FIELDS, priceCents, productForm, productPayload, productValidation, validateOrderDetails } from '../orderProduct.js'
 import { can } from '../roles.js'
 import { useSession } from '../stores/session.js'
@@ -36,11 +36,12 @@ const localProblem = computed(() => editable.value && form.value
   ? productValidation(form.value, ops.value.productLimits, details.value.limitCheck) : null)
 const fieldProblem = computed(() => problem.value ?? localProblem.value)
 const pageProblem = computed(() => hasOnlyPresentedFieldErrors(fieldProblem.value, PRODUCT_FIELDS) ? null : fieldProblem.value)
+const totalFormatter = new Intl.NumberFormat('ru-RU', { minimumFractionDigits:2, maximumFractionDigits:2 })
 const total = computed(() => {
   const cents = priceCents(form.value?.sellerPrice ?? '')
   const quantity = Number(form.value?.quantity)
   return cents !== null && Number.isSafeInteger(quantity) && quantity > 0
-    ? formatOrderMoney({ amount:Number(cents * BigInt(quantity)) / 100, currency:ops.value.productLimits.sellerPriceCurrency }, ops.value) : '—'
+    ? totalFormatter.format(Number(cents * BigInt(quantity)) / 100) : '—'
 })
 
 function apply(value) {
@@ -75,7 +76,10 @@ async function save() {
       method:'PUT', headers:{ 'Content-Type':'application/json' },
       body:JSON.stringify(productPayload(form.value, ops.value.productLimits, details.value.updatedAt))
     })
-    if (current === version) apply(result)
+    if (current === version) {
+      apply(result)
+      await back()
+    }
   } catch (value) {
     if (current !== version) return
     problem.value = normalizeProblem(value)
@@ -139,28 +143,14 @@ onUnmounted(() => { clear(); globalThis.removeEventListener('beforeunload', befo
       <h1 class="primary-heading">
         Заказ {{ number }}
       </h1>
-      <div class="header-actions">
-        <ActionButton
-          icon="$saveChanges"
-          tooltip-text="Сохранить товар"
-          variant="blue"
-          :disabled="busy || !editable || !details?.limitCheck.available || !!localProblem || !dirty"
-          :loading="busy"
-          @click="save"
-        />
-        <ActionButton
-          icon="$refresh"
-          tooltip-text="Обновить карточку"
-          :disabled="busy"
-          @click="refresh"
-        />
-        <ActionButton
-          icon="$close"
-          tooltip-text="Назад к заказам"
-          :disabled="busy"
-          @click="back"
-        />
-      </div>
+      <EditorHeaderActions
+        form="order-product-form"
+        :loaded="!!details"
+        :busy="busy"
+        :save-disabled="!editable || !details?.limitCheck.available || !!localProblem || !dirty"
+        @refresh="refresh"
+        @cancel="back"
+      />
     </header>
     <hr class="hr">
     <PageAlertRegion :problem="pageProblem" />
@@ -198,6 +188,7 @@ onUnmounted(() => { clear(); globalThis.removeEventListener('beforeunload', befo
         Заказ доступен только для просмотра.
       </p>
       <form
+        id="order-product-form"
         class="editor-form staff-form order-editor"
         novalidate
         @submit.prevent="save"
@@ -244,7 +235,7 @@ onUnmounted(() => { clear(); globalThis.removeEventListener('beforeunload', befo
             />
           </div>
           <div class="staff-form-row total-line">
-            <span class="staff-form-label">Стоимость</span>
+            <span class="staff-form-label">Стоимость, USD</span>
             <span class="staff-form-value">{{ total }}</span>
           </div>
           <div class="color-cell">

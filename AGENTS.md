@@ -82,6 +82,7 @@ For other comment-capable formats, use the same three lines with that format's n
 ## Action buttons
 
 - Use the local ActionButton component for application actions: an icon, tooltip, item payload emitted on click, semantic variant, and disabled/loading state. Workspace and recovery ActionButtons are icon-only; only login actions and modal-dialog actions may add visible labels. Put the full Russian action text in the tooltip and accessible name.
+- Use `EditorHeaderActions` for form headers with refresh, save and cancel actions. Keep the user editor's action order, icons and tooltips; feature views own the handlers and save availability.
 - Keep disabled-action explanations keyboard-accessible through a focusable tooltip activator. Never emit actions while disabled or loading. Keep native button types and accessible names. Navigation and confirmations stay with the owning view.
 - Use Font Awesome Free through Vuetify for replaceable application and framework icons, referenced through centralized semantic aliases rather than raw paths or per-call classes. Native browser controls and Sarafan brand artwork are exempt when replacement is infeasible. Use the Sarafan palette, focus styles and reduced-motion behavior; do not add per-call button styling.
 - Every authenticated workspace header action group includes refresh. Do not render a second load-retry action when header refresh is available. Before refresh reloads an editor with unsaved changes, require confirmation in a labelled modal and preserve the form when confirmation is cancelled.

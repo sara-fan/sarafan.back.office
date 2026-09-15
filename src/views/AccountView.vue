@@ -2,7 +2,7 @@
 // Copyright (C) 2026 Maxim [maxirmx] Samsonov (www.sw.consulting)
 // All rights reserved.
 // This file is a part of the Sarafan application
-import ActionButton from '../components/ActionButton.vue'
+import EditorHeaderActions from '../components/EditorHeaderActions.vue'
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import FormField from '../components/FormField.vue'
@@ -147,30 +147,14 @@ onMounted(load)
       <h1 class="primary-heading">
         {{ title }}
       </h1>
-      <div class="header-actions">
-        <ActionButton
-          icon="$refresh"
-          tooltip-text="Обновить данные"
-          :disabled="busy"
-          @click="requestRefresh"
-        /><ActionButton
-          v-if="loaded"
-          type="submit"
-          form="account-form"
-          variant="blue"
-          :loading="busy"
-          icon="$saveChanges"
-          icon-size="28"
-          :tooltip-text="creating ? 'Создать пользователя' : 'Сохранить изменения'"
-        /><ActionButton
-          v-if="loaded"
-          icon="$close"
-          icon-size="28"
-          tooltip-text="Отменить"
-          :disabled="busy"
-          @click="cancel"
-        />
-      </div>
+      <EditorHeaderActions
+        form="account-form"
+        :loaded="loaded"
+        :busy="busy"
+        :save-tooltip="creating ? 'Создать пользователя' : 'Сохранить изменения'"
+        @refresh="requestRefresh"
+        @cancel="cancel"
+      />
     </header>
     <hr class="hr">
     <PageAlertRegion

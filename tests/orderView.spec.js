@@ -45,7 +45,10 @@ describe('staff order card', () => {
     expect(wrapper.findAll('.buyer-field .staff-form-value').at(-1).text()).toBe('Не указано')
     await wrapper.get('#productName').setValue(' Новое название ')
     await wrapper.get('#storeName').setValue(' Новый магазин ')
-    expect(wrapper.get('.total-line').text()).toContain('Стоимость40,00 USD')
+    expect(wrapper.get('.total-line').text()).toContain('Стоимость, USD40,00')
+    expect(wrapper.findAll('.header-actions button').map(button => button.attributes('aria-label'))).toEqual([
+      'Обновить данные', 'Сохранить изменения', 'Отменить'
+    ])
     expect(wrapper.find('.merchandise-summary').exists()).toBe(false)
     const result = { ...details, product:{ ...details.product, productName:'Новое название', storeName:'Новый магазин' }, updatedAt:'2026-09-15T12:00:00.123456Z' }
     h.session.orderRequest.mockResolvedValueOnce(result)
@@ -56,6 +59,7 @@ describe('staff order card', () => {
     expect(vm().dirty).toBe(false)
     expect(vm().details.updatedAt).toBe(result.updatedAt)
     expect(vm().details.status).toBe(0)
+    expect(h.push).toHaveBeenCalledWith('/orders')
   })
   it('shows quantity and value errors once immediately without clamping values', async () => {
     await render()
@@ -144,7 +148,7 @@ describe('staff order card', () => {
     expect(wrapper.find('img').exists()).toBe(false)
     expect(wrapper.find('a').exists()).toBe(false)
     expect(wrapper.get('.product-page-link').text()).toBe('Страница товара недоступна')
-    expect(wrapper.find('.header-actions button').attributes('disabled')).toBeDefined()
+    expect(wrapper.get('button[aria-label="Сохранить изменения"]').attributes('disabled')).toBeDefined()
     await wrapper.get('#size').setValue('XL')
     await vm().save()
     expect(h.session.orderRequest).toHaveBeenCalledTimes(1)
