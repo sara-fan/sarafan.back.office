@@ -322,7 +322,7 @@ onUnmounted(() => { clear(); globalThis.removeEventListener('beforeunload', befo
         >
           <dt class="staff-form-label">
             {{ label }}
-          </dt><dd class="staff-form-value">
+          </dt><dd class="staff-form-value staff-form-value--readonly">
             {{ details.customer[key] || 'Не указано' }}
           </dd>
         </div>

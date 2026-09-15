@@ -45,6 +45,7 @@ describe('staff order card', () => {
     expect(wrapper.text()).not.toContain('как на сайте')
     expect(wrapper.findAll('.buyer-field')).toHaveLength(Object.keys(details.customer).length)
     expect(wrapper.findAll('.buyer-field .staff-form-value').at(-1).text()).toBe('Не указано')
+    expect(wrapper.findAll('.buyer-field .staff-form-value').every(field => field.classes().includes('staff-form-value--readonly'))).toBe(true)
     await wrapper.get('#productName').setValue(' Новое название ')
     await wrapper.get('#storeName').setValue(' Новый магазин ')
     expect(wrapper.get('.total-line').text()).toContain('Стоимость, USD40,00')
