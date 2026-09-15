@@ -152,6 +152,7 @@ describe('staff order card', () => {
     expect(wrapper.get('.product-page-link').text()).toBe('Страница товара недоступна')
     expect(wrapper.get('button[aria-label="Сохранить изменения"]').attributes('disabled')).toBeDefined()
     expect(wrapper.get('.product-grid').attributes('disabled')).toBeDefined()
+    expect(wrapper.get('.total-line .staff-form-value').classes()).toContain('staff-form-value--readonly')
     expect(wrapper.text()).toContain('Исправление товара временно недоступно')
     await vm().save()
     expect(h.session.orderRequest).toHaveBeenCalledTimes(1)

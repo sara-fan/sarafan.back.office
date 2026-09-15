@@ -3,6 +3,7 @@
 // This file is a part of the Sarafan application
 
 import { createInternalProblem } from './errors/problem.js'
+import { formatMoneyInput } from './moneyFormatting.js'
 
 export const PRODUCT_FIELDS = ['productName', 'storeName', 'sellerPrice', 'quantity', 'color', 'size', 'comment']
 export const CUSTOMER_FIELDS = Object.freeze({
@@ -73,7 +74,7 @@ export function validateOrderDetails(value, ops, number) {
 
 export function productForm(product, limits) {
   return { productName:product.productName ?? '', storeName:product.storeName ?? '',
-    sellerPrice:product.sellerPrice?.currency === limits.sellerPriceCurrency ? String(product.sellerPrice.amount) : '',
+    sellerPrice:product.sellerPrice?.currency === limits.sellerPriceCurrency ? formatMoneyInput(product.sellerPrice.amount) : '',
     quantity:String(product.quantity), color:product.color ?? '', size:product.size ?? '', comment:product.comment ?? '' }
 }
 

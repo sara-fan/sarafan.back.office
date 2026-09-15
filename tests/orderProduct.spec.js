@@ -13,6 +13,7 @@ describe('order product contracts', () => {
     expect(validateOrderDetails(legacy, ops, details.orderNumber)).toBe(legacy)
     expect(productForm(legacy.product, productLimits).sellerPrice).toBe('')
     expect(productForm(legacy.product, productLimits).productName).toBe('')
+    expect(productForm(product, productLimits).sellerPrice).toBe('40,00')
     expect(validateProductLimits(productLimits, currencies)).toBe(productLimits)
     expect(limitIsValid({ ...limit, available:false, sourceEffectiveDate:null, maximumTotalUsd:null }, currencies)).toBe(true)
   })

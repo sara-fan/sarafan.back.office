@@ -11,6 +11,7 @@ import FormField from '../components/FormField.vue'
 import PageAlertRegion from '../components/PageAlertRegion.vue'
 import { moscowTime } from '../consentFormatting.js'
 import { CORE_PROBLEM_TYPES, hasOnlyPresentedFieldErrors, normalizeProblem, problemFieldErrors } from '../errors/problem.js'
+import { formatMoneyAmount } from '../moneyFormatting.js'
 import { orderStatusName, safeOrderSource } from '../orderFormatting.js'
 import { CUSTOMER_FIELDS, PRODUCT_FIELDS, priceCents, productForm, productPayload, productValidation, validateOrderDetails } from '../orderProduct.js'
 import { can } from '../roles.js'
@@ -38,12 +39,11 @@ const localProblem = computed(() => productEditingEnabled.value && form.value
   ? productValidation(form.value, ops.value.productLimits, details.value.limitCheck) : null)
 const fieldProblem = computed(() => problem.value ?? localProblem.value)
 const pageProblem = computed(() => hasOnlyPresentedFieldErrors(fieldProblem.value, PRODUCT_FIELDS) ? null : fieldProblem.value)
-const totalFormatter = new Intl.NumberFormat('ru-RU', { minimumFractionDigits:2, maximumFractionDigits:2 })
 const total = computed(() => {
   const cents = priceCents(form.value?.sellerPrice ?? '')
   const quantity = Number(form.value?.quantity)
   return cents !== null && Number.isSafeInteger(quantity) && quantity > 0
-    ? totalFormatter.format(Number(cents * BigInt(quantity)) / 100) : '—'
+    ? formatMoneyAmount(Number(cents * BigInt(quantity)) / 100) : '—'
 })
 
 function apply(value) {
@@ -251,7 +251,7 @@ onUnmounted(() => { clear(); globalThis.removeEventListener('beforeunload', befo
           </div>
           <div class="staff-form-row total-line">
             <span class="staff-form-label">Стоимость, USD</span>
-            <span class="staff-form-value">{{ total }}</span>
+            <span class="staff-form-value staff-form-value--readonly">{{ total }}</span>
           </div>
           <div class="color-cell">
             <FormField

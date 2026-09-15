@@ -95,6 +95,7 @@ For other comment-capable formats, use the same three lines with that format's n
 - Keep feature CSS to layout and feature-specific presentation. Add reusable control or table styling to the corresponding shared set in `src/styles.css` instead of duplicating it in a view.
 - Present read-only values inside an editor with the same `staff-form` label and value alignment as editable controls. For large forms with many attributes, prefer disabled `staff-form` controls with a light-gray background; use label/value rows for compact read-only blocks. Feature views own their field order and column layout.
 - Preserve the Orders filter's wide-screen order as search, status, creation start and creation end in one four-column row. Shared list rules must not replace that feature layout.
+- Format displayed monetary amounts with `Intl.NumberFormat('ru-RU')`, two fractional digits and a comma decimal separator. Monetary form inputs must be normalized to the same ungrouped presentation while accepting either `,` or `.`; API payloads remain numeric.
 
 - Application logger adapters fix service/version identity, event catalogue, severities and catalogue validation after configurable test/runtime options; callers cannot override these invariants.
 
