@@ -5,7 +5,6 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ref } from 'vue'
-import { RouterLinkStub } from '@vue/test-utils'
 import { createSarafanVuetify } from '../src/plugins/vuetify.js'
 import { createInternalProblem } from '../src/errors/problem.js'
 import {
@@ -70,7 +69,7 @@ const pending = () => { let resolve; return { promise:new Promise(done => { reso
 let wrapper
 const vm = () => wrapper.vm.$.setupState
 const render = () => {
-  wrapper = mount(OrdersView, { global:{ plugins:[createSarafanVuetify()], stubs:{ RouterLink:RouterLinkStub } } })
+  wrapper = mount(OrdersView, { global:{ plugins:[createSarafanVuetify()] } })
   return wrapper
 }
 
@@ -158,9 +157,15 @@ describe('orders server table', () => {
       'actions', 'orderNumber', 'status', 'productName', 'storeName', 'sellerPrice', 'quantity', 'createdAt', 'updatedAt'
     ])
     expect(table.props('headers')[0]).toMatchObject({ title:'', sortable:false })
-    expect(wrapper.findAllComponents(RouterLinkStub)[0].props('to')).toBe('/orders/12345678-1')
-    await wrapper.get('button[aria-label="Открыть заказ"]').trigger('click')
+    const clickableColumns = table.props('headers').filter(header => header.key !== 'productName')
+    const clickable = table.props('cellProps')({ item:rows[0], column:clickableColumns[0] })
+    for (const column of clickableColumns) {
+      expect(table.props('cellProps')({ item:rows[0], column })).toMatchObject({ class:'order-card-cell', onClick:expect.any(Function) })
+    }
+    clickable.onClick()
     expect(h.push).toHaveBeenCalledWith('/orders/12345678-1')
+    expect(table.props('cellProps')({ item:rows[0], column:{ key:'productName' } })).toEqual({})
+    expect(wrapper.find('.order-number').exists()).toBe(false)
     h.push.mockRejectedValueOnce(new Error('private'))
     await vm().openOrder(rows[0])
     expect(vm().problem).toBeTruthy()

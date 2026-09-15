@@ -197,8 +197,17 @@ function refreshList() {
 }
 
 async function openOrder(item) {
+  if (busy.value) return
   try { await router.push(`/orders/${item.orderNumber}`) }
   catch (value) { problem.value = normalizeProblem(value) }
+}
+
+function orderCellProps({ item, column }) {
+  if (column.key === 'productName') return {}
+  return {
+    class:'order-card-cell',
+    onClick:() => openOrder(item)
+  }
 }
 
 function onStatusChange(value) {
@@ -339,6 +348,7 @@ onUnmounted(() => {
         :sort-by="sortBy"
         :headers="headers"
         :items="rows"
+        :cell-props="orderCellProps"
         :items-length="total"
         :loading="busy"
         item-value="orderNumber"
@@ -355,14 +365,6 @@ onUnmounted(() => {
         @update:items-per-page="onItemsPerPageChange"
         @update:sort-by="onSortChange"
       >
-        <template #[`item.orderNumber`]="{ item }">
-          <RouterLink
-            class="order-number"
-            :to="`/orders/${item.orderNumber}`"
-          >
-            {{ item.orderNumber }}
-          </RouterLink>
-        </template>
         <template #[`item.actions`]="{ item }">
           <div class="actions-container">
             <ActionButton
@@ -370,7 +372,6 @@ onUnmounted(() => {
               tooltip-text="Открыть заказ"
               :item="item"
               :disabled="busy"
-              @click="openOrder"
             />
           </div>
         </template>
@@ -407,7 +408,7 @@ onUnmounted(() => {
 <style scoped>
 .orders-filter-bar { grid-template-columns:minmax(260px, 1fr) minmax(240px, 320px) minmax(150px, 190px) minmax(150px, 190px); }
 .orders-table { --staff-table-height:max(320px, calc(100vh - 300px)); }
-.order-number { color:#203c58; font-weight:650; white-space:nowrap; }
+.orders-table :deep(td.order-card-cell) { cursor:pointer; }
 .order-product { display:grid; gap:2px; min-width:200px; }
 .order-product a { color:#176da5; font-size:12px; text-decoration:underline; text-underline-offset:2px; }
 .order-product a:hover { color:#1d3e85; }
