@@ -4,6 +4,7 @@
 // This file is a part of the Sarafan application
 
 import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import ActionButton from '../components/ActionButton.vue'
 import PageAlertRegion from '../components/PageAlertRegion.vue'
 import { moscowTime } from '../consentFormatting.js'
@@ -23,6 +24,7 @@ import {
 import { useSession } from '../stores/session.js'
 import { isPageResult, PAGE_SIZE_OPTIONS, readViewState, writeViewState } from '../viewState.js'
 
+const router = useRouter()
 const VIEW_KEY = 'orders'
 const defaults = {
   page:1,
@@ -58,9 +60,10 @@ let loadVersion = 0
 let searchTimer = null
 
 const headers = [
+  { title:'', key:'actions', sortable:false, width:'56px' },
   { title:'Номер', key:'orderNumber' },
   { title:'Статус', key:'status' },
-  { title:'Товар / источник', key:'productName' },
+  { title:'Товар', key:'productName' },
   { title:'Магазин', key:'storeName' },
   { title:'Цена продавца', key:'sellerPrice', align:'end' },
   { title:'Кол-во', key:'quantity', align:'end' },
@@ -193,6 +196,20 @@ function refreshList() {
   load()
 }
 
+async function openOrder(item) {
+  if (busy.value) return
+  try { await router.push(`/orders/${item.orderNumber}`) }
+  catch (value) { problem.value = normalizeProblem(value) }
+}
+
+function orderCellProps({ item, column }) {
+  if (column.key === 'productName') return {}
+  return {
+    class:'order-card-cell',
+    onClick:() => openOrder(item)
+  }
+}
+
 function onStatusChange(value) {
   if (!ops.value || !selectionIsKnown(value, ops.value)) return
   selectedStatus.value = value
@@ -246,7 +263,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <section class="settings table-wide">
+  <section class="settings staff-list">
     <header class="header-with-actions">
       <h1 class="primary-heading">
         Заказы <span class="count">{{ total }}</span>
@@ -331,6 +348,7 @@ onUnmounted(() => {
         :sort-by="sortBy"
         :headers="headers"
         :items="rows"
+        :cell-props="orderCellProps"
         :items-length="total"
         :loading="busy"
         item-value="orderNumber"
@@ -347,8 +365,15 @@ onUnmounted(() => {
         @update:items-per-page="onItemsPerPageChange"
         @update:sort-by="onSortChange"
       >
-        <template #[`item.orderNumber`]="{ item }">
-          <span class="order-number">{{ item.orderNumber }}</span>
+        <template #[`item.actions`]="{ item }">
+          <div class="actions-container">
+            <ActionButton
+              icon="$edit"
+              tooltip-text="Открыть заказ"
+              :item="item"
+              :disabled="busy"
+            />
+          </div>
         </template>
         <template #[`item.status`]="{ item }">
           <span class="status-pill">{{ orderStatusName(item.status, ops) }}</span>
@@ -360,7 +385,7 @@ onUnmounted(() => {
               :href="safeOrderSource(item.sourceUrl)"
               target="_blank"
               rel="noopener noreferrer"
-            >Открыть источник</a>
+            >Страница товара</a>
           </div>
         </template>
         <template #[`item.storeName`]="{ item }">
@@ -381,18 +406,18 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
-.orders-filter-bar { grid-template-columns:minmax(260px, 1fr) minmax(240px, 320px) minmax(150px, 190px) minmax(150px, 190px); }
+.staff-list .orders-filter-bar { grid-template-columns:minmax(260px, 1fr) minmax(240px, 320px) minmax(150px, 190px) minmax(150px, 190px); }
 .orders-table { --staff-table-height:max(320px, calc(100vh - 300px)); }
-.order-number { color:#203c58; font-weight:650; white-space:nowrap; }
+.orders-table :deep(td.order-card-cell) { cursor:pointer; }
 .order-product { display:grid; gap:2px; min-width:200px; }
 .order-product a { color:#176da5; font-size:12px; text-decoration:underline; text-underline-offset:2px; }
 .order-product a:hover { color:#1d3e85; }
 @media (max-width:1100px) {
-  .orders-filter-bar { grid-template-columns:1fr 1fr; }
-  .orders-filter-bar .filter-search { grid-column:1 / -1; }
+  .staff-list .orders-filter-bar { grid-template-columns:1fr 1fr; }
+  .staff-list .orders-filter-bar .filter-search { grid-column:1 / -1; }
 }
 @media (max-width:600px) {
-  .orders-filter-bar { grid-template-columns:1fr; }
-  .orders-filter-bar .filter-search { grid-column:auto; }
+  .staff-list .orders-filter-bar { grid-template-columns:1fr; }
+  .staff-list .orders-filter-bar .filter-search { grid-column:auto; }
 }
 </style>

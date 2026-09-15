@@ -11,7 +11,7 @@ import { can } from '../roles.js'
 const BASE = '/api/v1/backoffice'
 const json = (method, body) => ({ method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
 const CONSENT_REQUEST_PATH_PATTERN = new RegExp(`^/(legal-documents(?:/(?:ops|preview|audit|${UUID_PATH_PATTERN}(?:/source)?))?|consents/withdrawal-requests(?:/processed)?)$`, 'iu')
-const ORDER_REQUEST_PATH_PATTERN = /^\/orders(?:\/ops)?$/iu
+const ORDER_REQUEST_PATH_PATTERN = /^\/orders(?:\/ops|\/\d{8}-[1-9]\d*(?:\/product)?)?$/u
 
 function isServiceUnavailable(problem) {
   return problem?.type === INTERNAL_PROBLEM_TYPES.protocolError
@@ -187,7 +187,7 @@ export function createSession() {
   async function getOrderOps() {
     if (orderOps.value) return orderOps.value
     if (!orderOpsRequest) {
-      const pending = request('/orders/ops')
+      const pending = request('/orders/ops', {}, { supplementary:true })
         .then(value => { orderOps.value = validateOrderOps(value); return orderOps.value })
         .finally(() => { if (orderOpsRequest === pending) orderOpsRequest = null })
       orderOpsRequest = pending
@@ -202,10 +202,10 @@ export function createSession() {
       if (!CONSENT_REQUEST_PATH_PATTERN.test(pathname)) throw createInternalProblem('invalidInput')
       return request(path, options, { supplementary:true, responseType })
     },
-    orderRequest: path => {
+    orderRequest: (path, options = {}) => {
       const pathname = typeof path === 'string' ? path.split('?')[0] : ''
       if (!ORDER_REQUEST_PATH_PATTERN.test(pathname)) throw createInternalProblem('invalidInput')
-      return request(path)
+      return request(path, options, { supplementary:true })
     },
     listUsers: () => request('/users'), getUser: id => request(`/users/${id}`), getRoles: () => request('/users/ops'),
     getStatus: () => request('/status', {}, { supplementary:true })

@@ -5,7 +5,24 @@ import { describe, expect, it, vi } from 'vitest'
 import { ref } from 'vue'
 import { createMemoryHistory } from 'vue-router'
 import { createAppRouter } from '../src/router.js'
+import { safeReturn } from '../src/roles.js'
 describe('route authorization',()=>{
+  it('authorizes direct order cards and safe returns for all four roles', async () => {
+    const s = { user:ref(null), restoreProblem:ref(null), ensureReady:vi.fn().mockResolvedValue() }
+    const r = createAppRouter(createMemoryHistory(), s)
+    await r.push('/orders/12345678-1')
+    expect(r.currentRoute.value.query.return).toBe('/orders/12345678-1')
+    for (const role of ['administrator','shift-manager','senior-operator','operator']) {
+      s.user.value = { roles:[role] }
+      await r.push('/orders/12345678-1')
+      expect(r.currentRoute.value.matched[0].meta.action).toBe('manualQuotes')
+      expect(safeReturn('/orders/12345678-1', s.user.value)).toBe('/orders/12345678-1')
+    }
+    for (const value of ['/orders/12345678-01','/orders/1','//evil','/orders/12345678-1?secret=1']) expect(safeReturn(value, s.user.value)).toBe('/orders')
+    s.user.value = { roles:['unknown'] }
+    await r.push('/orders/12345678-2')
+    expect(r.currentRoute.value.path).toBe('/forbidden')
+  })
   it('chooses the landing page after the initial session restore',async()=>{
     const s={user:ref(null),restoreProblem:ref(null),ensureReady:vi.fn(async()=>{s.user.value={id:7,roles:['administrator']}})}
     const r=createAppRouter(createMemoryHistory(),s)
