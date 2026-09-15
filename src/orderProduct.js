@@ -27,7 +27,7 @@ export function limitIsValid(value, currencies) {
     && currencies.some(item => item.value === value.currency && item.routeAlias === 'eur')
     && typeof value.available === 'boolean'
     && (value.available ? dateIsValid(value.sourceEffectiveDate)
-      && typeof value.maximumTotalUsd === 'number' && Number.isFinite(value.maximumTotalUsd) && value.maximumTotalUsd >= 0
+      && typeof value.maximumTotalUsd === 'number' && Number.isFinite(value.maximumTotalUsd) && value.maximumTotalUsd >= 0 && priceCents(value.maximumTotalUsd) !== null
       : value.sourceEffectiveDate === null && value.maximumTotalUsd === null)
 }
 
@@ -35,7 +35,7 @@ export function validateProductLimits(value, currencies) {
   if (!value || !['minimumQuantity', 'maximumQuantity', 'defaultQuantity', 'storeNameMaximumLength', 'productNameMaximumLength',
     'colorMaximumLength', 'sizeMaximumLength', 'commentMaximumLength'].every(key => Number.isSafeInteger(value[key]) && value[key] > 0)
     || value.minimumQuantity > value.defaultQuantity || value.defaultQuantity > value.maximumQuantity
-    || !positive(value.maximumUnitPrice) || value.priceDecimalPlaces !== 2
+    || !positive(value.maximumUnitPrice) || priceCents(value.maximumUnitPrice) === null || value.priceDecimalPlaces !== 2
     || !currencies.some(item => item.value === value.sellerPriceCurrency && item.routeAlias === 'usd')
     || !limitIsValid(value.valueLimit, currencies)) throw createInternalProblem('protocolError')
   return value
@@ -46,7 +46,7 @@ function productIsValid(product, currencies, limits) {
     && text(product.storeName, limits.storeNameMaximumLength)
     && text(product.color, limits.colorMaximumLength) && text(product.size, limits.sizeMaximumLength)
     && text(product.comment, limits.commentMaximumLength) && Number.isSafeInteger(product.quantity) && product.quantity > 0
-    && (product.sellerPrice === null || (positive(product.sellerPrice?.amount)
+    && (product.sellerPrice === null || (positive(product.sellerPrice?.amount) && priceCents(product.sellerPrice.amount) !== null
       && currencies.some(item => item.value === product.sellerPrice.currency)))
 }
 

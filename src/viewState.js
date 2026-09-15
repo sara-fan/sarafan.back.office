@@ -27,17 +27,20 @@ function normalizedSort(value, defaults, allowedSortKeys) {
   return [{ key:candidate.key, order:candidate.order }]
 }
 
-export function readViewState({ userId, viewKey, defaults, allowedSortKeys, normalizeFilters }) {
+export function readViewState({ userId, viewKey, defaults, allowedSortKeys, normalizeFilters, memory }) {
   const fallback = defaultsCopy(defaults)
   const key = storageKey(userId, viewKey)
   if (!key) return { state:fallback, unavailable:false }
+  let unavailable
   let raw
   try {
-    raw = globalThis.localStorage.getItem(key)
+    raw = memory?.get(key) ?? globalThis.localStorage.getItem(key)
+    unavailable = memory?.has(key) ?? false
   } catch {
-    return { state:fallback, unavailable:true }
+    raw = memory?.get(key)
+    unavailable = true
   }
-  if (!raw) return { state:fallback, unavailable:false }
+  if (!raw) return { state:fallback, unavailable }
   try {
     const value = JSON.parse(raw)
     if (!value || value.version !== VERSION) return { state:fallback, unavailable:false }
@@ -54,7 +57,7 @@ export function readViewState({ userId, viewKey, defaults, allowedSortKeys, norm
         sortBy:restoredSort,
         filters:restoredFilters
       },
-      unavailable:false
+      unavailable
     }
   } catch {
     try { globalThis.localStorage.removeItem(key) } catch { return { state:fallback, unavailable:true } }
@@ -62,13 +65,17 @@ export function readViewState({ userId, viewKey, defaults, allowedSortKeys, norm
   }
 }
 
-export function writeViewState({ userId, viewKey, state }) {
+export function writeViewState({ userId, viewKey, state, memory }) {
   const key = storageKey(userId, viewKey)
   if (!key) return true
+  let raw
   try {
-    globalThis.localStorage.setItem(key, JSON.stringify({ version:VERSION, ...state }))
+    raw = JSON.stringify({ version:VERSION, ...state })
+    globalThis.localStorage.setItem(key, raw)
+    memory?.delete(key)
     return true
   } catch {
+    if (raw !== undefined) memory?.set(key, raw)
     return false
   }
 }

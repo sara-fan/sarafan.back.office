@@ -32,6 +32,17 @@ describe('order product contracts', () => {
   ])('rejects malformed detail DTO (%j)', value => {
     expect(() => validateOrderDetails(value, ops, details.orderNumber)).toThrow()
   })
+  it.each([40.001, 0.001, 999.999])('rejects non-cent DTO amounts and ceilings (%s)', amount => {
+    expect(() => validateOrderDetails({ ...details, product:{ ...product, sellerPrice:{ amount, currency:840 } } }, ops, details.orderNumber)).toThrow()
+    expect(() => validateProductLimits({ ...productLimits, maximumUnitPrice:amount }, currencies)).toThrow()
+    expect(limitIsValid({ ...limit, maximumTotalUsd:amount }, currencies)).toBe(false)
+  })
+  it.each([0.01, 1.1, 40.01, 99999999.99])('accepts exact cent amounts (%s)', amount => {
+    expect(validateOrderDetails({ ...details, product:{ ...product, sellerPrice:{ amount, currency:840 } } }, ops, details.orderNumber)).toBeDefined()
+    expect(validateProductLimits({ ...productLimits, maximumUnitPrice:amount }, currencies)).toBeDefined()
+    expect(limitIsValid({ ...limit, maximumTotalUsd:amount }, currencies)).toBe(true)
+    expect(limitIsValid({ ...limit, maximumTotalUsd:0 }, currencies)).toBe(true)
+  })
   it('validates dates without normalizing broken dates', () => {
     for (const value of [null, '', 'bad', '2026-02-30', '2026-13-01']) expect(dateIsValid(value)).toBe(false)
     expect(dateIsValid('2024-02-29')).toBe(true)

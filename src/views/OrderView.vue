@@ -9,7 +9,7 @@ import ConfirmDialog from '../components/ConfirmDialog.vue'
 import EditorHeaderActions from '../components/EditorHeaderActions.vue'
 import FormField from '../components/FormField.vue'
 import PageAlertRegion from '../components/PageAlertRegion.vue'
-import { moscowTime } from '../consentFormatting.js'
+import { moscowDate, moscowTime } from '../consentFormatting.js'
 import { CORE_PROBLEM_TYPES, hasOnlyPresentedFieldErrors, normalizeProblem, problemFieldErrors } from '../errors/problem.js'
 import { formatMoneyAmount } from '../moneyFormatting.js'
 import { orderStatusName, safeOrderSource } from '../orderFormatting.js'
@@ -290,6 +290,16 @@ onUnmounted(() => { clear(); globalThis.removeEventListener('beforeunload', befo
           </div>
         </fieldset>
       </form>
+      <dl class="staff-form saved-limit">
+        <div class="staff-form-row">
+          <dt class="staff-form-label">
+            Дата курсов при последнем сохранении товара
+          </dt>
+          <dd class="staff-form-value staff-form-value--readonly">
+            {{ details.savedLimitSourceEffectiveDate ? moscowDate(details.savedLimitSourceEffectiveDate) : 'Сохранённая проверка лимита отсутствует' }}
+          </dd>
+        </div>
+      </dl>
       <div class="recognition">
         <img
           v-if="safeOrderSource(details.imageUrl)"

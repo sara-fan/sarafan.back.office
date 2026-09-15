@@ -26,6 +26,7 @@ function serviceUnavailableProblem(problem) {
 }
 
 export function createSession() {
+  const viewStateMemory = new Map()
   const user = ref(null)
   const ready = ref(false)
   const restoring = ref(false)
@@ -45,6 +46,7 @@ export function createSession() {
   function clearSession(message = '', problem = null) {
     epoch += 1
     token = ''
+    viewStateMemory.clear()
     user.value = null
     notice.value = message
     loginProblem.value = problem
@@ -64,6 +66,7 @@ export function createSession() {
       || !Number.isInteger(session.user?.id) || !can(session.user, 'access')) {
       throw createInternalProblem('protocolError')
     }
+    if (user.value?.id !== session.user.id) viewStateMemory.clear()
     token = session.accessToken
     user.value = session.user
     notice.value = ''
@@ -196,7 +199,7 @@ export function createSession() {
   }
   return {
     user:readonly(user), ready:readonly(ready), restoring:readonly(restoring), restoreProblem:readonly(restoreProblem), notice:readonly(notice), loginProblem:readonly(loginProblem), legalDocumentOps:readonly(legalDocumentOps), orderOps:readonly(orderOps),
-    ensureReady, restoreSession, login, logout, saveUser, saveProfile, getLegalDocumentOps, getOrderOps,
+    viewStateMemory, ensureReady, restoreSession, login, logout, saveUser, saveProfile, getLegalDocumentOps, getOrderOps,
     consentRequest: (path, options = {}, responseType = 'json') => {
       const pathname = typeof path === 'string' ? path.split('?')[0] : ''
       if (!CONSENT_REQUEST_PATH_PATTERN.test(pathname)) throw createInternalProblem('invalidInput')

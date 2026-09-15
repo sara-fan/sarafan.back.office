@@ -48,6 +48,8 @@ describe('staff order card', () => {
     expect(wrapper.findAll('.buyer-field .staff-form-value').every(field => field.classes().includes('staff-form-value--readonly'))).toBe(true)
     await wrapper.get('#productName').setValue(' Новое название ')
     await wrapper.get('#storeName').setValue(' Новый магазин ')
+    expect(wrapper.get('.saved-limit').text()).toContain('14.09.2026')
+    expect(wrapper.get('.saved-limit').text()).not.toContain('15.09.2026')
     expect(wrapper.get('.total-line').text()).toContain('Стоимость, USD40,00')
     expect(wrapper.findAll('.header-actions button').map(button => button.attributes('aria-label'))).toEqual([
       'Обновить данные', 'Сохранить изменения', 'Отменить'
@@ -155,6 +157,7 @@ describe('staff order card', () => {
     expect(wrapper.get('.product-grid').attributes('disabled')).toBeDefined()
     expect(wrapper.get('.total-line .staff-form-value').classes()).toContain('staff-form-value--readonly')
     expect(wrapper.text()).toContain('Исправление товара временно недоступно')
+    expect(wrapper.get('.saved-limit').text()).toContain('Сохранённая проверка лимита отсутствует')
     await vm().save()
     expect(h.session.orderRequest).toHaveBeenCalledTimes(1)
   })

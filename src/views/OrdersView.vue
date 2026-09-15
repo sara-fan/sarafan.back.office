@@ -36,6 +36,7 @@ const session = useSession()
 const restored = readViewState({
   userId:session.user.value?.id,
   viewKey:VIEW_KEY,
+  memory:session.viewStateMemory,
   defaults,
   allowedSortKeys:ORDER_SORT_KEYS,
   normalizeFilters:normalizeOrderFilters
@@ -81,6 +82,7 @@ function persistState() {
   const saved = writeViewState({
     userId:session.user.value?.id,
     viewKey:VIEW_KEY,
+    memory:session.viewStateMemory,
     state:{
       page:page.value,
       pageSize:itemsPerPage.value,
@@ -203,7 +205,7 @@ async function openOrder(item) {
 }
 
 function orderCellProps({ item, column }) {
-  if (column.key === 'productName') return {}
+  if (['productName', 'actions'].includes(column.key)) return {}
   return {
     class:'order-card-cell',
     onClick:() => openOrder(item)
@@ -372,6 +374,7 @@ onUnmounted(() => {
               tooltip-text="Открыть заказ"
               :item="item"
               :disabled="busy"
+              @click="openOrder"
             />
           </div>
         </template>

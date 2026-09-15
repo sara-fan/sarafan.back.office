@@ -24,6 +24,17 @@ const deferred = () => { let resolve; const promise = new Promise(r => { resolve
 afterEach(() => vi.unstubAllGlobals())
 
 describe('staff session boundary', () => {
+  it('clears memory preferences on identity change and logout', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(auth()).mockResolvedValueOnce(auth({ ...identity, id:2 })).mockResolvedValueOnce(response(200, {})))
+    const session = createSession()
+    await session.login('a', 'password')
+    session.viewStateMemory.set('orders', 'old preferences')
+    await session.login('b', 'password')
+    expect(session.viewStateMemory.size).toBe(0)
+    session.viewStateMemory.set('orders', 'new preferences')
+    await session.logout()
+    expect(session.viewStateMemory.size).toBe(0)
+  })
   it('uses only staff detail/update endpoints and retains session on recoverable order failures', async () => {
     const fetch = vi.fn().mockResolvedValueOnce(auth()).mockResolvedValueOnce(response(200, {}))
       .mockResolvedValueOnce(problemResponse(503, 'order-limit-rates-unavailable'))

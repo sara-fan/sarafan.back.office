@@ -85,6 +85,27 @@ describe('persistent view state', () => {
     expect(globalThis.localStorage.getItem('sarafan.backoffice.view-state.v1.1.privacy-requests')).toBeNull()
   })
 
+  it('validates staff-scoped memory fallbacks and clears them after successful persistence', () => {
+    const memory = new Map()
+    const state = { ...defaults, page:3 }
+    const options = { userId:1, viewKey:'orders', defaults, allowedSortKeys:['processed'], normalizeFilters, memory }
+    const blocked = vi.spyOn(globalThis.Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('quota') })
+    expect(writeViewState({ ...options, state })).toBe(false)
+    expect(readViewState(options)).toEqual({ state, unavailable:true })
+    expect(readViewState({ ...options, userId:2 }).state).toEqual(defaults)
+    state.page = 8
+    expect(readViewState(options).state.page).toBe(3)
+    blocked.mockRestore()
+    expect(writeViewState({ ...options, state })).toBe(true)
+    expect(memory.size).toBe(0)
+    expect(readViewState(options)).toEqual({ state, unavailable:false })
+  })
+  it('keeps serialization failures non-throwing without caching invalid state', () => {
+    const memory = new Map()
+    const state = { ...defaults }; state.filters = state
+    expect(writeViewState({ userId:1, viewKey:'orders', state, memory })).toBe(false)
+    expect(memory.size).toBe(0)
+  })
   it('keeps storage failures non-throwing', () => {
     vi.stubGlobal('localStorage', {
       getItem:vi.fn(() => { throw new globalThis.DOMException('blocked') }),
