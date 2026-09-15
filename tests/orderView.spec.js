@@ -4,22 +4,24 @@
 
 import { mount, flushPromises } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { ref } from 'vue'
+import { reactive, ref } from 'vue'
 import OrderView from '../src/views/OrderView.vue'
 import ConfirmDialog from '../src/components/ConfirmDialog.vue'
 import { createSarafanVuetify } from '../src/plugins/vuetify.js'
 import { CORE_PROBLEM_TYPES, createInternalProblem, ProblemError } from '../src/errors/problem.js'
 import { details, ops, limit } from './fixtures/orderProduct.js'
 
-const h = vi.hoisted(() => ({ session:{}, push:vi.fn(), leave:null }))
+const h = vi.hoisted(() => ({ session:{}, push:vi.fn(), leave:null, update:null, route:null }))
 vi.mock('../src/stores/session.js', () => ({ useSession:() => h.session }))
-vi.mock('vue-router', () => ({ useRoute:() => ({ params:{ orderNumber:'12345678-1' } }), useRouter:() => ({ push:h.push }), onBeforeRouteLeave:fn => { h.leave = fn } }))
+vi.mock('vue-router', () => ({ useRoute:() => h.route, useRouter:() => ({ push:h.push }), onBeforeRouteLeave:fn => { h.leave = fn }, onBeforeRouteUpdate:fn => { h.update = fn } }))
 let wrapper
 const vm = () => wrapper.vm.$.setupState
 const pending = () => { let resolve, reject; const promise = new Promise((a, b) => { resolve = a; reject = b }); return { promise, resolve, reject } }
 async function render() { wrapper = mount(OrderView, { global:{ plugins:[createSarafanVuetify()] } }); await flushPromises() }
 const remote = type => new ProblemError({ type, code:type.split('/').at(-1).replaceAll('-', '_'), title:'Конфликт', detail:'Обновите данные заказа.', status:409, instance:'/test' })
 beforeEach(() => {
+  h.route = reactive({ params:{ orderNumber:'12345678-1' } })
+  h.update = null
   h.session.user = ref({ id:1, roles:['operator'] })
   h.session.getOrderOps = vi.fn().mockResolvedValue(ops)
   h.session.orderRequest = vi.fn().mockResolvedValue(globalThis.structuredClone(details))
@@ -149,7 +151,8 @@ describe('staff order card', () => {
     expect(wrapper.find('a').exists()).toBe(false)
     expect(wrapper.get('.product-page-link').text()).toBe('Страница товара недоступна')
     expect(wrapper.get('button[aria-label="Сохранить изменения"]').attributes('disabled')).toBeDefined()
-    await wrapper.get('#size').setValue('XL')
+    expect(wrapper.get('.product-grid').attributes('disabled')).toBeDefined()
+    expect(wrapper.text()).toContain('Исправление товара временно недоступно')
     await vm().save()
     expect(h.session.orderRequest).toHaveBeenCalledTimes(1)
   })
@@ -158,6 +161,26 @@ describe('staff order card', () => {
     await render(); expect(vm().editable).toBe(true)
     vm().details.canEditProduct = false
     expect(vm().editable).toBe(false)
+  })
+  it('reloads a changed order number only after the dirty draft is confirmed', async () => {
+    await render()
+    await wrapper.get('#size').setValue('XL')
+    const next = '12345678-2'
+    const cancelled = h.update({ params:{ orderNumber:next } }, { params:{ orderNumber:details.orderNumber } })
+    await flushPromises()
+    expect(wrapper.findComponent(ConfirmDialog).props('open')).toBe(true)
+    wrapper.findComponent(ConfirmDialog).vm.$emit('cancel')
+    expect(await cancelled).toBe(false)
+
+    const accepted = h.update({ params:{ orderNumber:next } }, { params:{ orderNumber:details.orderNumber } })
+    await flushPromises()
+    wrapper.findComponent(ConfirmDialog).vm.$emit('confirm')
+    expect(await accepted).toBe(true)
+    h.session.orderRequest.mockResolvedValueOnce({ ...details, orderNumber:next })
+    h.route.params.orderNumber = next
+    await flushPromises()
+    expect(h.session.orderRequest).toHaveBeenLastCalledWith(`/orders/${next}`)
+    expect(wrapper.get('.primary-heading').text()).toBe(`Заказ ${next}`)
   })
   it('denies unknown roles and ignores late load replies and failures after identity changes', async () => {
     const wait = pending()

@@ -4,7 +4,7 @@
 // This file is a part of the Sarafan application
 
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
-import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
+import { onBeforeRouteLeave, onBeforeRouteUpdate, useRoute, useRouter } from 'vue-router'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
 import EditorHeaderActions from '../components/EditorHeaderActions.vue'
 import FormField from '../components/FormField.vue'
@@ -19,7 +19,7 @@ import { useSession } from '../stores/session.js'
 const session = useSession()
 const route = useRoute()
 const router = useRouter()
-const number = route.params.orderNumber
+const number = computed(() => route.params.orderNumber)
 const details = ref(null)
 const ops = ref(null)
 const form = ref(null)
@@ -32,7 +32,9 @@ let version = 0
 let confirmAction = null
 const dirty = computed(() => form.value !== null && JSON.stringify(form.value) !== baseline.value)
 const editable = computed(() => details.value?.canEditProduct && can(session.user.value, 'manualQuotes') && !locked.value)
-const localProblem = computed(() => editable.value && form.value
+const productEditingEnabled = computed(() => editable.value && details.value?.limitCheck.available)
+const limitRatesUnavailable = computed(() => editable.value && details.value?.limitCheck.available === false)
+const localProblem = computed(() => productEditingEnabled.value && form.value
   ? productValidation(form.value, ops.value.productLimits, details.value.limitCheck) : null)
 const fieldProblem = computed(() => problem.value ?? localProblem.value)
 const pageProblem = computed(() => hasOnlyPresentedFieldErrors(fieldProblem.value, PRODUCT_FIELDS) ? null : fieldProblem.value)
@@ -45,7 +47,7 @@ const total = computed(() => {
 })
 
 function apply(value) {
-  details.value = validateOrderDetails(value, ops.value, number)
+  details.value = validateOrderDetails(value, ops.value, number.value)
   form.value = productForm(value.product, ops.value.productLimits)
   baseline.value = JSON.stringify(form.value)
   locked.value = false
@@ -59,7 +61,7 @@ async function load() {
     const catalog = await session.getOrderOps()
     if (current !== version) return
     ops.value = catalog
-    const value = await session.orderRequest(`/orders/${number}`)
+    const value = await session.orderRequest(`/orders/${number.value}`)
     if (current === version) apply(value)
   } catch (value) {
     if (current === version) problem.value = normalizeProblem(value)
@@ -67,12 +69,12 @@ async function load() {
 }
 
 async function save() {
-  if (busy.value || !editable.value || !details.value.limitCheck.available || localProblem.value) return
+  if (busy.value || !productEditingEnabled.value || localProblem.value) return
   const current = ++version
   busy.value = true
   problem.value = null
   try {
-    const result = await session.orderRequest(`/orders/${number}/product`, {
+    const result = await session.orderRequest(`/orders/${number.value}/product`, {
       method:'PUT', headers:{ 'Content-Type':'application/json' },
       body:JSON.stringify(productPayload(form.value, ops.value.productLimits, details.value.updatedAt))
     })
@@ -116,6 +118,10 @@ onBeforeRouteLeave(() => {
   if (!dirty.value) return true
   return new Promise(resolve => ask(resolve))
 })
+onBeforeRouteUpdate((to, from) => {
+  if (to.params.orderNumber === from.params.orderNumber || !dirty.value) return true
+  return new Promise(resolve => ask(accepted => resolve(accepted !== false)))
+})
 function beforeUnload(event) {
   if (!dirty.value) return
   event.preventDefault()
@@ -133,6 +139,9 @@ function clear() {
 }
 watch(() => session.user.value?.id, clear, { flush:'sync' })
 watch(form, () => { if (!locked.value) problem.value = null }, { deep:true, flush:'sync' })
+watch(() => route.params.orderNumber, (next, previous) => {
+  if (next !== previous) load()
+})
 onMounted(() => { globalThis.addEventListener('beforeunload', beforeUnload); load() })
 onUnmounted(() => { clear(); globalThis.removeEventListener('beforeunload', beforeUnload) })
 </script>
@@ -147,7 +156,7 @@ onUnmounted(() => { clear(); globalThis.removeEventListener('beforeunload', befo
         form="order-product-form"
         :loaded="!!details"
         :busy="busy"
-        :save-disabled="!editable || !details?.limitCheck.available || !!localProblem || !dirty"
+        :save-disabled="!productEditingEnabled || !!localProblem || !dirty"
         @refresh="refresh"
         @cancel="back"
       />
@@ -184,6 +193,12 @@ onUnmounted(() => { clear(); globalThis.removeEventListener('beforeunload', befo
       >
         Данные заказа изменились. Обновите карточку перед сохранением.
       </p>
+      <p
+        v-else-if="limitRatesUnavailable"
+        role="status"
+      >
+        Исправление товара временно недоступно: не удалось получить общую пару курсов USD/RUB и EUR/RUB.
+      </p>
       <p v-else-if="!editable">
         Заказ доступен только для просмотра.
       </p>
@@ -198,7 +213,7 @@ onUnmounted(() => { clear(); globalThis.removeEventListener('beforeunload', befo
         </h2>
         <fieldset
           class="product-grid"
-          :disabled="busy || !editable"
+          :disabled="busy || !productEditingEnabled"
         >
           <div class="product-name-cell">
             <FormField

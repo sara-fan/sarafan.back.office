@@ -49,6 +49,14 @@ describe('staff session boundary', () => {
     expect(() => s.orderRequest('/orders/1')).toThrow(expect.objectContaining({code:'ui_invalid_input'}))
     expect(() => s.orderRequest('/users')).toThrow(expect.objectContaining({code:'ui_invalid_input'}))
   })
+  it('retains the staff session when order metadata is unavailable', async () => {
+    const fetch = vi.fn().mockResolvedValueOnce(auth()).mockResolvedValueOnce(problemResponse(503, 'service-unavailable'))
+    vi.stubGlobal('fetch', fetch)
+    const s = createSession(); await s.login('a@b.test', 'password')
+    await expect(s.getOrderOps()).rejects.toBeDefined()
+    expect(s.user.value).toEqual(identity)
+    expect(s.orderOps.value).toBeNull()
+  })
   it.each([
     '/legal-documents/a',
     '/legal-documents/-',

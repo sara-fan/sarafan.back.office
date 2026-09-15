@@ -187,7 +187,7 @@ export function createSession() {
   async function getOrderOps() {
     if (orderOps.value) return orderOps.value
     if (!orderOpsRequest) {
-      const pending = request('/orders/ops')
+      const pending = request('/orders/ops', {}, { supplementary:true })
         .then(value => { orderOps.value = validateOrderOps(value); return orderOps.value })
         .finally(() => { if (orderOpsRequest === pending) orderOpsRequest = null })
       orderOpsRequest = pending

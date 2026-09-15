@@ -89,6 +89,7 @@ fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
 .staff-form .form-field label, .staff-form-label { overflow: hidden; margin-bottom: 0; color: #263d55; font-size: 14px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
 .staff-form .form-field > input, .staff-form .password-control, .staff-form .field-hint, .staff-form .form-field > .field-error { grid-column: 2; }
 .staff-form .form-field input:not([type="checkbox"]), .staff-form textarea { width: 100%; min-height: 42px; padding: 9px 11px; color: var(--ink); background: #fff; border: 1px solid #b9cad8; border-radius: 4px; }
+.staff-form fieldset:disabled input:not([type="checkbox"]), .staff-form fieldset:disabled textarea { color: #526a80; background: #f2f5f7; opacity: 1; }
 .staff-form textarea { width: 100%; resize: vertical; }
 .staff-form .password-control { grid-template-columns: minmax(0, 1fr) 40px; }
 .staff-form .password-control .action-button { width: 36px; height: 36px; color: #4b4b4b; }
