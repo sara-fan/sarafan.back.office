@@ -16,13 +16,13 @@ export const ops = { currencies, productLimits, statuses:[
   { value:0, name:'На проверке', routeAlias:'under_review', upperStatusValue:0, upperStatusName:'На проверке', upperStatusRouteAlias:'under_review' },
   { value:300, name:'Оплачен', routeAlias:'paid', upperStatusValue:300, upperStatusName:'Выполняется', upperStatusRouteAlias:'in_progress' }
 ], statusGroups:[{ routeAlias:'work', name:'В работе', statuses:[0, 300] }, { routeAlias:'in_progress', name:'Выполняется', statuses:[300] }] }
-export const product = { productName:'Чайник', sellerPrice:{ amount:40, currency:840 }, quantity:1, color:'Красный', size:null, comment:null }
+export const product = { productName:'Чайник', storeName:'Магазин', sellerPrice:{ amount:40, currency:840 }, quantity:1, color:'Красный', size:null, comment:null }
 export const details = {
   orderNumber:'12345678-1', status:0, sourceUrl:'https://shop.example/item',
   createdAt:'2026-09-15T10:00:00.123456Z', updatedAt:'2026-09-15T11:00:00.654321Z',
-  product, submittedProduct:product, limitCheck:limit, canEditProduct:true,
+  product, limitCheck:limit, canEditProduct:true,
   savedLimitSourceEffectiveDate:'2026-09-14',
-  storeName:'Магазин', imageUrl:'https://shop.example/item.png', dimensions:{ lengthCm:1, widthCm:2, heightCm:3 }, characteristics:{ Материал:'Сталь' },
+  imageUrl:'https://shop.example/item.png', dimensions:{ lengthCm:1, widthCm:2, heightCm:3 }, characteristics:{ Материал:'Сталь' },
   customer:{ lastName:'Иванов', firstName:'Иван', patronymic:null, phone:'+79991234567', email:null,
     passportSeries:null, passportNumber:null, passportIssueDate:null, passportIssuedBy:null, inn:null,
     postalCode:null, city:'Москва', address:null }

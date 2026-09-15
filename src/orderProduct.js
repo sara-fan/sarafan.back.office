@@ -40,9 +40,11 @@ export function validateProductLimits(value, currencies) {
   return value
 }
 
-function productIsValid(product, currencies) {
-  return product && text(product.productName, 500) && text(product.color, 200) && text(product.size, 200)
-    && text(product.comment, 2000) && Number.isSafeInteger(product.quantity) && product.quantity > 0
+function productIsValid(product, currencies, limits) {
+  return product && text(product.productName, limits.productNameMaximumLength)
+    && text(product.storeName, limits.storeNameMaximumLength)
+    && text(product.color, limits.colorMaximumLength) && text(product.size, limits.sizeMaximumLength)
+    && text(product.comment, limits.commentMaximumLength) && Number.isSafeInteger(product.quantity) && product.quantity > 0
     && (product.sellerPrice === null || (positive(product.sellerPrice?.amount)
       && currencies.some(item => item.value === product.sellerPrice.currency)))
 }
@@ -53,11 +55,11 @@ export function validateOrderDetails(value, ops, number) {
     || typeof value.sourceUrl !== 'string'
     || !timestampIsValid(value.createdAt) || !timestampIsValid(value.updatedAt)
     || Date.parse(value.updatedAt) < Date.parse(value.createdAt)
-    || !productIsValid(value.product, ops.currencies) || !productIsValid(value.submittedProduct, ops.currencies)
+    || !productIsValid(value.product, ops.currencies, ops.productLimits)
     || !value.customer || !Object.keys(CUSTOMER_FIELDS).every(key => key === 'passportIssueDate'
       ? value.customer[key] === null || dateIsValid(value.customer[key]) : text(value.customer[key], 2000))
     || typeof value.customer.phone !== 'string' || !value.customer.phone
-    || !text(value.storeName, ops.productLimits.storeNameMaximumLength) || !text(value.imageUrl, 2048)
+    || !text(value.imageUrl, 2048)
     || !(value.savedLimitSourceEffectiveDate === null || dateIsValid(value.savedLimitSourceEffectiveDate))
     || !(value.dimensions === null || (value.dimensions && ['lengthCm', 'widthCm', 'heightCm'].every(key => positive(value.dimensions[key]))))
     || !(value.characteristics === null || (typeof value.characteristics === 'object' && !Array.isArray(value.characteristics)
@@ -69,8 +71,8 @@ export function validateOrderDetails(value, ops, number) {
   return value
 }
 
-export function productForm(product, storeName, limits) {
-  return { productName:product.productName ?? '', storeName:storeName ?? '',
+export function productForm(product, limits) {
+  return { productName:product.productName ?? '', storeName:product.storeName ?? '',
     sellerPrice:product.sellerPrice?.currency === limits.sellerPriceCurrency ? String(product.sellerPrice.amount) : '',
     quantity:String(product.quantity), color:product.color ?? '', size:product.size ?? '', comment:product.comment ?? '' }
 }

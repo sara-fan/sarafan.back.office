@@ -47,7 +47,7 @@ describe('staff order card', () => {
     await wrapper.get('#storeName').setValue(' Новый магазин ')
     expect(wrapper.get('.total-line').text()).toContain('Стоимость40,00 USD')
     expect(wrapper.find('.merchandise-summary').exists()).toBe(false)
-    const result = { ...details, storeName:'Новый магазин', product:{ ...details.product, productName:'Новое название' }, updatedAt:'2026-09-15T12:00:00.123456Z' }
+    const result = { ...details, product:{ ...details.product, productName:'Новое название', storeName:'Новый магазин' }, updatedAt:'2026-09-15T12:00:00.123456Z' }
     h.session.orderRequest.mockResolvedValueOnce(result)
     await vm().save()
     expect(JSON.parse(h.session.orderRequest.mock.calls.at(-1)[1].body)).toEqual({
@@ -138,7 +138,7 @@ describe('staff order card', () => {
     expect(vm().problem).toBeNull()
   })
   it('keeps read-only data and blocks save when rates are unavailable', async () => {
-    h.session.orderRequest.mockResolvedValueOnce({ ...details, sourceUrl:'javascript:secret', imageUrl:'data:secret', storeName:null, savedLimitSourceEffectiveDate:null,
+    h.session.orderRequest.mockResolvedValueOnce({ ...details, sourceUrl:'javascript:secret', imageUrl:'data:secret', product:{ ...details.product, storeName:null }, savedLimitSourceEffectiveDate:null,
       dimensions:null, characteristics:null, limitCheck:{ ...limit, available:false, maximumTotalUsd:null, sourceEffectiveDate:null } })
     await render()
     expect(wrapper.find('img').exists()).toBe(false)

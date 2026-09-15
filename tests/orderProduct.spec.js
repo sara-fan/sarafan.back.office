@@ -9,10 +9,10 @@ import { details, product, currencies, ops, productLimits, limit } from './fixtu
 describe('order product contracts', () => {
   it('accepts complete and legacy snapshots and retains microseconds', () => {
     expect(validateOrderDetails(details, ops, details.orderNumber)).toBe(details)
-    const legacy = { ...details, product:{ ...product, productName:null, sellerPrice:null }, storeName:null, imageUrl:null, dimensions:null, characteristics:null, savedLimitSourceEffectiveDate:null }
+    const legacy = { ...details, product:{ ...product, productName:null, storeName:null, sellerPrice:null }, imageUrl:null, dimensions:null, characteristics:null, savedLimitSourceEffectiveDate:null }
     expect(validateOrderDetails(legacy, ops, details.orderNumber)).toBe(legacy)
-    expect(productForm(legacy.product, legacy.storeName, productLimits).sellerPrice).toBe('')
-    expect(productForm(legacy.product, legacy.storeName, productLimits).productName).toBe('')
+    expect(productForm(legacy.product, productLimits).sellerPrice).toBe('')
+    expect(productForm(legacy.product, productLimits).productName).toBe('')
     expect(validateProductLimits(productLimits, currencies)).toBe(productLimits)
     expect(limitIsValid({ ...limit, available:false, sourceEffectiveDate:null, maximumTotalUsd:null }, currencies)).toBe(true)
   })
@@ -21,11 +21,11 @@ describe('order product contracts', () => {
     { ...details, product:null }, { ...details, product:{ ...product, color:3 } },
     { ...details, product:{ ...product, quantity:1.5 } }, { ...details, product:{ ...product, sellerPrice:{ amount:0, currency:840 } } },
     { ...details, product:{ ...product, sellerPrice:{ amount:1, currency:999 } } },
-    { ...details, submittedProduct:null }, { ...details, customer:null },
+    { ...details, product:{ ...product, storeName:5 } }, { ...details, customer:null },
     { ...details, customer:{ ...details.customer, phone:null } }, { ...details, customer:{ ...details.customer, phone:'' } },
     { ...details, customer:{ ...details.customer, passportIssueDate:'2026-02-30' } },
     { ...details, customer:{ ...details.customer, email:9 } }, { ...details, customer:{ ...details.customer, email:'x'.repeat(2001) } },
-    { ...details, storeName:5 }, { ...details, imageUrl:5 }, { ...details, dimensions:{} }, { ...details, dimensions:[] }, { ...details, savedLimitSourceEffectiveDate:'bad' },
+    { ...details, imageUrl:5 }, { ...details, dimensions:{} }, { ...details, dimensions:[] }, { ...details, savedLimitSourceEffectiveDate:'bad' },
     { ...details, characteristics:[] }, { ...details, characteristics:{ a:1 } }, { ...details, characteristics:{ '':'x' } },
     { ...details, limitCheck:null }, { ...details, canEditProduct:null }, { ...details, status:300 }
   ])('rejects malformed detail DTO (%j)', value => {
@@ -50,7 +50,7 @@ describe('order product contracts', () => {
 
 describe('form rules and payload', () => {
   it('compares integer cents, keeps the exact boundary and uses Core message', () => {
-    const form = { ...productForm(product, details.storeName, productLimits), sellerPrice:'281,25', quantity:'4' }
+    const form = { ...productForm(product, productLimits), sellerPrice:'281,25', quantity:'4' }
     expect(productValidation(form, productLimits, limit)).toBeNull()
     expect(priceCents(' 1,1 ')).toBe(110n)
     expect(priceCents('1')).toBe(100n)
@@ -71,12 +71,12 @@ describe('form rules and payload', () => {
     expect(productValidation({ ...form, productName:'x'.repeat(501) }, productLimits, limit).errors.productName).toEqual(['Не более 500 символов.'])
   })
   it('whitelists payload and keeps server version verbatim', () => {
-    const form = { ...productForm(product, details.storeName, productLimits), productName:' Чайник ', storeName:' Магазин 2 ', sellerPrice:'40,01', comment:' note ', size:' L ', sourceUrl:'evil' }
+    const form = { ...productForm(product, productLimits), productName:' Чайник ', storeName:' Магазин 2 ', sellerPrice:'40,01', comment:' note ', size:' L ', sourceUrl:'evil' }
     expect(productPayload(form, productLimits, details.updatedAt)).toEqual({
       expectedUpdatedAt:details.updatedAt, storeName:'Магазин 2', productName:'Чайник', sellerPrice:{ amount:40.01, currency:840 },
       quantity:1, color:'Красный', size:'L', comment:'note'
     })
     expect(productPayload({ ...form, storeName:' ', color:' ', size:'', comment:'' }, productLimits, details.updatedAt)).toMatchObject({ storeName:null, color:null, size:null, comment:null })
-    expect(productForm({ ...product, color:null, sellerPrice:{ amount:1, currency:978 } }, null, productLimits).sellerPrice).toBe('')
+    expect(productForm({ ...product, color:null, sellerPrice:{ amount:1, currency:978 } }, productLimits).sellerPrice).toBe('')
   })
 })

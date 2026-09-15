@@ -45,7 +45,7 @@ const total = computed(() => {
 
 function apply(value) {
   details.value = validateOrderDetails(value, ops.value, number)
-  form.value = productForm(value.product, value.storeName, ops.value.productLimits)
+  form.value = productForm(value.product, ops.value.productLimits)
   baseline.value = JSON.stringify(form.value)
   locked.value = false
 }
