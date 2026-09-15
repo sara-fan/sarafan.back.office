@@ -155,8 +155,9 @@ describe('orders server table', () => {
     const table = wrapper.findComponent({ name:'VDataTableServer' })
     expect(table.props()).toMatchObject({ fixedHeader:true, density:'compact', mustSort:true, itemsPerPage:10, itemsLength:2 })
     expect(table.props('headers').map(header => header.key)).toEqual([
-      'orderNumber', 'status', 'productName', 'storeName', 'sellerPrice', 'quantity', 'createdAt', 'updatedAt', 'actions'
+      'actions', 'orderNumber', 'status', 'productName', 'storeName', 'sellerPrice', 'quantity', 'createdAt', 'updatedAt'
     ])
+    expect(table.props('headers')[0]).toMatchObject({ title:'', sortable:false })
     expect(wrapper.findAllComponents(RouterLinkStub)[0].props('to')).toBe('/orders/12345678-1')
     await wrapper.get('button[aria-label="Открыть заказ"]').trigger('click')
     expect(h.push).toHaveBeenCalledWith('/orders/12345678-1')

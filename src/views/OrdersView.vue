@@ -60,6 +60,7 @@ let loadVersion = 0
 let searchTimer = null
 
 const headers = [
+  { title:'', key:'actions', sortable:false, width:'56px' },
   { title:'Номер', key:'orderNumber' },
   { title:'Статус', key:'status' },
   { title:'Товар / источник', key:'productName' },
@@ -67,8 +68,7 @@ const headers = [
   { title:'Цена продавца', key:'sellerPrice', align:'end' },
   { title:'Кол-во', key:'quantity', align:'end' },
   { title:'Создан', key:'createdAt' },
-  { title:'Обновлён', key:'updatedAt' },
-  { title:'Действия', key:'actions', sortable:false }
+  { title:'Обновлён', key:'updatedAt' }
 ]
 const activeSort = () => {
   const candidate = sortBy.value?.[0]
@@ -364,12 +364,15 @@ onUnmounted(() => {
           </RouterLink>
         </template>
         <template #[`item.actions`]="{ item }">
-          <ActionButton
-            icon="$edit"
-            tooltip-text="Открыть заказ"
-            :item="item"
-            @click="openOrder"
-          />
+          <div class="actions-container">
+            <ActionButton
+              icon="$edit"
+              tooltip-text="Открыть заказ"
+              :item="item"
+              :disabled="busy"
+              @click="openOrder"
+            />
+          </div>
         </template>
         <template #[`item.status`]="{ item }">
           <span class="status-pill">{{ orderStatusName(item.status, ops) }}</span>
