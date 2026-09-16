@@ -113,13 +113,13 @@ onMounted(load)
     <PageAlertRegion :problem="problem" />
     <fieldset
       class="filter-bar"
-      :disabled="busy"
+      :aria-busy="busy"
     >
       <v-text-field
         id="user-search"
         v-model="search"
         class="filter-control filter-search"
-        label="Поиск по любой информации о пользователе"
+        label="Поиск"
         prepend-inner-icon="$search"
         variant="solo"
         density="compact"
@@ -129,6 +129,7 @@ onMounted(load)
       />
       <v-select
         v-model="role"
+        :disabled="busy"
         class="filter-control"
         label="Роль"
         :items="roleItems"
@@ -139,6 +140,7 @@ onMounted(load)
       />
       <v-select
         v-model="state"
+        :disabled="busy"
         class="filter-control"
         label="Статус"
         :items="stateItems"

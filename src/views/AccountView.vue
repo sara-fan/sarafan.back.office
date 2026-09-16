@@ -3,15 +3,19 @@
 // All rights reserved.
 // This file is a part of the Sarafan application
 import EditorHeaderActions from '../components/EditorHeaderActions.vue'
+import { useValidationFocus, validationFields } from '../validationFocus.js'
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import FormField from '../components/FormField.vue'
 import PageAlertRegion from '../components/PageAlertRegion.vue'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
-import { hasOnlyPresentedFieldErrors, normalizeProblem, problemFieldErrors } from '../errors/problem.js'
+import { CORE_PROBLEM_TYPES, hasOnlyPresentedFieldErrors, normalizeProblem, problemFieldErrors } from '../errors/problem.js'
 import { accountPayload } from '../forms.js'
 import { landing, roleLabel, ROLES } from '../roles.js'
 import { useSession } from '../stores/session.js'
+const accountProblemFields = { [CORE_PROBLEM_TYPES.emailExists]:['email'] }
+const focusRoot = ref(null)
+
 const session = useSession()
 const route = useRoute()
 const router = useRouter()
@@ -87,7 +91,7 @@ async function load() {
   } catch (value) { problem.value = normalizeProblem(value) }
   finally { busy.value = false }
 }
-async function save(payload) {
+async function saveAction(payload) {
   pending.value = null
   busy.value = true
   try {
@@ -109,7 +113,7 @@ async function save(payload) {
   } catch (value) { problem.value = normalizeProblem(value) }
   finally { busy.value = false }
 }
-async function submit() {
+async function submitAction() {
   if (busy.value || !loaded.value) return
   problem.value = null
   message.value = ''
@@ -140,6 +144,11 @@ function cancel() {
   } else router.push(returnPath.value)
 }
 onMounted(load)
+function submit(...args) { return focusAfter(() => submitAction(...args), () => validationFields(problem.value, { types:accountProblemFields })) }
+
+function save(...args) { return focusAfter(() => saveAction(...args), () => validationFields(problem.value, { types:accountProblemFields })) }
+
+const focusAfter = useValidationFocus(focusRoot, { context:() => [session.user.value?.id, route.fullPath], active:() => !pending.value, ready:() => !busy.value })
 </script>
 <template>
   <section class="settings form-medium">
@@ -171,6 +180,7 @@ onMounted(load)
     <form
       v-if="loaded"
       id="account-form"
+      ref="focusRoot"
       class="staff-form"
       novalidate
       @submit.prevent="submit"
@@ -184,6 +194,7 @@ onMounted(load)
           maxlength="100"
           autocomplete="family-name"
           :problem="problem"
+          :error-options="{ types:accountProblemFields }"
         /><FormField
           v-model="form.firstName"
           name="firstName"
@@ -192,6 +203,7 @@ onMounted(load)
           maxlength="100"
           autocomplete="given-name"
           :problem="problem"
+          :error-options="{ types:accountProblemFields }"
         /><FormField
           v-model="form.patronymic"
           name="patronymic"
@@ -200,6 +212,7 @@ onMounted(load)
           maxlength="100"
           autocomplete="additional-name"
           :problem="problem"
+          :error-options="{ types:accountProblemFields }"
         /><FormField
           v-model="form.email"
           name="email"
@@ -210,6 +223,7 @@ onMounted(load)
           maxlength="254"
           autocomplete="username"
           :problem="problem"
+          :error-options="{ types:accountProblemFields }"
         /><FormField
           v-model="form.password"
           name="password"
@@ -220,6 +234,7 @@ onMounted(load)
           revealable
           :hint="creating ? 'От 8 до 18 символов.' : 'Оставьте пустым, чтобы сохранить текущий пароль. От 8 до 18 символов.'"
           :problem="problem"
+          :error-options="{ types:accountProblemFields }"
         /><FormField
           v-model="form.confirmation"
           name="confirmation"
@@ -229,6 +244,7 @@ onMounted(load)
           autocomplete="new-password"
           revealable
           :problem="problem"
+          :error-options="{ types:accountProblemFields }"
         />
         <div class="staff-form-row">
           <span class="staff-form-label">Права:</span>
@@ -263,6 +279,7 @@ onMounted(load)
                   v-model="form.roles"
                   type="checkbox"
                   name="roles"
+                  :aria-invalid="roleErrors.length > 0"
                   :value="role.code"
                   :disabled="lastAdministrator && role.code === 'administrator'"
                   :aria-describedby="lastAdministrator && role.code === 'administrator' ? 'last-administrator-note' : undefined"

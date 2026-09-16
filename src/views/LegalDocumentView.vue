@@ -3,6 +3,7 @@
 // All rights reserved.
 // This file is a part of the Sarafan application
 
+import { useValidationFocus, validationFields } from '../validationFocus.js'
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import ActionButton from '../components/ActionButton.vue'
@@ -10,8 +11,33 @@ import ConfirmDialog from '../components/ConfirmDialog.vue'
 import LegalDocumentReader from '../components/LegalDocumentReader.vue'
 import PageAlertRegion from '../components/PageAlertRegion.vue'
 import { LEGAL_DOCUMENT_KIND, downloadBytes, moscowDate, moscowDateInput } from '../consentFormatting.js'
-import { createInternalProblem, normalizeProblem } from '../errors/problem.js'
+import { associatedFieldErrors, createInternalProblem, normalizeProblem } from '../errors/problem.js'
 import { useSession } from '../stores/session.js'
+
+const legalFocusOptions = {
+  aliases:{ source:'file', fileName:'file' },
+  types:{
+    'https://sarafan.sw.consulting/problems/invalid-legal-document-kind':['kind'],
+    'https://sarafan.sw.consulting/problems/invalid-legal-document-title':['title'],
+    'https://sarafan.sw.consulting/problems/invalid-legal-document-version':['displayVersion'],
+    'https://sarafan.sw.consulting/problems/legal-document-version-conflict':['displayVersion'],
+    'https://sarafan.sw.consulting/problems/invalid-effective-date':['effectiveDate'],
+    'https://sarafan.sw.consulting/problems/legal-document-effective-date-conflict':['effectiveDate'],
+    'https://sarafan.sw.consulting/problems/legal-document-file-required':['file'],
+    'https://sarafan.sw.consulting/problems/legal-document-file-too-large':['file'],
+    'https://sarafan.sw.consulting/problems/legal-document-file-type':['file'],
+    'https://sarafan.sw.consulting/problems/legal-document-encoding':['file'],
+    'https://sarafan.sw.consulting/problems/legal-document-text-required':['file'],
+    'https://sarafan.sw.consulting/problems/legal-document-control-character':['file'],
+    'https://sarafan.sw.consulting/problems/legal-document-html-not-allowed':['file'],
+    'https://sarafan.sw.consulting/problems/legal-document-code-not-allowed':['file'],
+    'https://sarafan.sw.consulting/problems/legal-document-quote-not-allowed':['file'],
+    'https://sarafan.sw.consulting/problems/legal-document-separator-not-allowed':['file'],
+    'https://sarafan.sw.consulting/problems/legal-document-image-not-allowed':['file'],
+    'https://sarafan.sw.consulting/problems/legal-document-link-not-allowed':['file']
+  }
+}
+const focusRoot = ref(null)
 
 const session = useSession()
 const route = useRoute()
@@ -155,17 +181,17 @@ function uploadFile() {
   const value = selectedFile()
   if (!value) {
     throw createInternalProblem('invalidInput', {
-      detail:'Загрузите файл Markdown с расширением .md.'
+      detail:'Загрузите файл Markdown с расширением .md.', errors:{ file:['Загрузите файл Markdown с расширением .md.'] }
     })
   }
   if (!value.name.toLowerCase().endsWith('.md')) throw createInternalProblem('invalidInput', {
-    detail:'Выберите файл Markdown с расширением .md.'
+    detail:'Выберите файл Markdown с расширением .md.', errors:{ file:['Выберите файл Markdown с расширением .md.'] }
   })
   if (value.size === 0) throw createInternalProblem('invalidInput', {
-    detail:'Выбранный файл пуст. Добавьте текст и загрузите файл снова.'
+    detail:'Выбранный файл пуст. Добавьте текст и загрузите файл снова.', errors:{ file:['Выбранный файл пуст. Добавьте текст и загрузите файл снова.'] }
   })
   if (value.size > 262144) throw createInternalProblem('invalidInput', {
-    detail:'Размер файла не должен превышать 256 Кб.'
+    detail:'Размер файла не должен превышать 256 Кб.', errors:{ file:['Размер файла не должен превышать 256 Кб.'] }
   })
   return value
 }
@@ -184,7 +210,7 @@ async function requestPayload() {
   }
 }
 
-async function previewDocument() {
+async function previewDocumentAction() {
   if (busy.value || !form.value) return
   await perform(async () => {
     const version = inputVersion
@@ -196,7 +222,7 @@ async function previewDocument() {
   })
 }
 
-async function save() {
+async function saveAction() {
   if (busy.value || !previewPayload.value) return
   await perform(async () => {
     const payload = { ...previewPayload.value, displayVersion:form.value.displayVersion }
@@ -252,6 +278,11 @@ async function confirmRefresh() {
 }
 
 onMounted(load)
+function previewDocument(...args) { return focusAfter(() => previewDocumentAction(...args), () => validationFields(problem.value, legalFocusOptions)) }
+
+function save(...args) { return focusAfter(() => saveAction(...args), () => validationFields(problem.value, legalFocusOptions)) }
+
+const focusAfter = useValidationFocus(focusRoot, { context:() => [session.user.value?.id, route.fullPath], ready:() => !busy.value })
 </script>
 
 <template>
@@ -324,6 +355,7 @@ onMounted(load)
     <form
       v-if="form"
       id="legal-document-form"
+      ref="focusRoot"
       class="editor-form staff-form legal-workspace legal-document-form"
       @submit.prevent="previewDocument"
     >
@@ -333,6 +365,10 @@ onMounted(load)
       >
         <v-select
           v-model="form.kind"
+          name="kind"
+          data-validation-field="kind"
+          :error-messages="associatedFieldErrors(problem, 'kind', legalFocusOptions)"
+          :aria-invalid="associatedFieldErrors(problem, 'kind', legalFocusOptions).length > 0"
           :items="kinds"
           label="Тип"
           variant="outlined"
@@ -341,6 +377,10 @@ onMounted(load)
         />
         <v-text-field
           v-model="form.title"
+          name="title"
+          data-validation-field="title"
+          :error-messages="associatedFieldErrors(problem, 'title', legalFocusOptions)"
+          :aria-invalid="associatedFieldErrors(problem, 'title', legalFocusOptions).length > 0"
           label="Название"
           maxlength="200"
           variant="outlined"
@@ -348,6 +388,10 @@ onMounted(load)
         />
         <v-text-field
           v-model="form.displayVersion"
+          name="displayVersion"
+          data-validation-field="displayVersion"
+          :error-messages="associatedFieldErrors(problem, 'displayVersion', legalFocusOptions)"
+          :aria-invalid="associatedFieldErrors(problem, 'displayVersion', legalFocusOptions).length > 0"
           class="legal-version"
           label="Версия"
           maxlength="64"
@@ -356,6 +400,10 @@ onMounted(load)
         />
         <v-text-field
           v-model="form.effectiveDate"
+          name="effectiveDate"
+          data-validation-field="effectiveDate"
+          :error-messages="associatedFieldErrors(problem, 'effectiveDate', legalFocusOptions)"
+          :aria-invalid="associatedFieldErrors(problem, 'effectiveDate', legalFocusOptions).length > 0"
           class="legal-effective-date"
           type="date"
           label="Дата начала действия"
@@ -365,6 +413,9 @@ onMounted(load)
         />
         <v-file-input
           v-model="file"
+          data-validation-field="file"
+          :error-messages="associatedFieldErrors(problem, 'file', legalFocusOptions)"
+          :aria-invalid="associatedFieldErrors(problem, 'file', legalFocusOptions).length > 0"
           class="legal-file"
           accept=".md,text/markdown"
           label="Исходный файл UTF-8 Markdown (до 256 Кб)"

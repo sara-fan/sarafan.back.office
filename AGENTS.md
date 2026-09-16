@@ -59,6 +59,12 @@ For other comment-capable formats, use the same three lines with that format's n
 
 ## Shared infrastructure and UI behavior
 
+- Legal-document lists display and filter Core-calculated `status`: `outdated` (Не актуальный), `current` (Актуальный), `future` (Будущий). Combine status with the existing list filters; do not infer currency from the browser clock or deletion availability.
+
+- Use `DateRangeFilterBar` for search, status and two date controls on list pages. It owns the four-column desktop layout and responsive breakpoints; generic filter-grid rules must exclude it. Views retain filter state, events and mutation locks.
+
+- Following Logibooks as a non-normative reference, keep text/date filters enabled during read-only refreshes and disable selectors individually while loading; never disable the entire filter row for a read. Keep Sarafan's 300 ms search debounce and invalidate in-flight server-list results immediately when search changes; mutation-specific locks remain separate.
+
 - Use @sara-fan/ui-shared for problem parsing, HTTP transport, tracing and privacy-safe diagnostics. Keep identity state, runtime configuration, route allowlists, fixed event catalogues and domain-specific problems in this application.
 - Follow this repository's operational workspace rules throughout the application; Logibooks may be consulted only as a non-normative visual reference and never overrides the specification or local rules. Land directly on the role's primary work screen; use a light Vuetify app bar and navigation drawer; use compact blue page headings, separators and grouped icon actions; and keep forms and tables dense. List screens use the user list as their reference layout: count badge, grouped header actions, compact solo filters, shared alert and header recovery state, and a compact fixed-header `v-data-table` inside the shared table card. Every create or edit action initiated from a table navigates to a dedicated route and view; do not place create/edit forms beneath or inside list tables. All dedicated create/edit views use the user editor's flat compact form styling without a surrounding card, and use the same native `check` pattern for checkboxes. Editors use the double-check save action, with accessible eye/crossed-eye controls for password fields. Use a simple, vertically centered login form with Sarafan branding and enough width for common errors.
 - Every user-relevant failure has one presentation owner. Stores reject transport/server failures; no empty catches or unobserved promise rejections. Expected suppression uses the named shared policy.
@@ -80,6 +86,8 @@ For other comment-capable formats, use the same three lines with that format's n
 - Serve on its own origin/container at sb.sw.consulting. Keep logging identity and runtime configuration independent of the customer application.
 
 ## Action buttons
+
+- Leave table action-button column headings blank in every list view; retain accessible action names and tooltips on the buttons.
 
 - Use the local ActionButton component for application actions: an icon, tooltip, item payload emitted on click, semantic variant, and disabled/loading state. Workspace and recovery ActionButtons are icon-only; only login actions and modal-dialog actions may add visible labels. Put the full Russian action text in the tooltip and accessible name.
 - Use `EditorHeaderActions` for form headers with refresh, save and cancel actions. Keep the user editor's action order, icons and tooltips; feature views own the handlers and save availability.
@@ -133,3 +141,15 @@ For other comment-capable formats, use the same three lines with that format's n
 - Render EUR in bold text-purple-darken-2 beside USD; retain each currency nominal/source date and show a common date only when equal. The narrow-screen disclosure uses a keyboard-operable button with aria-expanded; the toolbar must not clip its contents.
 
 - Reject non-cent seller amounts and USD ceilings before formatting or comparing them. Display savedLimitSourceEffectiveDate separately from the current limitCheck; do not infer a historical result from current rates. Keep failed Orders preference writes in validated staff-session memory so card navigation preserves list state; clear that memory on logout or identity change.
+
+## Validation focus
+
+- Use `associatedFieldErrors` with the same canonical-type and field-alias options as validation focus. Render its messages through native field descriptions or Vuetify `error-messages`, so every focused invalid control exposes its correction even when Core supplies only a canonical problem type.
+
+- After a failed user submit, save, preview or file-selection action, use `@sara-fan/ui-shared/validation-focus` through the local `useValidationFocus` lifecycle adapter to focus the first invalid field in displayed form order, after errors render and controls are enabled. Trigger it for each attempt, including identical failures; never focus from typing, blur validation or background refresh.
+- Scope lookup to the originating form/dialog. Associate structured field errors and canonical problem types with named controls or explicit field aliases; expose `aria-invalid` and accessible error descriptions. Never infer a field from localized error text. Support grouped selections and Vuetify controls; focus the visible upload activator when the file input is hidden. Skip disabled, hidden, read-only and detached controls.
+- Preserve entered values and existing messages. Ignore obsolete results after navigation, identity changes, dialog closure, newer actions or unmount. Keep successful step autofocus and dialog focus restoration; errors without an identifiable field remain alerts. Test ordering, repeated failures, rendering/enabling, native and framework controls, and stale-result safeguards.
+
+- Validation focus separates lifecycle from readiness: `active` tracks whether the form/dialog is current and deactivation synchronously invalidates pending actions, including close-and-reopen cycles. Put temporary busy/disabled conditions in `ready`, sampled after rendering; never put them in `active`.
+
+- Privacy-request lists accept optional requestedFrom/requestedTo (YYYY-MM-DD), filter RequestedAt by inclusive Moscow calendar days before counting/paging, and echo both dates. Persist validated date filters in the staff view; keep date controls editable during read refreshes. No database migration is required.

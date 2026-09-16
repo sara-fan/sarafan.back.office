@@ -136,7 +136,8 @@ describe('staff views',()=>{
   })
   it('lists, searches, filters, sorts, paginates, and opens staff editing through item actions',async()=>{
     h.session.listUsers.mockResolvedValue(Array.from({length:12},(_,i)=>({...identity,id:i+1,email:`user${i}@example.test`,firstName:i===0?'Анна':`Имя ${i}`,roles:i===0?['operator']:['administrator'],isActive:i!==0})))
-    const w=render(UsersView);await nextTick();await flushPromises();expect(w.findAll('tbody tr')).toHaveLength(10);const filterBar=w.get('.filter-bar');expect(filterBar.findComponent({name:'VTextField'}).props()).toMatchObject({label:'Поиск по любой информации о пользователе',density:'compact',variant:'solo',active:true});expect(filterBar.findAllComponents({name:'VSelect'}).every(select=>select.props('density')==='compact'&&select.props('variant')==='solo'&&select.props('active')===true)).toBe(true)
+    const w=render(UsersView);await nextTick();await flushPromises();expect(w.findAll('tbody tr')).toHaveLength(10);
+    const filterBar=w.get('.filter-bar');expect(filterBar.findComponent({name:'VTextField'}).props()).toMatchObject({label:'Поиск',density:'compact',variant:'solo',active:true});expect(filterBar.findAllComponents({name:'VSelect'}).every(select=>select.props('density')==='compact'&&select.props('variant')==='solo'&&select.props('active')===true)).toBe(true)
     const table=w.findComponent({name:'VDataTable'});table.vm.$emit('update:page',2);await nextTick();expect(w.findAll('tbody tr')).toHaveLength(2);table.vm.$emit('update:page',1);await nextTick()
     await w.get('.filter-search input').setValue('Анна');expect(w.findAll('tbody tr')).toHaveLength(1)
     await w.get('.filter-search input').setValue('');const selects=w.findAllComponents({name:'VSelect'});selects[0].vm.$emit('update:modelValue','operator');await nextTick();expect(w.findAll('tbody tr')).toHaveLength(1)
@@ -238,4 +239,49 @@ describe('staff views',()=>{
     h.session.user.value=null;h.session.getStatus.mockRejectedValueOnce(failure());h.session.restoreProblem.value=failure();const w=render(App);await flushPromises()
     h.session.restoreSession.mockImplementationOnce(()=>{h.session.restoreProblem.value=null;return Promise.resolve()});await button(w,'Повторить').trigger('click');await flushPromises();expect(h.router.replace).toHaveBeenCalledWith('/login')
   })
+})
+
+
+it('focuses login errors in form order and repeats focus without changing input', async () => {
+  const w = render(LoginView, { attachTo:document.body })
+  for (let attempt = 0; attempt < 2; attempt++) {
+    button(w, 'Войти').element.focus()
+    await w.get('form').trigger('submit')
+    await flushPromises()
+    expect(document.activeElement).toBe(w.get('[name="email"]').element)
+  }
+  await fill(w, 'email', 'user@example.test')
+  await w.get('form').trigger('submit')
+  await flushPromises()
+  expect(document.activeElement).toBe(w.get('[name="password"]').element)
+  expect(w.get('[name="email"]').element.value).toBe('user@example.test')
+})
+
+it('focuses account fields, grouped roles and remote errors after save', async () => {
+  h.route = { path:'/users/new', params:{}, query:{} }
+  const w = render(AccountView, { attachTo:document.body })
+  await flushPromises()
+  await w.get('form').trigger('submit')
+  await flushPromises()
+  const invalidInputs = w.findAll('input[aria-invalid="true"]')
+  expect(document.activeElement).toBe(invalidInputs[0].element)
+  for (const [name, value] of Object.entries({ firstName:'Иван', lastName:'Иванов', email:'new@example.test', password:'valid-password', confirmation:'valid-password' })) await fill(w, name, value)
+  await w.get('form').trigger('submit')
+  await flushPromises()
+  expect(document.activeElement).toBe(w.get('[name="roles"]').element)
+  await w.get('[name="roles"]').setValue(true)
+  h.session.saveUser.mockRejectedValueOnce(createInternalProblem('invalidInput', { errors:{ Email:['Проверьте почту'] } }))
+  await w.get('form').trigger('submit')
+  await flushPromises()
+  expect(document.activeElement).toBe(w.get('[name="email"]').element)
+  expect(w.get('[name="email"]').element.value).toBe('new@example.test')
+  h.session.saveUser.mockRejectedValueOnce(new problemReporting.ProblemError({
+    type:problemReporting.CORE_PROBLEM_TYPES.emailExists, title:'Ошибка', detail:'Этот адрес уже используется', code:'backoffice_email_exists'
+  }))
+  await w.get('form').trigger('submit')
+  await flushPromises()
+  expect(document.activeElement).toBe(w.get('[name="email"]').element)
+  expect(w.get('[name="email"]').attributes('aria-invalid')).toBe('true')
+  expect(w.get('[name="email"]').attributes('aria-describedby')).toContain('email-error')
+  expect(w.get('#email-error').text()).toBe('Этот адрес уже используется')
 })

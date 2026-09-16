@@ -139,6 +139,36 @@ describe('order catalogue and formatting', () => {
 })
 
 describe('orders server table', () => {
+  it('keeps filters enabled and focused through refreshes and discards replies superseded during debounce', async () => {
+    vi.useFakeTimers()
+    wrapper = mount(OrdersView, { attachTo:document.body, global:{ plugins:[createSarafanVuetify()] } })
+    await flushPromises()
+    const search = wrapper.get('#order-search')
+    search.element.focus()
+    const old = pending()
+    h.session.orderRequest.mockReturnValueOnce(old.promise)
+    await search.setValue('7')
+    await vi.advanceTimersByTimeAsync(300)
+    await flushPromises()
+    expect(vm().busy).toBe(true)
+    expect(search.element.matches(':disabled')).toBe(false)
+    expect(wrapper.getComponent({ name:'VSelect' }).props('disabled')).toBe(true)
+    expect(wrapper.findAll('input[type="date"]').every(input => !input.element.matches(':disabled'))).toBe(true)
+    expect(document.activeElement).toBe(search.element)
+    const oldPath = h.session.orderRequest.mock.calls.at(-1)[0]
+    await search.setValue('76')
+    old.resolve(resultFor(oldPath, [], 0))
+    await flushPromises()
+    expect(vm().problem).toBeNull()
+    expect(vm().rows).toHaveLength(2)
+    await vi.advanceTimersByTimeAsync(300)
+    await flushPromises()
+    expect(h.session.orderRequest.mock.calls.at(-1)[0]).toContain('search=76')
+    expect(document.activeElement).toBe(search.element)
+    expect(wrapper.get('fieldset').element.disabled).toBe(false)
+    expect(wrapper.getComponent({ name:'VSelect' }).props('disabled')).toBe(false)
+  })
+
   it('opens with the staff default, renders compact rows, and opens the dedicated card', async () => {
     render()
     await flushPromises()

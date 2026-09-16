@@ -6,6 +6,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 import {
   INTERNAL_PROBLEM_TYPES,
+  associatedFieldErrors,
   ProblemError,
   createInternalProblem,
   hasOnlyPresentedFieldErrors,
@@ -16,6 +17,15 @@ import {
 } from '../src/errors/problem.js'
 
 describe('shared problem model', () => {
+  it('shares type and alias associations with focus while preferring structured corrections', () => {
+    const options = { types:{ 'urn:test':['file'] }, aliases:{ source:'file', fileName:'file' } }
+    const problem = new ProblemError({ type:'urn:test', title:'Ошибка', detail:'Исправьте файл' })
+    expect(associatedFieldErrors(null, 'file', options)).toEqual([])
+    expect(associatedFieldErrors(problem, 'file', options)).toEqual(['Исправьте файл'])
+    expect(associatedFieldErrors(problem, 'title', options)).toEqual([])
+    const structured = new ProblemError({ type:'urn:test', title:'Ошибка', detail:'Общая ошибка', errors:{ 'Source.Content':['Ошибка содержимого'], FileName:['Ошибка имени'], file:['Ошибка имени'] } })
+    expect(associatedFieldErrors(structured, 'FILE', options)).toEqual(['Ошибка содержимого', 'Ошибка имени'])
+  })
   it('constructs every internal catalogue entry without an HTTP status', () => {
     for (const [kind, type] of Object.entries(INTERNAL_PROBLEM_TYPES)) {
       const problem = createInternalProblem(kind)

@@ -3,6 +3,7 @@
 // This file is a part of the Sarafan application
 
 import { PROBLEM_TYPE_ROOT, createProblemTools } from '@sara-fan/ui-shared/problems'
+import { validationFields } from '@sara-fan/ui-shared/validation-focus'
 import { EVENTS } from '../observability/catalogue.js'
 import { uiLogger } from '../observability/logger.js'
 export { PROBLEM_TYPE_ROOT, ProblemError } from '@sara-fan/ui-shared/problems'
@@ -69,4 +70,14 @@ export function hasOnlyPresentedFieldErrors(value, fields) {
   return entries.length > 0 && entries.every(([field, messages]) =>
     presented.has(field.toLowerCase()) && Array.isArray(messages) && messages.length > 0
   )
+}
+
+export function associatedFieldErrors(value, field, options = {}) {
+  if (!value) return []
+  const matches = fields => fields.some(name => name.toLowerCase() === field.toLowerCase())
+  const messages = Object.entries(value.errors ?? {}).flatMap(([name, errors]) =>
+    matches(validationFields({ errors:{ [name]:errors } }, { aliases:options.aliases }))
+      ? problemFieldErrors(value, name) : [])
+  if (messages.length) return [...new Set(messages)]
+  return matches(validationFields(value, options)) ? [presentProblem(value)] : []
 }

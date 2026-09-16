@@ -23,14 +23,14 @@ const ops = { kinds:[
   { value:3, name:'Правила заказа товаров', routeAlias:'order-rules' },
   { value:4, name:'Политика обработки персональных данных', routeAlias:'privacy-policy' }
 ] }
-const doc = { id, kind:LEGAL_DOCUMENT_KIND.PERSONAL_DATA_CONSENT, locale:'ru', title:'Отдельное согласие', displayVersion:'2', html:'<p>Правовой текст</p>', sourceHash:'b'.repeat(64), contentHash:'a'.repeat(64), effectiveAt:'2027-09-07T21:00:00Z', canDelete:true }
+const doc = { id, status:'future', kind:LEGAL_DOCUMENT_KIND.PERSONAL_DATA_CONSENT, locale:'ru', title:'Отдельное согласие', displayVersion:'2', html:'<p>Правовой текст</p>', sourceHash:'b'.repeat(64), contentHash:'a'.repeat(64), effectiveAt:'2027-09-07T21:00:00Z', canDelete:true }
 const audit = { id:1, documentId:id, actorId:1, actorName:'Иванов Иван', action:'created', at:'2026-09-07T09:00:00Z', kind:doc.kind, title:doc.title, displayVersion:doc.displayVersion, effectiveAt:doc.effectiveAt }
 const withdrawalRequest = { customerId:7, requestedAt:'2026-09-01T09:00:00Z', processed:false }
 const failure = () => createInternalProblem('networkUnavailable')
 let wrapper
 let withdrawalRows
 const vm = () => wrapper.vm.$.setupState
-function render(view, route = { path:'/', params:{}, query:{} }) { h.route = route; wrapper = mount(view, { global:{ plugins:[createSarafanVuetify()], stubs:{ VDialog:{ props:['modelValue'], template:'<section v-if="modelValue"><slot /></section>' }, RouterLink:{ props:['to'], template:'<a :href="to"><slot /></a>' } } } }); return wrapper }
+function render(view, route = { path:'/', params:{}, query:{} }, attachTo) { h.route = route; wrapper = mount(view, { attachTo, global:{ plugins:[createSarafanVuetify()], stubs:{ VDialog:{ props:['modelValue'], template:'<section v-if="modelValue"><slot /></section>' }, RouterLink:{ props:['to'], template:'<a :href="to"><slot /></a>' } } } }); return wrapper }
 async function click(label) { await wrapper.get(`button[aria-label="${label}"]`).trigger('click'); await flushPromises() }
 function openConfirm() { return wrapper.findAllComponents(ConfirmDialog).find(dialog => dialog.props('open')) }
 async function confirm() { openConfirm().vm.$emit('confirm'); await flushPromises() }
@@ -44,7 +44,9 @@ function pageResult(items, path, { total=items.length, defaultPageSize=25, defau
     items,
     pagination:{ currentPage, pageSize, totalCount:total, totalPages, hasNextPage:currentPage < totalPages, hasPreviousPage:currentPage > 1 },
     sorting:{ sortBy:params.get('sortBy') || defaultSortBy, sortOrder:params.get('sortOrder') || defaultSortOrder },
-    search:params.get('search')
+    search:params.get('search'),
+    requestedFrom:params.get('requestedFrom'),
+    requestedTo:params.get('requestedTo')
   }
 }
 beforeEach(() => {
@@ -77,6 +79,61 @@ beforeEach(() => {
   vi.spyOn(globalThis.HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
 })
 afterEach(() => { wrapper?.unmount(); vi.restoreAllMocks(); vi.unstubAllGlobals() })
+
+it.each([PrivacyRequestsView, LegalDocumentAuditView])('keeps server-list filters focused and ignores superseded replies during debounce', async view => {
+  vi.useFakeTimers()
+  try {
+    render(view, { path:'/', params:{}, query:{} }, document.body)
+    await flushPromises()
+    const input = wrapper.get('.filter-search input')
+    input.element.focus()
+    let finish
+    h.session.consentRequest.mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
+    await input.setValue('7')
+    await vi.advanceTimersByTimeAsync(300)
+    await flushPromises()
+    expect(vm().busy).toBe(true)
+    expect(input.element.matches(':disabled')).toBe(false)
+    expect(wrapper.get('fieldset.filter-bar').findAllComponents({ name:'VSelect' }).every(select => select.props('disabled'))).toBe(true)
+    expect(document.activeElement).toBe(input.element)
+    await input.setValue('76')
+    finish({ invalid:true })
+    await flushPromises()
+    expect(vm().problem).toBeNull()
+    await vi.advanceTimersByTimeAsync(300)
+    await flushPromises()
+    expect(h.session.consentRequest.mock.calls.at(-1)[0]).toContain('search=76')
+    expect(wrapper.get('fieldset.filter-bar').findAllComponents({ name:'VSelect' }).every(select => !select.props('disabled'))).toBe(true)
+    expect(document.activeElement).toBe(input.element)
+  } finally {
+    vi.useRealTimers()
+  }
+})
+it('shows and combines legal document status filters with search and kind', async () => {
+  h.session.consentRequest.mockResolvedValueOnce([
+    { ...doc, id:'old', title:'Согласие старое', status:'outdated' },
+    { ...doc, id:'current', title:'Согласие текущее', status:'current' },
+    { ...doc, id:'future', title:'Согласие будущее', status:'future' }
+  ])
+  render(LegalDocumentsView); await flushPromises()
+  expect(vm().filtered.map(item => item.statusTitle)).toEqual(['Не актуальный', 'Актуальный', 'Будущий'])
+  for (const value of ['outdated', 'current', 'future']) {
+    vm().page = 2
+    wrapper.findAllComponents({ name:'VSelect' }).find(select => select.props('label') === 'Статус').vm.$emit('update:modelValue', value)
+    await nextTick()
+    expect(vm().page).toBe(1)
+    expect(vm().filtered.map(item => item.status)).toEqual([value])
+  }
+  vm().search = 'текущее'; await nextTick()
+  expect(vm().filtered).toEqual([])
+  vm().status = null; await nextTick()
+  expect(vm().filtered.map(item => item.id)).toEqual(['current'])
+  vm().kind = 2; await nextTick()
+  expect(vm().filtered).toEqual([])
+  h.session.consentRequest.mockResolvedValueOnce([{ ...doc, status:'unknown' }])
+  await vm().load()
+  expect(vm().problem).not.toBeNull()
+})
 it('requires a current server preview before immutable creation and preserves failed forms', async () => {
   render(LegalDocumentView, { path:'/legal-documents/new', params:{}, query:{} }); await flushPromises()
   expect(wrapper.text()).not.toContain('Загрузка правового документа')
@@ -225,7 +282,7 @@ it('uses the shared legal-document list layout, routes actions, filters, and ret
   expect(wrapper.get('.count').text()).toBe('1')
   const filterBar = wrapper.get('.filter-bar')
   expect(filterBar.findComponent({name:'VTextField'}).props()).toMatchObject({ density:'compact', variant:'solo', active:true })
-  const filters = filterBar.findAllComponents({name:'VSelect'}); expect(filters).toHaveLength(1)
+  const filters = filterBar.findAllComponents({name:'VSelect'}); expect(filters).toHaveLength(2)
   filters[0].vm.$emit('update:modelValue',LEGAL_DOCUMENT_KIND.PERSONAL_DATA_CONSENT); await nextTick()
   const table = wrapper.findComponent({name:'VDataTable'}); table.vm.$emit('update:page',1); table.vm.$emit('update:itemsPerPage',25); table.vm.$emit('update:sortBy',[{key:'displayVersion',order:'desc'}]); await nextTick()
   await wrapper.get('.filter-search input').setValue('ничего'); expect(wrapper.text()).toContain('Правовые документы не найдены')
@@ -329,6 +386,33 @@ it('retries audit failures and enforces pagination boundaries', async () => {
   h.session.consentRequest.mockImplementationOnce(path => Promise.resolve(pageResult([{ ...audit }], path, { total:30 })))
   table.vm.$emit('update:page',1); await flushPromises()
   expect(vm().page).toBe(1)
+})
+it('filters withdrawal dates, persists the range and validates calendar dates', async () => {
+  render(PrivacyRequestsView); await flushPromises()
+  vm().page = 3
+  await wrapper.get('#privacy-request-from').setValue('2026-09-01')
+  await flushPromises()
+  expect(vm().page).toBe(1)
+  await wrapper.get('#privacy-request-to').setValue('2026-09-16')
+  await flushPromises()
+  expect(h.session.consentRequest).toHaveBeenLastCalledWith(expect.stringContaining('requestedFrom=2026-09-01&requestedTo=2026-09-16'))
+  expect(vm().problem).toBeNull()
+  wrapper.unmount()
+  render(PrivacyRequestsView); await flushPromises()
+  expect(wrapper.get('#privacy-request-from').element.value).toBe('2026-09-01')
+  expect(wrapper.get('#privacy-request-to').element.value).toBe('2026-09-16')
+  const calls = h.session.consentRequest.mock.calls.length
+  vm().onDateChange('requestedTo', '2026-08-31')
+  vm().onDateChange('requestedFrom', '2026-02-30')
+  expect(h.session.consentRequest).toHaveBeenCalledTimes(calls)
+  vm().onDateChange('requestedFrom', null)
+  await flushPromises()
+  expect(h.session.consentRequest.mock.lastCall[0]).not.toContain('requestedFrom=')
+  expect(h.session.consentRequest.mock.lastCall[0]).toContain('requestedTo=2026-09-16')
+  h.session.consentRequest.mockImplementationOnce(path => Promise.resolve({ ...pageResult([], path), requestedTo:null }))
+  vm().onDateChange('requestedTo', '2026-09-17')
+  await flushPromises()
+  expect(vm().problem).not.toBeNull()
 })
 it('restores server-table state across fresh mounts and corrects a stale last page once', async () => {
   const key = 'sarafan.backoffice.view-state.v1.1.privacy-requests'
@@ -576,4 +660,25 @@ it('recovers a persisted audit filter for retired legal kind zero', async () => 
   expect(vm().kind).toBeNull()
   expect(vm().page).toBe(1)
   expect(h.session.consentRequest.mock.calls.some(([path]) => /[?&]kind=0(?:&|$)/u.test(path))).toBe(false)
+})
+
+
+it('focuses the upload control on missing files and the relevant metadata after preview rejection', async () => {
+  render(LegalDocumentView, { path:'/legal-documents/new', params:{}, query:{} }, document.body)
+  await flushPromises()
+  await vm().previewDocument()
+  expect(document.activeElement.closest('[data-validation-field]')?.getAttribute('data-validation-field')).toBe('file')
+  vm().file = upload()
+  h.session.consentRequest.mockRejectedValueOnce(createInternalProblem('invalidInput', { errors:{ Title:['Исправьте название'] } }))
+  await vm().previewDocument()
+  expect(document.activeElement).toBe(wrapper.get('[name="title"]').element)
+  expect(wrapper.get('[name="title"]').element.disabled).toBe(false)
+  const title = wrapper.get('[name="title"]')
+  expect(title.attributes('aria-invalid')).toBe('true')
+  expect(document.getElementById(title.attributes('aria-describedby')).textContent).toContain('Исправьте название')
+  h.session.consentRequest.mockRejectedValueOnce(createInternalProblem('invalidInput', { errors:{ Source:['Исправьте файл'], FileName:['Неверное имя файла'] } }))
+  await vm().previewDocument()
+  const uploadControl = wrapper.findComponent({ name:'VFileInput' })
+  expect(uploadControl.props('errorMessages')).toEqual(['Исправьте файл', 'Неверное имя файла'])
+  expect(document.activeElement.closest('[data-validation-field]')?.getAttribute('data-validation-field')).toBe('file')
 })
