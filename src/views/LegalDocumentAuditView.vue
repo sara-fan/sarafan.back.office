@@ -141,6 +141,7 @@ async function load() {
 }
 
 function onSearchInput(value) {
+  loadVersion++
   search.value = String(value ?? '').slice(0, 200)
   page.value = 1
   if (searchTimer) globalThis.clearTimeout(searchTimer)
@@ -227,12 +228,12 @@ onUnmounted(() => {
     <PageAlertRegion :problem="visibleProblem" />
     <fieldset
       class="filter-bar"
-      :disabled="busy"
+      :aria-busy="busy"
     >
       <v-text-field
         :model-value="search"
         class="filter-control filter-search"
-        label="Поиск по документу, версии или идентификатору"
+        label="Поиск"
         prepend-inner-icon="$search"
         variant="solo"
         density="compact"
@@ -242,6 +243,7 @@ onUnmounted(() => {
         @update:model-value="onSearchInput"
       />
       <v-select
+        :disabled="busy"
         :model-value="kind"
         class="filter-control"
         :items="kindItems"
@@ -253,6 +255,7 @@ onUnmounted(() => {
         @update:model-value="onKindChange"
       />
       <v-select
+        :disabled="busy"
         :model-value="action"
         class="filter-control"
         :items="actionItems"

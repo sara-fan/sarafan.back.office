@@ -6,6 +6,7 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import ActionButton from '../components/ActionButton.vue'
+import DateRangeFilterBar from '../components/DateRangeFilterBar.vue'
 import PageAlertRegion from '../components/PageAlertRegion.vue'
 import { moscowTime } from '../consentFormatting.js'
 import { createInternalProblem, normalizeProblem } from '../errors/problem.js'
@@ -183,6 +184,7 @@ function reloadFromFirstPage() {
 }
 
 function onSearchInput(value) {
+  loadVersion++
   search.value = String(value ?? '').slice(0, ORDER_SEARCH_LIMIT)
   page.value = 1
   persistState()
@@ -287,9 +289,8 @@ onUnmounted(() => {
     </header>
     <hr class="hr">
     <PageAlertRegion :problem="visibleProblem" />
-    <fieldset
-      class="filter-bar orders-filter-bar"
-      :disabled="busy"
+    <DateRangeFilterBar
+      :aria-busy="busy"
     >
       <v-text-field
         id="order-search"
@@ -305,6 +306,7 @@ onUnmounted(() => {
         @update:model-value="onSearchInput"
       />
       <v-select
+        :disabled="busy"
         :model-value="selectedStatus"
         class="filter-control order-status-filter"
         :items="statusItems"
@@ -339,7 +341,7 @@ onUnmounted(() => {
         clearable
         @update:model-value="onCreatedToChange"
       />
-    </fieldset>
+    </DateRangeFilterBar>
     <v-card
       v-if="!problem || rows.length"
       class="table-card"
@@ -409,18 +411,9 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
-.staff-list .orders-filter-bar { grid-template-columns:minmax(260px, 1fr) minmax(240px, 320px) minmax(150px, 190px) minmax(150px, 190px); }
 .orders-table { --staff-table-height:max(320px, calc(100vh - 300px)); }
 .orders-table :deep(td.order-card-cell) { cursor:pointer; }
 .order-product { display:grid; gap:2px; min-width:200px; }
 .order-product a { color:#176da5; font-size:12px; text-decoration:underline; text-underline-offset:2px; }
 .order-product a:hover { color:#1d3e85; }
-@media (max-width:1100px) {
-  .staff-list .orders-filter-bar { grid-template-columns:1fr 1fr; }
-  .staff-list .orders-filter-bar .filter-search { grid-column:1 / -1; }
-}
-@media (max-width:600px) {
-  .staff-list .orders-filter-bar { grid-template-columns:1fr; }
-  .staff-list .orders-filter-bar .filter-search { grid-column:auto; }
-}
 </style>

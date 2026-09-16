@@ -3,6 +3,7 @@
 // All rights reserved.
 // This file is a part of the Sarafan application
 
+import { useValidationFocus, validationFields } from '../validationFocus.js'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { onBeforeRouteLeave, onBeforeRouteUpdate, useRoute, useRouter } from 'vue-router'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
@@ -16,6 +17,8 @@ import { orderStatusName, safeOrderSource } from '../orderFormatting.js'
 import { CUSTOMER_FIELDS, PRODUCT_FIELDS, priceCents, productForm, productPayload, productValidation, validateOrderDetails } from '../orderProduct.js'
 import { can } from '../roles.js'
 import { useSession } from '../stores/session.js'
+
+const focusRoot = ref(null)
 
 const session = useSession()
 const route = useRoute()
@@ -68,7 +71,7 @@ async function load() {
   } finally { if (current === version) busy.value = false }
 }
 
-async function save() {
+async function saveAction() {
   if (busy.value || !productEditingEnabled.value || localProblem.value) return
   const current = ++version
   busy.value = true
@@ -144,6 +147,9 @@ watch(() => route.params.orderNumber, (next, previous) => {
 })
 onMounted(() => { globalThis.addEventListener('beforeunload', beforeUnload); load() })
 onUnmounted(() => { clear(); globalThis.removeEventListener('beforeunload', beforeUnload) })
+function save(...args) { return focusAfter(() => saveAction(...args), () => validationFields(fieldProblem.value)) }
+
+const focusAfter = useValidationFocus(focusRoot, { context:() => [session.user.value?.id, route.fullPath], active:() => !confirmation.value, ready:() => !busy.value })
 </script>
 
 <template>
@@ -204,6 +210,7 @@ onUnmounted(() => { clear(); globalThis.removeEventListener('beforeunload', befo
       </p>
       <form
         id="order-product-form"
+        ref="focusRoot"
         class="editor-form staff-form order-editor"
         novalidate
         @submit.prevent="save"
@@ -274,6 +281,7 @@ onUnmounted(() => { clear(); globalThis.removeEventListener('beforeunload', befo
             <textarea
               id="comment"
               v-model="form.comment"
+              name="comment"
               rows="3"
               :aria-invalid="problemFieldErrors(fieldProblem, 'comment').length > 0"
               aria-describedby="comment-error"

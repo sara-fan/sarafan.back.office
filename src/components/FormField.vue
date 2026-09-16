@@ -2,14 +2,16 @@
 // Copyright (C) 2026 Maxim [maxirmx] Samsonov (www.sw.consulting)
 // All rights reserved.
 // This file is a part of the Sarafan application
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import ActionButton from './ActionButton.vue'
-import { problemFieldErrors } from '../errors/problem.js'
+import { associatedFieldErrors } from '../errors/problem.js'
 defineOptions({ inheritAttrs:false })
-defineProps({
+const props = defineProps({
   name:{ type:String, required:true }, label:{ type:String, required:true }, problem:{ type:Object, default:null },
-  type:{ type:String, default:'text' }, hint:{ type:String, default:'' }, revealable:Boolean
+  type:{ type:String, default:'text' }, hint:{ type:String, default:'' }, revealable:Boolean,
+  errorOptions:{ type:Object, default:() => ({}) }
 })
+const errors = computed(() => associatedFieldErrors(props.problem, props.name, props.errorOptions))
 const model = defineModel({ type:String, default:'' })
 const reveal = ref(false)
 </script>
@@ -26,7 +28,7 @@ const reveal = ref(false)
         v-bind="$attrs"
         :type="reveal ? 'text' : type"
         :name="name"
-        :aria-invalid="problemFieldErrors(problem, name).length > 0"
+        :aria-invalid="errors.length > 0"
         :aria-describedby="`${hint ? `${name}-hint ` : ''}${name}-error`"
       >
       <ActionButton
@@ -41,7 +43,7 @@ const reveal = ref(false)
       v-bind="$attrs"
       :type="type"
       :name="name"
-      :aria-invalid="problemFieldErrors(problem, name).length > 0"
+      :aria-invalid="errors.length > 0"
       :aria-describedby="`${hint ? `${name}-hint ` : ''}${name}-error`"
     ><p
       v-if="hint"
@@ -55,7 +57,7 @@ const reveal = ref(false)
       class="field-error"
     >
       <span
-        v-for="error in problemFieldErrors(problem, name)"
+        v-for="error in errors"
         :key="error"
       >{{ error }}</span>
     </div>

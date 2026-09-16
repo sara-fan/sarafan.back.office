@@ -3,6 +3,7 @@
 // All rights reserved.
 // This file is a part of the Sarafan application
 import ActionButton from '../components/ActionButton.vue'
+import { useValidationFocus, validationFields } from '../validationFocus.js'
 import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import FormField from '../components/FormField.vue'
@@ -10,6 +11,8 @@ import PageAlertRegion from '../components/PageAlertRegion.vue'
 import { createInternalProblem, hasOnlyPresentedFieldErrors, normalizeProblem, problemFieldErrors } from '../errors/problem.js'
 import { safeReturn } from '../roles.js'
 import { useSession } from '../stores/session.js'
+const focusRoot = ref(null)
+
 const session = useSession()
 const route = useRoute()
 const router = useRouter()
@@ -20,7 +23,7 @@ const busy = ref(false)
 const problem = ref(null)
 const passwordErrors = computed(() => problemFieldErrors(problem.value, 'password'))
 const pageProblem = computed(() => hasOnlyPresentedFieldErrors(problem.value, ['email', 'password']) ? null : problem.value)
-async function submit() {
+async function submitAction() {
   if (busy.value) return
   problem.value = null
   busy.value = true
@@ -34,6 +37,9 @@ async function submit() {
   } catch (value) { problem.value = normalizeProblem(value) }
   finally { busy.value = false }
 }
+function submit(...args) { return focusAfter(() => submitAction(...args), () => validationFields(problem.value)) }
+
+const focusAfter = useValidationFocus(focusRoot, { context:() => route.fullPath, ready:() => !busy.value })
 </script>
 <template>
   <main class="login-layout">
@@ -50,6 +56,7 @@ async function submit() {
         alt=""
       ><span>САРАФАН<small>ОФИС</small></span></a>
       <form
+        ref="focusRoot"
         class="login-card staff-form"
         novalidate
         @submit.prevent="submit"

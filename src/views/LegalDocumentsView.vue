@@ -17,6 +17,14 @@ const rows = ref([])
 const ops = ref(null)
 const search = ref('')
 const kind = ref(null)
+const status = ref(null)
+const statusItems = [
+  { title:'Все статусы', value:null },
+  { title:'Не актуальный', value:'outdated' },
+  { title:'Актуальный', value:'current' },
+  { title:'Будущий', value:'future' }
+]
+const statusName = value => statusItems.find(item => item.value === value)?.title
 const page = ref(1)
 const itemsPerPage = ref(10)
 const sortBy = ref([{ key:'title', order:'asc' }])
@@ -26,22 +34,25 @@ const pendingDelete = ref(null)
 const kindItems = computed(() => [{ title:'Все типы', value:null }, ...(ops.value?.kinds || []).map(item => ({ value:item.value, title:item.name }))])
 const kindName = value => ops.value?.kinds.find(item => item.value === value)?.name
 const headers = [
-  { title:'Действия', key:'actions', sortable:false, width:'120px' },
+  { title:'', key:'actions', sortable:false, width:'120px' },
   { title:'Документ', key:'title' },
   { title:'Версия', key:'displayVersion' },
+  { title:'Статус', key:'statusTitle' },
   { title:'Дата начала действия', key:'effectiveAt' }
 ]
 const filtered = computed(() => rows.value.map(document => ({
   ...document,
   title:document.title || kindName(document.kind),
+  statusTitle:statusName(document.status),
   kindTitle:kindName(document.kind)
 })).filter(document => {
   const text = `${document.title} ${document.kindTitle} ${document.displayVersion}`.toLocaleLowerCase('ru')
   return text.includes(search.value.trim().toLocaleLowerCase('ru')) &&
-    (kind.value === null || document.kind === kind.value)
+    (kind.value === null || document.kind === kind.value) &&
+    (status.value === null || document.status === status.value)
 }))
 
-watch([search, kind], () => { page.value = 1 })
+watch([search, kind, status], () => { page.value = 1 })
 
 async function load() {
   busy.value = true
@@ -49,7 +60,7 @@ async function load() {
   try {
     const [catalogue, documents] = await Promise.all([session.getLegalDocumentOps(), session.consentRequest('/legal-documents')])
     ops.value = catalogue
-    if (!Array.isArray(documents) || documents.some(document => !Number.isInteger(document.kind) || !kindName(document.kind))) throw createInternalProblem('protocolError')
+    if (!Array.isArray(documents) || documents.some(document => !Number.isInteger(document.kind) || !kindName(document.kind) || !['outdated', 'current', 'future'].includes(document.status))) throw createInternalProblem('protocolError')
     rows.value = documents
   } catch (value) { rows.value = []; page.value = 1; problem.value = normalizeProblem(value) }
   finally { busy.value = false }
@@ -62,7 +73,7 @@ function confirmDeletion(document) {
 
 async function reloadDocuments() {
   const documents = await session.consentRequest('/legal-documents')
-  if (!Array.isArray(documents) || documents.some(document => !Number.isInteger(document.kind) || !kindName(document.kind))) throw createInternalProblem('protocolError')
+  if (!Array.isArray(documents) || documents.some(document => !Number.isInteger(document.kind) || !kindName(document.kind) || !['outdated', 'current', 'future'].includes(document.status))) throw createInternalProblem('protocolError')
   rows.value = documents
 }
 
@@ -127,13 +138,13 @@ onMounted(load)
     <PageAlertRegion :problem="problem" />
     <fieldset
       class="filter-bar"
-      :disabled="busy"
+      :aria-busy="busy"
     >
       <v-text-field
         id="legal-document-search"
         v-model="search"
         class="filter-control filter-search"
-        label="Поиск по документу или версии"
+        label="Поиск"
         prepend-inner-icon="$search"
         variant="solo"
         density="compact"
@@ -143,9 +154,22 @@ onMounted(load)
       />
       <v-select
         v-model="kind"
+        :disabled="busy"
         class="filter-control"
         :items="kindItems"
         label="Тип документа"
+        variant="solo"
+        density="compact"
+        active
+        hide-details
+      />
+      <v-select
+        id="legal-document-status"
+        v-model="status"
+        :disabled="busy"
+        class="filter-control"
+        :items="statusItems"
+        label="Статус"
         variant="solo"
         density="compact"
         active

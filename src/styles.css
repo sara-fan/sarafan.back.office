@@ -61,7 +61,7 @@ fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
 .hr { height: 2px; margin: 7px 0 20px; background: var(--primary); border: 0; }
 /* Shared staff lists: /users is the visual reference. */
 .staff-list .filter-bar { display: grid; gap: 12px; align-items: stretch; margin-bottom: 14px; }
-.staff-list .filter-bar:not(.orders-filter-bar) { grid-template-columns: minmax(260px, 1fr) minmax(180px, 240px) minmax(170px, 220px); }
+.staff-list .filter-bar:not(.date-range-filter-bar) { grid-template-columns: minmax(260px, 1fr) minmax(180px, 240px) minmax(170px, 220px); }
 .staff-list .filter-bar .v-input, .staff-list .filter-bar .v-input__control, .staff-list .filter-bar .v-field { height: 100%; min-width: 0; }
 .staff-list .filter-bar .v-field { background: #fff; }
 .staff-list .filter-bar .v-field__input:focus-visible { outline: none; }
@@ -154,8 +154,8 @@ button:disabled { cursor: default; opacity: .4; }
 
 @media (max-width: 960px) {
   .app-page-shell { padding: 22px 20px 32px; }
-  .staff-list .filter-bar:not(.orders-filter-bar) { grid-template-columns: 1fr 1fr; }
-  .staff-list .filter-bar:not(.orders-filter-bar) .filter-search { grid-column: 1 / -1; }
+  .staff-list .filter-bar:not(.date-range-filter-bar) { grid-template-columns: 1fr 1fr; }
+  .staff-list .filter-bar:not(.date-range-filter-bar) .filter-search { grid-column: 1 / -1; }
 }
 
 @media (max-width: 600px) {
@@ -165,8 +165,8 @@ button:disabled { cursor: default; opacity: .4; }
   .header-with-actions { align-items: flex-start; }
   .primary-heading { padding-top: 5px; font-size: 25px; }
   .staff-list .filter-bar { gap: 8px; }
-  .staff-list .filter-bar:not(.orders-filter-bar) { grid-template-columns: 1fr; }
-  .staff-list .filter-bar:not(.orders-filter-bar) .filter-search { grid-column: auto; }
+  .staff-list .filter-bar:not(.date-range-filter-bar) { grid-template-columns: 1fr; }
+  .staff-list .filter-bar:not(.date-range-filter-bar) .filter-search { grid-column: auto; }
   .staff-list .interlaced-table { --staff-table-height: max(320px, calc(100vh - 390px)); }
   .staff-form .form-field, .staff-form-row { grid-template-columns: 1fr; gap: 5px; align-items: start; }
   .staff-form .form-field > input, .staff-form .password-control, .staff-form .field-hint, .staff-form .form-field > .field-error { grid-column: 1; }

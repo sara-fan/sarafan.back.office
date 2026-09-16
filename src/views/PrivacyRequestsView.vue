@@ -4,7 +4,9 @@
 // This file is a part of the Sarafan application
 
 import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { validDate } from '../orderFormatting.js'
 import ActionButton from '../components/ActionButton.vue'
+import DateRangeFilterBar from '../components/DateRangeFilterBar.vue'
 import PageAlertRegion from '../components/PageAlertRegion.vue'
 import { moscowTime } from '../consentFormatting.js'
 import { createInternalProblem, normalizeProblem } from '../errors/problem.js'
@@ -17,11 +19,13 @@ const defaults = {
   page:1,
   pageSize:10,
   sortBy:[{ key:'processed', order:'asc' }],
-  filters:{ search:'', processed:'' }
+  filters:{ search:'', processed:'', requestedFrom:'', requestedTo:'' }
 }
 const normalizeFilters = value => typeof value?.search === 'string' && /^\d{0,10}$/u.test(value.search)
   && ['', 'false', 'true'].includes(value?.processed)
-  ? { search:value.search, processed:value.processed }
+  && [value.requestedFrom ?? '', value.requestedTo ?? ''].every(validDate)
+  && !(value.requestedFrom && value.requestedTo && value.requestedFrom > value.requestedTo)
+  ? { search:value.search, processed:value.processed, requestedFrom:value.requestedFrom ?? '', requestedTo:value.requestedTo ?? '' }
   : null
 
 const session = useSession()
@@ -36,6 +40,8 @@ const rows = ref([])
 const total = ref(0)
 const search = ref(restored.state.filters.search)
 const processed = ref(restored.state.filters.processed)
+const requestedFrom = ref(restored.state.filters.requestedFrom)
+const requestedTo = ref(restored.state.filters.requestedTo)
 const page = ref(restored.state.page)
 const itemsPerPage = ref(restored.state.pageSize)
 const sortBy = ref(restored.state.sortBy)
@@ -54,10 +60,10 @@ const statusItems = [
 ]
 const pageSizeItems = PAGE_SIZE_OPTIONS.map(value => ({ value, title:String(value) }))
 const headers = [
-  { title:'Действия', key:'actions', sortable:false, width:'150px' },
+  { title:'', key:'actions', sortable:false, width:'150px' },
   { title:'Покупатель', key:'customerId' },
-  { title:'Время запроса', key:'requestedAt' },
-  { title:'Статус', key:'processed' }
+  { title:'Статус', key:'processed' },
+  { title:'Дата и время запроса', key:'requestedAt' }
 ]
 const rowKey = request => `${request.customerId}:${request.requestedAt}`
 const requestIsValid = request => Number.isInteger(request?.customerId) && request.customerId > 0
@@ -77,7 +83,7 @@ function persistState() {
       page:page.value,
       pageSize:itemsPerPage.value,
       sortBy:[{ ...activeSort() }],
-      filters:{ search:search.value, processed:processed.value }
+      filters:{ search:search.value, processed:processed.value, requestedFrom:requestedFrom.value, requestedTo:requestedTo.value }
     }
   })
   if (!saved && !preferenceProblem.value) preferenceProblem.value = createInternalProblem('viewPreferencesUnavailable')
@@ -97,6 +103,8 @@ async function load(options) {
   })
   if (search.value) query.set('search', search.value)
   if (processed.value) query.set('processed', processed.value)
+  if (requestedFrom.value) query.set('requestedFrom', requestedFrom.value)
+  if (requestedTo.value) query.set('requestedTo', requestedTo.value)
   try {
     const result = await session.consentRequest(`/consents/withdrawal-requests?${query}`)
     if (version !== loadVersion) return
@@ -104,7 +112,9 @@ async function load(options) {
       || result.pagination.currentPage !== page.value
       || result.pagination.pageSize !== itemsPerPage.value
       || result.sorting.sortBy !== sorting.key || result.sorting.sortOrder !== sorting.order
-      || (result.search ?? '') !== search.value) {
+      || (result.search ?? '') !== search.value
+      || (result.requestedFrom ?? '') !== requestedFrom.value
+      || (result.requestedTo ?? '') !== requestedTo.value) {
       throw createInternalProblem('protocolError')
     }
     const lastPage = Math.max(1, result.pagination.totalPages)
@@ -128,6 +138,7 @@ async function load(options) {
 }
 
 function onSearchInput(value) {
+  loadVersion++
   search.value = String(value ?? '').replace(/\D/gu, '').slice(0, 10)
   page.value = 1
   if (searchTimer) globalThis.clearTimeout(searchTimer)
@@ -140,6 +151,18 @@ function onSearchInput(value) {
 
 function onProcessedChange(value) {
   processed.value = ['', 'false', 'true'].includes(value) ? value : ''
+  page.value = 1
+  persistState()
+  load()
+}
+
+function onDateChange(field, value) {
+  const dates = { requestedFrom:requestedFrom.value, requestedTo:requestedTo.value, [field]:value ?? '' }
+  if (!normalizeFilters({ search:search.value, processed:processed.value, ...dates })) return
+  requestedFrom.value = dates.requestedFrom
+  requestedTo.value = dates.requestedTo
+  if (searchTimer) globalThis.clearTimeout(searchTimer)
+  searchTimer = null
   page.value = 1
   persistState()
   load()
@@ -221,15 +244,15 @@ onUnmounted(() => {
     </header>
     <hr class="hr">
     <PageAlertRegion :problem="visibleProblem" />
-    <fieldset
-      class="filter-bar"
-      :disabled="busy || Boolean(processingKey)"
+    <DateRangeFilterBar
+      :aria-busy="busy"
+      :disabled="Boolean(processingKey)"
     >
       <v-text-field
         id="privacy-request-search"
         :model-value="search"
         class="filter-control filter-search"
-        label="Поиск по номеру покупателя"
+        label="Поиск"
         prepend-inner-icon="$search"
         inputmode="numeric"
         variant="solo"
@@ -240,6 +263,7 @@ onUnmounted(() => {
         @update:model-value="onSearchInput"
       />
       <v-select
+        :disabled="busy"
         :model-value="processed"
         class="filter-control"
         :items="statusItems"
@@ -250,7 +274,35 @@ onUnmounted(() => {
         hide-details
         @update:model-value="onProcessedChange"
       />
-    </fieldset>
+      <v-text-field
+        id="privacy-request-from"
+        :model-value="requestedFrom"
+        :max="requestedTo || undefined"
+        class="filter-control"
+        label="Дата с"
+        type="date"
+        variant="solo"
+        density="compact"
+        active
+        hide-details
+        clearable
+        @update:model-value="onDateChange('requestedFrom', $event)"
+      />
+      <v-text-field
+        id="privacy-request-to"
+        :model-value="requestedTo"
+        :min="requestedFrom || undefined"
+        class="filter-control"
+        label="Дата по"
+        type="date"
+        variant="solo"
+        density="compact"
+        active
+        hide-details
+        clearable
+        @update:model-value="onDateChange('requestedTo', $event)"
+      />
+    </DateRangeFilterBar>
     <v-card
       v-if="!problem || rows.length"
       class="table-card"

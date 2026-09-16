@@ -17,7 +17,7 @@ vi.mock('vue-router', () => ({ useRoute:() => h.route, useRouter:() => ({ push:h
 let wrapper
 const vm = () => wrapper.vm.$.setupState
 const pending = () => { let resolve, reject; const promise = new Promise((a, b) => { resolve = a; reject = b }); return { promise, resolve, reject } }
-async function render() { wrapper = mount(OrderView, { global:{ plugins:[createSarafanVuetify()] } }); await flushPromises() }
+async function render() { wrapper = mount(OrderView, { attachTo:document.body, global:{ plugins:[createSarafanVuetify()] } }); await flushPromises() }
 const remote = type => new ProblemError({ type, code:type.split('/').at(-1).replaceAll('-', '_'), title:'Конфликт', detail:'Обновите данные заказа.', status:409, instance:'/test' })
 beforeEach(() => {
   h.route = reactive({ params:{ orderNumber:'12345678-1' } })
@@ -73,6 +73,7 @@ describe('staff order card', () => {
     expect(vm().form.quantity).toBe('5')
     await vm().save()
     expect(h.session.orderRequest).toHaveBeenCalledTimes(1)
+    expect(document.activeElement).toBe(wrapper.get('#quantity').element)
     await wrapper.get('#quantity').setValue('4')
     await wrapper.get('#sellerPrice').setValue('281.26')
     expect(wrapper.text().match(/Максимальная стоимость заказа/g)).toHaveLength(1)

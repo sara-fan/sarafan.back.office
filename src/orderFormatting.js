@@ -16,7 +16,7 @@ const DATE_PATTERN = /^\d{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])$/u
 const TIMESTAMP_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,7})?(?:Z|[+-]\d{2}:\d{2})$/u
 const ALIAS_PATTERN = /^[a-z][a-z0-9]*(?:[_-][a-z0-9]+)*$/u
 
-const validDate = value => {
+export const validDate = value => {
   if (value === '') return true
   if (typeof value !== 'string' || !DATE_PATTERN.test(value)) return false
   const date = new Date(`${value}T00:00:00Z`)
