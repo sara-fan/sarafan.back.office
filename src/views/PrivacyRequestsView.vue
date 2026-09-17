@@ -5,6 +5,7 @@
 
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { validDate } from '../orderFormatting.js'
+import ListText from '../components/ListText.vue'
 import ActionButton from '../components/ActionButton.vue'
 import ListFilterBar from '../components/ListFilterBar.vue'
 import PageAlertRegion from '../components/PageAlertRegion.vue'
@@ -333,13 +334,13 @@ onUnmounted(() => {
           </div>
         </template>
         <template #[`item.customerId`]="{ item }">
-          <span class="customer-id">№ {{ item.customerId }}</span>
+          <span class="customer-id"><ListText :text="`№ ${item.customerId}`" /></span>
         </template>
         <template #[`item.requestedAt`]="{ item }">
-          {{ moscowTime(item.requestedAt) }}
+          <ListText :text="moscowTime(item.requestedAt)" />
         </template>
         <template #[`item.processed`]="{ item }">
-          <span :class="['status-pill', { inactive:item.processed }]">{{ item.processed ? 'Обработан' : 'Ожидает ручной обработки' }}</span>
+          <span :class="['status-pill', { inactive:item.processed }]"><ListText :text="item.processed ? 'Обработан' : 'Ожидает ручной обработки'" /></span>
         </template>
       </v-data-table-server>
     </v-card>

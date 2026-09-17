@@ -32,12 +32,12 @@ defineEmits(['confirm','cancel'])
       </p>
       <div class="form-actions">
         <ActionButton
-
           icon="$close"
           label="Отмена"
           tooltip-text="Отмена"
           @click="$emit('cancel')"
-        /><ActionButton
+        />
+        <ActionButton
           variant="orange"
           :icon="actionIcon"
           :label="action"
@@ -48,3 +48,6 @@ defineEmits(['confirm','cancel'])
     </section>
   </v-dialog>
 </template>
+<style scoped>
+.form-actions { display:flex; flex-wrap:wrap; gap:12px; }
+</style>

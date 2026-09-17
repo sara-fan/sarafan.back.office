@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Maxim [maxirmx] Samsonov (www.sw.consulting)
 // All rights reserved.
 // This file is a part of the Sarafan application
+import ListText from '../components/ListText.vue'
 import ActionButton from '../components/ActionButton.vue'
 import ListFilterBar from '../components/ListFilterBar.vue'
 import { useRouter } from 'vue-router'
@@ -160,6 +161,9 @@ onMounted(load)
         height="var(--staff-table-height)"
         fixed-header
       >
+        <template #[`item.email`]="{ item }">
+          <ListText :text="item.email" />
+        </template>
         <template #[`item.actions`]="{ item }">
           <div class="actions-container">
             <ActionButton
@@ -180,7 +184,7 @@ onMounted(load)
           </div>
         </template>
         <template #[`item.displayName`]="{ item }">
-          <span class="staff-name">{{ item.displayName }}</span><span
+          <span class="staff-name"><ListText :text="item.displayName" /></span><span
             v-if="item.id === session.user.value?.id"
             class="current-user"
           > (вы)</span>
@@ -191,11 +195,11 @@ onMounted(load)
               v-for="code in item.roles"
               :key="code"
               class="role-chip"
-            >{{ roleLabel(code) }}</span>
+            ><ListText :text="roleLabel(code)" /></span>
           </div>
         </template>
         <template #[`item.isActive`]="{ item }">
-          <span :class="['status-pill', { inactive:!item.isActive }]">{{ item.isActive ? 'Активен' : 'Отключён' }}</span>
+          <span :class="['status-pill', { inactive:!item.isActive }]"><ListText :text="item.isActive ? 'Активен' : 'Отключён'" /></span>
         </template>
       </v-data-table>
     </v-card>

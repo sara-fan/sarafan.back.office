@@ -2,12 +2,18 @@
 // All rights reserved.
 // This file is a part of the Sarafan application
 import { describe, expect, it } from 'vitest'
-import { safeStoreUrl, storeAction, storeIdentity, storeForm, storePayload, storeValidation, logoValidation, validateStore, validateStoreList, validateStoreOps, STORE_ERROR_OPTIONS } from '../src/storeCatalogue.js'
+import { nextStoreOrder, storePlacementErrors, safeStoreUrl, storeAction, storeIdentity, storeForm, storePayload, storeValidation, logoValidation, validateStore, validateStoreList, validateStoreOps, STORE_ERROR_OPTIONS } from '../src/storeCatalogue.js'
 import { associatedFieldErrors, ProblemError } from '../src/errors/problem.js'
 import { validationFields } from '../src/validationFocus.js'
 import { store, ops, logoUrl } from './fixtures/stores.js'
 
 describe('store contracts and atomic payload', () => {
+  it.each([null, {}, { ...ops.officialUrlRules, maximumLength:1 },
+    { ...ops.officialUrlRules, topLevelDomainListVersion:null }, { ...ops.officialUrlRules, topLevelDomainListVersion:'' },
+    ...[null, [], [null], ['com'], ['COM.']].map(topLevelDomains => ({ ...ops.officialUrlRules, topLevelDomains }))
+  ])('rejects malformed URL rules %j', officialUrlRules => {
+    expect(() => validateStoreOps({ ...ops, officialUrlRules })).toThrow()
+  })
   it('validates catalogues and full staff metadata including digest URLs', () => {
     expect(validateStoreOps(ops)).toBe(ops)
     expect(validateStore(store, ops, 1)).toBe(store)
@@ -31,7 +37,7 @@ describe('store contracts and atomic payload', () => {
   ])('rejects incomplete operations %#', value => expect(() => validateStoreOps(value)).toThrow())
   it.each([
     null, {}, ...['name','description','officialUrl'].flatMap(key => [null, '', 'x'.repeat(2050)].map(value => ({ ...store, [key]:value }))),
-    ...Object.entries({ id:0, status:2, showOnHome:1, displayOrder:-1, version:'bad', createdAt:'bad', updatedAt:'2026-09-17', logoUrl:'https://evil.test/logo' }).map(([key,value]) => ({ ...store, [key]:value })),
+    ...Object.entries({ id:0, status:3, displayOrder:-1, version:'bad', createdAt:'bad', updatedAt:'2026-09-17', logoUrl:'https://evil.test/logo' }).map(([key,value]) => ({ ...store, [key]:value })),
     { ...store, version:'00000000-0000-0000-0000-000000000000' }, { ...store, logoUrl:5 },
     { ...store, displayOrder:2147483648 }, { ...store, officialUrl:'javascript:alert(1)' }, { ...store, logoUrl:logoUrl.replace('/1/', '/2/') }
   ])('rejects malformed or unsafe metadata %#', value => expect(() => validateStore(value, ops)).toThrow())
@@ -53,7 +59,7 @@ describe('store contracts and atomic payload', () => {
   })
   it('uses published limits, permits 140–160, enforces activation and integer order', () => {
     const form = storeForm(store)
-    expect(storeForm()).toEqual({ name:'', description:'', officialUrl:'', status:0, showOnHome:false, displayOrder:'0' })
+    expect(storeForm()).toEqual({ name:'', description:'', officialUrl:'', status:0, displayOrder:'0' })
     expect(storeValidation(form, ops, null, false)).toBeNull()
     for (const count of [140,141,160]) expect(storeValidation({ ...form, description:'a'.repeat(count) }, ops, null, false)).toBeNull()
     expect(storeValidation({ ...form, description:'a'.repeat(161) }, ops, null, false).errors.description).toBeTruthy()
@@ -72,9 +78,9 @@ describe('store contracts and atomic payload', () => {
     expect(body.get('name')).toBe('Shop')
     expect(body.get('version')).toBe(store.version)
     expect(body.get('logo')).toBe(file)
-    expect(body.get('showOnHome')).toBe('true')
+    expect(body.get('showOnHome')).toBeNull()
     expect(body.get('displayOrder')).toBe('0')
-    expect([...storePayload(form).keys()]).toEqual(['name','description','officialUrl','status','showOnHome','displayOrder'])
+    expect([...storePayload(form).keys()]).toEqual(['name','description','officialUrl','status','displayOrder'])
   })
   it('maps every canonical validation type to one accessible field', () => {
     for (const [type, fields] of Object.entries(STORE_ERROR_OPTIONS.types)) {
@@ -83,4 +89,19 @@ describe('store contracts and atomic payload', () => {
       expect(associatedFieldErrors(problem, fields[0], STORE_ERROR_OPTIONS)).toEqual(['Исправьте поле'])
     }
   })
+})
+
+it('allocates free numbers and validates placement across all statuses excluding the current record', () => {
+  const stores = [0,1,2].map((status, id) => ({ ...store, id:id+1, status, displayOrder:id }))
+  expect(nextStoreOrder(stores)).toBe(3)
+  expect(nextStoreOrder([stores[0],stores[2]])).toBe(1)
+  for (const item of stores) {
+    expect(storePlacementErrors({ displayOrder:String(item.displayOrder), status:0 }, stores, null, 6)).toHaveProperty('displayOrder')
+    expect(storePlacementErrors({ displayOrder:String(item.displayOrder), status:item.status }, stores, item.id, 6)).toEqual({})
+  }
+  const six = Array.from({ length:6 }, (_, i) => ({ ...store, id:i+1, status:2, displayOrder:i }))
+  expect(storePlacementErrors({ displayOrder:'6', status:2 }, six, null, 6)).toHaveProperty('status')
+  expect(storePlacementErrors({ displayOrder:'0', status:2 }, six, 1, 6)).toEqual({})
+  expect(storePlacementErrors({ displayOrder:'bad', status:0 }, [], null, 6)).toEqual({})
+  expect(storeValidation({ ...storeForm(store), status:2 }, ops, null, false).errors.logo).toBeTruthy()
 })

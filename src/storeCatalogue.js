@@ -4,11 +4,13 @@
 
 import { createInternalProblem, PROBLEM_TYPE_ROOT } from './errors/problem.js'
 import { can } from './roles.js'
+import { normalizeStoreAddress } from './storeAddress.js'
 
-export const STORE_FIELDS = ['name', 'description', 'officialUrl', 'logo', 'status', 'showOnHome', 'displayOrder']
+export const STORE_FIELDS = ['name', 'description', 'officialUrl', 'logo', 'status', 'displayOrder']
 export const STORE_CONFLICT = `${PROBLEM_TYPE_ROOT}store-update-conflict`
 export const STORE_VERSION_INVALID = `${PROBLEM_TYPE_ROOT}invalid-store-version`
 export const STORE_ERROR_OPTIONS = { types:Object.fromEntries(Object.entries({
+  'store-display-order-conflict':'displayOrder', 'store-priority-limit-exceeded':'status',
   'invalid-store-name':'name', 'invalid-store-description':'description', 'invalid-store-url':'officialUrl',
   'invalid-store-status':'status', 'invalid-store-display-order':'displayOrder', 'store-logo-required':'logo',
   'invalid-store-logo-size':'logo', 'invalid-store-logo-type':'logo', 'invalid-store-logo-content':'logo'
@@ -26,10 +28,15 @@ export function safeStoreUrl(value) {
   } catch { return false }
 }
 export function validateStoreOps(value) {
-  if (!value || !Array.isArray(value.statuses) || value.statuses.length !== 2
-    || !['hidden', 'active'].every((alias, index) => value.statuses.some(item => item?.value === index && item.routeAlias === alias && typeof item.name === 'string' && item.name.trim()))
+  const rules = value?.officialUrlRules
+  if (!rules || rules.maximumLength !== value?.limits?.officialUrlMaxLength
+    || typeof rules.topLevelDomainListVersion !== 'string' || !rules.topLevelDomainListVersion.trim()
+    || !Array.isArray(rules.topLevelDomains) || !rules.topLevelDomains.length
+    || rules.topLevelDomains.some(tld => typeof tld !== 'string' || !/^[A-Z0-9-]+$/u.test(tld))) protocol()
+  if (!value || !Array.isArray(value.statuses) || value.statuses.length !== 3
+    || !['hidden', 'active', 'priority'].every((alias, index) => value.statuses.some(item => item?.value === index && item.routeAlias === alias && typeof item.name === 'string' && item.name.trim()))
     || !['view', 'create', 'edit', 'delete'].every(key => typeof value.actions?.[key] === 'boolean')
-    || !['nameMaxLength', 'descriptionMaxLength', 'descriptionRecommendedLength', 'officialUrlMaxLength', 'logoMaxBytes',
+    || !['maxPriorityStores', 'nameMaxLength', 'descriptionMaxLength', 'descriptionRecommendedLength', 'officialUrlMaxLength', 'logoMaxBytes',
       'logoMaxDimension', 'logoMaxPixels', 'logoMaxFrames', 'logoMaxAnimationPixels', 'logoMaxMetadataBytes'].every(key => positive(value.limits?.[key]))
     || value.limits.descriptionRecommendedLength > value.limits.descriptionMaxLength
     || !Array.isArray(value.limits.logoContentTypes) || value.limits.logoContentTypes.length === 0
@@ -47,7 +54,7 @@ export function validateStore(value, ops, id) {
   if (!value || !positive(value.id) || (id !== undefined && value.id !== Number(id))
     || !['name', 'description', 'officialUrl'].every(key => typeof value[key] === 'string' && value[key].trim().length > 0 && value[key].length <= ops.limits[`${key}MaxLength`])
     || !safeStoreUrl(value.officialUrl) || !ops.statuses.some(item => item.value === value.status)
-    || typeof value.showOnHome !== 'boolean' || !Number.isInteger(value.displayOrder) || value.displayOrder < 0 || value.displayOrder > 2147483647
+    || !Number.isInteger(value.displayOrder) || value.displayOrder < 0 || value.displayOrder > 2147483647
     || !uuid(value.version) || !['createdAt', 'updatedAt'].every(key => typeof value[key] === 'string' && /^\d{4}-\d{2}-\d{2}T.+(?:Z|\+00:00)$/u.test(value[key]) && Number.isFinite(Date.parse(value[key])))
     || !(value.logoUrl === null || (typeof value.logoUrl === 'string' && new RegExp(`^/api/v1/backoffice/stores/${value.id}/logo\\?v=[0-9a-f]{64}$`, 'u').test(value.logoUrl)))) protocol()
   return value
@@ -60,7 +67,7 @@ export function validateStoreList(value, ops) {
 }
 export function storeForm(value) {
   return { name:value?.name ?? '', description:value?.description ?? '', officialUrl:value?.officialUrl ?? '',
-    status:value?.status ?? 0, showOnHome:value?.showOnHome ?? false, displayOrder:String(value?.displayOrder ?? 0) }
+    status:value?.status ?? 0, displayOrder:String(value?.displayOrder ?? 0) }
 }
 export function logoValidation(file, limits) {
   if (!file) return null
@@ -74,12 +81,12 @@ export function storeValidation(form, ops, file, hasLogo) {
     const limit = ops.limits[`${key}MaxLength`]
     if (!form[key].trim() || form[key].trim().length > limit) errors[key] = [`Обязательное поле, не более ${limit} символов.`]
   }
-  if (!safeStoreUrl(form.officialUrl.trim())) errors.officialUrl = ['Укажите полный адрес HTTP(S) без учётных данных.']
+  if (!normalizeStoreAddress(form.officialUrl, ops.officialUrlRules)) errors.officialUrl = ['Укажите адрес HTTP(S) с допустимым доменом верхнего уровня, без учётных данных.']
   if (!ops.statuses.some(item => item.value === form.status)) errors.status = ['Выберите статус магазина.']
   if (!/^\d+$/u.test(form.displayOrder) || !Number.isInteger(Number(form.displayOrder)) || Number(form.displayOrder) > 2147483647) errors.displayOrder = ['Укажите целое число от 0 до 2147483647.']
   const logoProblem = logoValidation(file, ops.limits)
   if (logoProblem) Object.assign(errors, logoProblem.errors)
-  else if (form.status === 1 && !file && !hasLogo) errors.logo = ['Для активного магазина необходим логотип.']
+  else if (form.status !== 0 && !file && !hasLogo) errors.logo = ['Для показа магазина необходим логотип.']
   return Object.keys(errors).length ? createInternalProblem('invalidInput', { errors }) : null
 }
 export function storePayload(form, version, file) {
@@ -88,4 +95,23 @@ export function storePayload(form, version, file) {
   if (version) body.append('version', version)
   if (file) body.append('logo', file)
   return body
+}
+
+export function nextStoreOrder(stores) {
+  const used = new Set(stores.map(item => item.displayOrder))
+  let next = 0
+  while (used.has(next)) next++
+  return next
+}
+
+export function storePlacementErrors(form, stores, currentId, maximum) {
+  const others = stores.filter(item => item.id !== currentId)
+  const errors = {}
+  if (/^\d+$/u.test(form.displayOrder) && others.some(item => item.displayOrder === Number(form.displayOrder))) {
+    errors.displayOrder = ['Этот номер порядка показа уже используется другим магазином.']
+  }
+  if (form.status === 2 && others.filter(item => item.status === 2).length >= maximum) {
+    errors.status = [`На главной странице можно показывать не более ${maximum} магазинов.`]
+  }
+  return errors
 }
