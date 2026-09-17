@@ -6,7 +6,7 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import ActionButton from '../components/ActionButton.vue'
-import DateRangeFilterBar from '../components/DateRangeFilterBar.vue'
+import ListFilterBar from '../components/ListFilterBar.vue'
 import PageAlertRegion from '../components/PageAlertRegion.vue'
 import { moscowTime } from '../consentFormatting.js'
 import { createInternalProblem, normalizeProblem } from '../errors/problem.js'
@@ -289,22 +289,12 @@ onUnmounted(() => {
     </header>
     <hr class="hr">
     <PageAlertRegion :problem="visibleProblem" />
-    <DateRangeFilterBar
+    <ListFilterBar
+      :search="search"
+      search-id="order-search"
       :aria-busy="busy"
+      @update:search="onSearchInput"
     >
-      <v-text-field
-        id="order-search"
-        :model-value="search"
-        class="filter-control filter-search"
-        label="Поиск"
-        prepend-inner-icon="$search"
-        variant="solo"
-        density="compact"
-        active
-        hide-details
-        clearable
-        @update:model-value="onSearchInput"
-      />
       <v-select
         :disabled="busy"
         :model-value="selectedStatus"
@@ -341,7 +331,7 @@ onUnmounted(() => {
         clearable
         @update:model-value="onCreatedToChange"
       />
-    </DateRangeFilterBar>
+    </ListFilterBar>
     <v-card
       v-if="!problem || rows.length"
       class="table-card"

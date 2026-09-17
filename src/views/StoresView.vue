@@ -5,6 +5,7 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import ActionButton from '../components/ActionButton.vue'
+import ListFilterBar from '../components/ListFilterBar.vue'
 import PageAlertRegion from '../components/PageAlertRegion.vue'
 import StoreLogo from '../components/StoreLogo.vue'
 import { normalizeProblem } from '../errors/problem.js'
@@ -16,12 +17,20 @@ const router = useRouter()
 const items = ref([])
 const ops = ref(null)
 const status = ref('')
+const search = ref('')
 const busy = ref(false)
 const problem = ref(null)
 const revision = ref(0)
 const page = ref(1)
 let generation = 0
-const filtered = computed(() => items.value.filter(item => status.value === '' || item.status === status.value))
+const statusName = value => ops.value.statuses.find(status => status.value === value).name
+const homeLabel = value => value ? 'Да' : 'Нет'
+const filtered = computed(() => {
+  const query = search.value.trim().toLocaleLowerCase('ru')
+  return items.value.filter(item => (status.value === '' || item.status === status.value)
+    && [item.name, statusName(item.status), homeLabel(item.showOnHome), String(item.displayOrder)]
+      .some(value => value.toLocaleLowerCase('ru').includes(query)))
+})
 const statusItems = computed(() => [{ title:'Все статусы', value:'' }, ...(ops.value?.statuses ?? []).map(item => ({ title:item.name, value:item.value }))])
 const headers = [
   { title:'', key:'actions', sortable:false }, { title:'Логотип', key:'logo', sortable:false },
@@ -49,9 +58,9 @@ async function open(path) {
   try { await router.push(path) }
   catch (value) { if (current === generation) problem.value = normalizeProblem(value) }
 }
-function clear() { generation += 1; items.value = []; ops.value = null; problem.value = null; busy.value = false; status.value = ''; page.value = 1 }
+function clear() { generation += 1; items.value = []; ops.value = null; problem.value = null; busy.value = false; status.value = ''; search.value = ''; page.value = 1 }
 watch(() => storeIdentity(session.user.value), clear, { flush:'sync' })
-watch(status, () => { page.value = 1 })
+watch([search, status], () => { page.value = 1 })
 onMounted(load)
 onUnmounted(clear)
 </script>
@@ -80,8 +89,9 @@ onUnmounted(clear)
     </header>
     <hr class="hr">
     <PageAlertRegion :problem="problem" />
-    <fieldset
-      class="filter-bar"
+    <ListFilterBar
+      v-model:search="search"
+      search-id="store-search"
       :aria-busy="busy"
     >
       <v-select
@@ -95,7 +105,7 @@ onUnmounted(clear)
         active
         hide-details
       />
-    </fieldset>
+    </ListFilterBar>
     <v-card class="table-card">
       <v-data-table
         v-model:page="page"
@@ -128,10 +138,10 @@ onUnmounted(clear)
           />
         </template>
         <template #[`item.status`]="{ item }">
-          <span :class="['status-pill', { inactive:item.status === 0 }]">{{ ops.statuses.find(status => status.value === item.status).name }}</span>
+          <span :class="['status-pill', { inactive:item.status === 0 }]">{{ statusName(item.status) }}</span>
         </template>
         <template #[`item.showOnHome`]="{ item }">
-          {{ item.showOnHome ? 'Да' : 'Нет' }}
+          {{ homeLabel(item.showOnHome) }}
         </template>
       </v-data-table>
     </v-card>
