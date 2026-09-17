@@ -80,21 +80,6 @@ describe('store editor', () => {
     await vm().refresh(); expect(h.push).toHaveBeenCalledTimes(2)
     expect(h.session.storeRequest).toHaveBeenCalledTimes(calls)
   })
-  it.each(['reject', 'abort'])('does not restore a deleted editor after navigation %s', async outcome => {
-    await render(); vm().deleting = true
-    h.session.storeRequest.mockResolvedValueOnce(null)
-    if (outcome === 'reject') h.push.mockRejectedValueOnce(new Error('navigation failed'))
-    else h.push.mockResolvedValueOnce(new Error('navigation aborted'))
-    await vm().remove()
-    expect(vm().committed).toBe('deleted'); expect(vm().form).toBeNull()
-    expect(wrapper.text()).toContain('Магазин удалён.')
-    expect(wrapper.find('button[aria-label="Сохранить изменения"]').exists()).toBe(false)
-    expect(wrapper.find('button[aria-label="Удалить магазин"]').exists()).toBe(false)
-    await vm().save(); await vm().remove()
-    expect(h.session.storeRequest).toHaveBeenCalledTimes(3)
-    await vm().refresh(); expect(h.push).toHaveBeenCalledTimes(2)
-    expect(h.session.storeRequest).toHaveBeenCalledTimes(3)
-  })
   it('renders server status/home errors and wires confirmation actions', async () => {
     await render()
     h.session.storeRequest.mockRejectedValueOnce(createInternalProblem('invalidInput', { errors:{ Status:['Ошибка статуса'], ShowOnHome:['Ошибка выбора'] } }))
@@ -106,8 +91,6 @@ describe('store editor', () => {
     expect(vm().dirty).toBe(true)
     const accept = vm().refresh(); wrapper.findAllComponents(ConfirmDialog)[0].vm.$emit('confirm'); await accept
     expect(vm().dirty).toBe(false)
-    await wrapper.get('button[aria-label="Удалить магазин"]').trigger('click')
-    wrapper.findAllComponents(ConfirmDialog)[1].vm.$emit('cancel'); expect(vm().deleting).toBe(false)
   })
   it('edits atomically and returns only after validated success', async () => {
     await render()
@@ -151,7 +134,7 @@ describe('store editor', () => {
     const edit = ['administrator','shift-manager'].includes(role)
     expect(wrapper.find('button[aria-label="Сохранить изменения"]').exists()).toBe(edit)
     expect(wrapper.find('#logo').exists()).toBe(edit)
-    expect(wrapper.find('button[aria-label="Удалить магазин"]').exists()).toBe(role === 'administrator')
+    expect(wrapper.find('button[aria-label="Удалить магазин"]').exists()).toBe(false)
     if (!edit) { await vm().save(); expect(h.session.storeRequest).toHaveBeenCalledTimes(2) }
     vm().ops.actions.edit = false; await flushPromises()
     expect(wrapper.find('button[aria-label="Сохранить изменения"]').exists()).toBe(false)
@@ -198,19 +181,6 @@ describe('store editor', () => {
     const accepted = vm().refresh(); vm().finish(true); await accepted
     expect(vm().locked).toBe(false); expect(vm().dirty).toBe(false)
   })
-  it('confirms deletion and handles failures/conflicts without discarding draft', async () => {
-    await render(); await vm().remove(); expect(h.session.storeRequest).toHaveBeenCalledTimes(2)
-    await wrapper.get('#name').setValue('Черновик')
-    await wrapper.get('button[aria-label="Удалить магазин"]').trigger('click')
-    expect(vm().deleting).toBe(true)
-    h.session.storeRequest.mockRejectedValueOnce(new Error('secret'))
-    await vm().remove(); expect(vm().form.name).toBe('Черновик')
-    vm().deleting = true; h.session.storeRequest.mockResolvedValueOnce(null)
-    await vm().remove()
-    const [, request] = h.session.storeRequest.mock.calls.at(-1)
-    expect(request.method).toBe('DELETE'); expect(JSON.parse(request.body)).toEqual({ version:store.version })
-    expect(vm().dirty).toBe(false); expect(h.push).toHaveBeenCalledWith('/stores')
-  })
   it('protects dirty refresh, route changes, closure and resolves pending guards on reset', async () => {
     await render(); expect(await h.leave()).toBe(true)
     const clean = new globalThis.Event('beforeunload', { cancelable:true }); globalThis.dispatchEvent(clean); expect(clean.defaultPrevented).toBe(false)
@@ -232,16 +202,15 @@ describe('store editor', () => {
     await vm().refresh(); expect(vm().form.name).toBe(store.name)
     h.push.mockRejectedValueOnce(new Error('secret')); await vm().back(); expect(vm().problem).toBeTruthy()
   })
-  it.each(['ops','details','save','delete'])('ignores late %s completion after identity changes', async phase => {
+  it.each(['ops','details','save'])('ignores late %s completion after identity changes', async phase => {
     const deferred = pending()
     if (phase === 'ops') h.session.storeRequest.mockReturnValueOnce(deferred.promise)
     if (phase === 'details') h.session.storeRequest.mockResolvedValueOnce(copy(ops)).mockReturnValueOnce(deferred.promise)
     await render()
     let action
-    if (phase === 'save' || phase === 'delete') {
+    if (phase === 'save') {
       h.session.storeRequest.mockReturnValueOnce(deferred.promise)
-      if (phase === 'delete') vm().deleting = true
-      action = phase === 'save' ? vm().save() : vm().remove()
+      action = vm().save()
     }
     h.session.user.value = null
     deferred.resolve(phase === 'ops' ? ops : store)
@@ -263,6 +232,53 @@ describe('store editor', () => {
 })
 
 describe('store management list', () => {
+  it('confirms row deletion, sends the row version, and removes it without navigating', async () => {
+    await render(StoresView)
+    await vm().remove(); expect(h.session.storeRequest).toHaveBeenCalledTimes(2)
+    await wrapper.get('button[aria-label="Удалить магазин"]').trigger('click')
+    expect(wrapper.getComponent(ConfirmDialog).props('message')).toContain(store.name)
+    wrapper.getComponent(ConfirmDialog).vm.$emit('cancel'); await flushPromises()
+    expect(vm().pendingDelete).toBeNull(); expect(h.session.storeRequest).toHaveBeenCalledTimes(2)
+    await wrapper.get('button[aria-label="Удалить магазин"]').trigger('click')
+    const request = pending(); h.session.storeRequest.mockReturnValueOnce(request.promise)
+    const action = vm().remove()
+    await vm().remove(); await vm().load(); expect(h.session.storeRequest).toHaveBeenCalledTimes(3)
+    expect(h.session.storeRequest.mock.calls.at(-1)).toEqual(['/stores/1', {
+      method:'DELETE', headers:{ 'Content-Type':'application/json' }, body:JSON.stringify({ version:store.version })
+    }])
+    request.resolve(null); await action
+    expect(vm().items).toEqual([]); expect(vm().page).toBe(1); expect(h.push).not.toHaveBeenCalled()
+  })
+  it.each(['shift-manager','senior-operator','operator'])('hides and guards deletion for %s', async role => {
+    h.session.user.value.roles = [role]; await render(StoresView)
+    expect(wrapper.find('button[aria-label="Удалить магазин"]').exists()).toBe(false)
+    vm().pendingDelete = store; await vm().remove(); expect(h.session.storeRequest).toHaveBeenCalledTimes(2)
+  })
+  it.each([STORE_CONFLICT, STORE_VERSION_INVALID])('requires successful refresh before deletion after %s', async type => {
+    await render(StoresView); vm().pendingDelete = store
+    h.session.storeRequest.mockRejectedValueOnce(new ProblemError({ type, detail:'Обновите данные' }))
+    await vm().remove(); expect(vm().items).toHaveLength(1); expect(vm().deleteLocked).toBe(true)
+    vm().pendingDelete = store; await vm().remove(); expect(h.session.storeRequest).toHaveBeenCalledTimes(3)
+    h.session.storeRequest.mockRejectedValueOnce(new Error('failed refresh'))
+    await vm().load(); expect(vm().deleteLocked).toBe(true)
+    await vm().load(); expect(vm().deleteLocked).toBe(false); expect(vm().pendingDelete).toBeNull()
+  })
+  it('retains rows after deletion failure and permits a confirmed retry', async () => {
+    await render(StoresView); vm().pendingDelete = store
+    h.session.storeRequest.mockRejectedValueOnce(new Error('secret'))
+    await vm().remove(); expect(vm().items).toHaveLength(1); expect(vm().deleteLocked).toBe(false)
+    expect(wrapper.text()).not.toContain('secret')
+    vm().pendingDelete = store; h.session.storeRequest.mockResolvedValueOnce(null)
+    await vm().remove(); expect(vm().items).toEqual([])
+  })
+  it.each(['resolve','reject'])('ignores late deletion %s after identity changes', async outcome => {
+    await render(StoresView); vm().pendingDelete = store
+    const request = pending(); h.session.storeRequest.mockReturnValueOnce(request.promise)
+    const action = vm().remove(); h.session.user.value = null
+    if (outcome === 'resolve') request.resolve(null)
+    else request.reject(new Error('obsolete'))
+    await action; expect(vm().items).toEqual([]); expect(vm().problem).toBeNull(); expect(vm().deleting).toBe(false)
+  })
   it('searches displayed fields in Cyrillic and Latin, combines status, and resets paging and identity', async () => {
     const rows = [store, { ...store, id:2, name:'North Shop', status:1, showOnHome:true, displayOrder:42 }]
     h.session.storeRequest.mockImplementation(async path => path === '/stores/ops' ? copy(ops) : { items:copy(rows) })

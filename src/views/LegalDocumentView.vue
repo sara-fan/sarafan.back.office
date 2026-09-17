@@ -7,6 +7,7 @@ import { useValidationFocus, validationFields } from '../validationFocus.js'
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import ActionButton from '../components/ActionButton.vue'
+import EditorHeaderActions from '../components/EditorHeaderActions.vue'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
 import LegalDocumentReader from '../components/LegalDocumentReader.vue'
 import PageAlertRegion from '../components/PageAlertRegion.vue'
@@ -57,7 +58,6 @@ const effectiveUntil = ref(null)
 const loaded = ref(false)
 const busy = ref(false)
 const problem = ref(null)
-const confirmDelete = ref(false)
 const baseline = ref(null)
 const refreshConfirmation = ref(false)
 let inputVersion = 0
@@ -231,24 +231,6 @@ async function saveAction() {
   })
 }
 
-async function deleteDocument() {
-  confirmDelete.value = false
-  busy.value = true
-  problem.value = null
-  try {
-    await session.consentRequest(`/legal-documents/${selected.value.id}`, { method:'DELETE' })
-    await router.push('/legal-documents')
-  } catch (value) {
-    const deletionProblem = normalizeProblem(value)
-    if (deletionProblem.code === 'legal_document_already_effective') {
-      try { selected.value = await session.consentRequest(`/legal-documents/${id}`) } catch { /* preserve the deletion error */ }
-    }
-    problem.value = deletionProblem
-  } finally {
-    busy.value = false
-  }
-}
-
 async function download(document = selected.value) {
   await perform(async () => downloadBytes(
     await session.consentRequest(`/legal-documents/${document.id}/source`, {
@@ -291,57 +273,43 @@ const focusAfter = useValidationFocus(focusRoot, { context:() => [session.user.v
       <h1 class="primary-heading">
         {{ title }}
       </h1>
-      <div class="header-actions">
-        <ActionButton
-          v-if="!creating"
-          icon="$print"
-          tooltip-text="Распечатать"
-          :disabled="busy || !selected"
-          @click="printDocument"
-        /><ActionButton
-          v-if="!creating"
-          icon="$download"
-          tooltip-text="Скачать"
-          :disabled="busy || !selected"
-          @click="download()"
-        /><ActionButton
-          v-if="!creating"
-          icon="$delete"
-          :tooltip-text="selected?.canDelete ? 'Удалить документ' : 'Удаление невозможно после начала действия документа'"
-          :disabled="busy || !selected?.canDelete"
-          variant="red"
-          @click="confirmDelete = true"
-        /><ActionButton
-          icon="$refresh"
-          tooltip-text="Обновить данные"
-          :disabled="busy"
-          @click="requestRefresh"
-        /><ActionButton
-          v-if="creating"
-          icon="$eye"
-          icon-size="28"
-          tooltip-text="Предварительный просмотр"
-          :loading="busy"
-          :disabled="!loaded"
-          @click="previewDocument"
-        />
-        <ActionButton
-          v-if="creating"
-          icon="$saveChanges"
-          icon-size="28"
-          variant="blue"
-          tooltip-text="Сохранить документ"
-          :disabled="busy || !previewPayload || !(form?.displayVersion || '').trim()"
-          @click="save"
-        />
-        <ActionButton
-          icon="$close"
-          icon-size="28"
-          tooltip-text="Вернуться к списку"
-          :disabled="busy"
-          @click="cancel"
-        />
-      </div>
+      <EditorHeaderActions
+        form="legal-document-form"
+        :loaded="loaded"
+        :busy="busy"
+        :show-save="creating"
+        :save-disabled="!previewPayload || !(form?.displayVersion || '').trim()"
+        save-tooltip="Сохранить документ"
+        cancel-tooltip="Вернуться к списку"
+        @refresh="requestRefresh"
+        @cancel="cancel"
+      >
+        <template #before>
+          <ActionButton
+            v-if="!creating"
+            icon="$print"
+            tooltip-text="Распечатать"
+            :disabled="busy || !selected"
+            @click="printDocument"
+          />
+          <ActionButton
+            v-if="!creating"
+            icon="$download"
+            tooltip-text="Скачать"
+            :disabled="busy || !selected"
+            @click="download()"
+          />
+          <ActionButton
+            v-if="creating"
+            icon="$eye"
+            icon-size="28"
+            tooltip-text="Предварительный просмотр"
+            :loading="busy"
+            :disabled="!loaded"
+            @click="previewDocument"
+          />
+        </template>
+      </EditorHeaderActions>
     </header>
     <hr class="hr">
     <PageAlertRegion :problem="problem" />
@@ -357,10 +325,10 @@ const focusAfter = useValidationFocus(focusRoot, { context:() => [session.user.v
       id="legal-document-form"
       ref="focusRoot"
       class="editor-form staff-form legal-workspace legal-document-form"
-      @submit.prevent="previewDocument"
+      @submit.prevent="save"
     >
       <fieldset
-        class="legal-form-grid"
+        class="legal-form-grid staff-form-grid"
         :disabled="busy"
       >
         <v-select
@@ -373,6 +341,7 @@ const focusAfter = useValidationFocus(focusRoot, { context:() => [session.user.v
           label="Тип"
           variant="outlined"
           density="compact"
+          hide-details="auto"
           @update:model-value="changeKind"
         />
         <v-text-field
@@ -385,6 +354,7 @@ const focusAfter = useValidationFocus(focusRoot, { context:() => [session.user.v
           maxlength="200"
           variant="outlined"
           density="compact"
+          hide-details="auto"
         />
         <v-text-field
           v-model="form.displayVersion"
@@ -397,6 +367,7 @@ const focusAfter = useValidationFocus(focusRoot, { context:() => [session.user.v
           maxlength="64"
           variant="outlined"
           density="compact"
+          hide-details="auto"
         />
         <v-text-field
           v-model="form.effectiveDate"
@@ -410,6 +381,7 @@ const focusAfter = useValidationFocus(focusRoot, { context:() => [session.user.v
           :min="moscowDateInput()"
           variant="outlined"
           density="compact"
+          hide-details="auto"
         />
         <v-file-input
           v-model="file"
@@ -421,6 +393,7 @@ const focusAfter = useValidationFocus(focusRoot, { context:() => [session.user.v
           label="Исходный файл UTF-8 Markdown (до 256 Кб)"
           variant="outlined"
           density="compact"
+          hide-details="auto"
         />
       </fieldset>
       <p class="format-note">
@@ -469,14 +442,6 @@ const focusAfter = useValidationFocus(focusRoot, { context:() => [session.user.v
       @cancel="refreshConfirmation = false"
       @confirm="confirmRefresh"
     />
-    <ConfirmDialog
-      :open="confirmDelete"
-      message="Удалить этот документ? Действие доступно только до даты начала действия и будет записано в журнал."
-      action="Удалить документ"
-      action-icon="$delete"
-      @cancel="confirmDelete = false"
-      @confirm="deleteDocument"
-    />
   </section>
 </template>
 
@@ -484,7 +449,7 @@ const focusAfter = useValidationFocus(focusRoot, { context:() => [session.user.v
 .legal-workspace { padding:20px; overflow-wrap:anywhere; }
 .legal-document-form { padding:0; }
 .legal-preview-surface { padding:18px; margin-top:18px; background:#fff; border:1px solid #dbe5ee; border-radius:4px; }
-.legal-form-grid { display:grid; grid-template-columns:minmax(340px, 1.25fr) minmax(280px, 1fr) minmax(160px, .55fr) minmax(210px, .7fr); gap:10px 12px; }
+.legal-form-grid { grid-template-columns:minmax(340px, 1.25fr) minmax(280px, 1fr) minmax(160px, .55fr) minmax(210px, .7fr); column-gap:12px; }
 .legal-version { max-width:140px; }
 .legal-effective-date { max-width:220px; }
 .legal-file { grid-column:1 / -1; }

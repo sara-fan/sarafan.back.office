@@ -4,7 +4,6 @@
 // This file is a part of the Sarafan application
 import { computed, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import ActionButton from '../components/ActionButton.vue'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
 import EditorHeaderActions from '../components/EditorHeaderActions.vue'
 import FormField from '../components/FormField.vue'
@@ -30,14 +29,12 @@ const baseline = ref('')
 const problem = ref(null)
 const busy = ref(false)
 const locked = ref(false)
-const deleting = ref(false)
 const committed = ref('')
 const revision = ref(0)
 let generation = 0
 const dirty = computed(() => !!form.value && (file.value !== null || JSON.stringify(form.value) !== baseline.value))
 const { confirmation, confirmDiscard, finish } = useDiscardChanges(dirty)
 const editable = computed(() => !committed.value && storeAction(session.user.value, ops.value, creating.value ? 'create' : 'edit'))
-const canDelete = computed(() => !committed.value && !creating.value && storeAction(session.user.value, ops.value, 'delete'))
 const errors = field => associatedFieldErrors(problem.value, field, STORE_ERROR_OPTIONS)
 const pageProblem = computed(() => {
   if (hasOnlyPresentedFieldErrors(problem.value, STORE_FIELDS)) return null
@@ -101,7 +98,7 @@ async function saveAction() {
   } catch (value) { if (current === generation) failure(value) }
   finally { if (current === generation) busy.value = false }
 }
-const focusAfter = useValidationFocus(focusRoot, { context:() => [storeIdentity(session.user.value), route.fullPath], active:() => !confirmation.value && !deleting.value, ready:() => !busy.value })
+const focusAfter = useValidationFocus(focusRoot, { context:() => [storeIdentity(session.user.value), route.fullPath], active:() => !confirmation.value, ready:() => !busy.value })
 function save() { return focusAfter(saveAction, () => validationFields(problem.value, STORE_ERROR_OPTIONS)) }
 async function selectLogo(event) {
   const selected = event.target.files?.[0]
@@ -119,30 +116,11 @@ function previewFailed(selected) {
   if (selected !== file.value || !editable.value) return
   return focusAfter(() => { invalidFile.value = selected; problem.value = previewProblem() }, () => ['logo'])
 }
-async function remove() {
-  if (!deleting.value || !canDelete.value || busy.value || locked.value) return
-  deleting.value = false
-  const current = ++generation
-  busy.value = true
-  problem.value = null
-  try {
-    await session.storeRequest(`/stores/${details.value.id}`, { method:'DELETE', headers:{ 'Content-Type':'application/json' }, body:JSON.stringify({ version:details.value.version }) })
-    if (current !== generation) return
-    committed.value = 'deleted'
-    details.value = null
-    form.value = null
-    file.value = null
-    invalidFile.value = null
-    baseline.value = ''
-    await back()
-  } catch (value) { if (current === generation) failure(value) }
-  finally { if (current === generation) busy.value = false }
-}
 function clear() {
   generation += 1
   details.value = null; form.value = null; ops.value = null; file.value = null
   invalidFile.value = null
-  baseline.value = ''; problem.value = null; busy.value = false; locked.value = false; deleting.value = false
+  baseline.value = ''; problem.value = null; busy.value = false; locked.value = false
   committed.value = ''
   finish(false)
 }
@@ -166,18 +144,7 @@ onUnmounted(clear)
         :save-disabled="locked || (!creating && !dirty)"
         @refresh="refresh"
         @cancel="back"
-      >
-        <template #before>
-          <ActionButton
-            v-if="canDelete && details"
-            icon="$delete"
-            variant="red"
-            tooltip-text="Удалить магазин"
-            :disabled="busy || locked"
-            @click="deleting = true"
-          />
-        </template>
-      </EditorHeaderActions>
+      />
     </header>
     <hr class="hr">
     <PageAlertRegion :problem="pageProblem" />
@@ -191,13 +158,13 @@ onUnmounted(clear)
       v-if="locked"
       role="status"
     >
-      Данные магазина изменились. Обновите карточку перед сохранением или удалением.
+      Данные магазина изменились. Обновите карточку перед сохранением.
     </p>
     <p
       v-if="committed"
       role="status"
     >
-      {{ committed === 'saved' ? 'Магазин сохранён.' : 'Магазин удалён.' }} Вернитесь к списку магазинов.
+      Магазин сохранён. Вернитесь к списку магазинов.
     </p>
     <p v-if="form && !editable && !committed">
       Магазин доступен только для просмотра.
@@ -353,15 +320,6 @@ onUnmounted(clear)
       action="Продолжить без сохранения"
       @cancel="finish(false)"
       @confirm="finish(true)"
-    />
-    <ConfirmDialog
-      :open="deleting"
-      title="Удалить магазин?"
-      message="Магазин и логотип будут удалены навсегда. Несохранённые изменения будут потеряны."
-      action="Удалить магазин"
-      action-icon="$delete"
-      @cancel="deleting = false"
-      @confirm="remove"
     />
   </section>
 </template>

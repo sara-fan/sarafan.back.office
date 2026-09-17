@@ -162,6 +162,7 @@ const focusAfter = useValidationFocus(focusRoot, { context:() => [session.user.v
         form="order-product-form"
         :loaded="!!details"
         :busy="busy"
+        :show-save="!!details?.canEditProduct && can(session.user.value, 'manualQuotes')"
         :save-disabled="!productEditingEnabled || !!localProblem || !dirty"
         @refresh="refresh"
         @cancel="back"
@@ -219,7 +220,7 @@ const focusAfter = useValidationFocus(focusRoot, { context:() => [session.user.v
           Товар
         </h2>
         <fieldset
-          class="product-grid"
+          class="product-grid staff-form-grid"
           :disabled="busy || !productEditingEnabled"
         >
           <div class="product-name-cell">
@@ -331,7 +332,7 @@ const focusAfter = useValidationFocus(focusRoot, { context:() => [session.user.v
       <h2 class="primary-heading buyer-heading">
         Покупатель
       </h2>
-      <dl class="buyer-grid staff-form">
+      <dl class="buyer-grid staff-form staff-form-grid">
         <div
           v-for="(label, key) in CUSTOMER_FIELDS"
           :key="key"
@@ -360,7 +361,7 @@ const focusAfter = useValidationFocus(focusRoot, { context:() => [session.user.v
 <style scoped>
 .order-meta { display:flex; flex-wrap:wrap; align-items:center; gap:12px 24px; margin-bottom:20px; color:#526a80; }
 .product-page-link { margin-left:auto; color:#1976d2; font-weight:500; }
-.product-grid { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); grid-template-areas:"name name" "store price" "quantity total" "color size" "comment comment"; column-gap:24px; row-gap:16px; }
+.product-grid { grid-template-columns:repeat(2, minmax(0, 1fr)); grid-template-areas:"name name" "store price" "quantity total" "color size" "comment comment"; column-gap:24px; }
 .buyer-grid { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); column-gap:24px; }
 .full-width { grid-column:1 / -1; }
 .product-name-cell { grid-area:name; }

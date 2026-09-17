@@ -5,11 +5,12 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import ActionButton from '../components/ActionButton.vue'
+import ConfirmDialog from '../components/ConfirmDialog.vue'
 import ListFilterBar from '../components/ListFilterBar.vue'
 import PageAlertRegion from '../components/PageAlertRegion.vue'
 import StoreLogo from '../components/StoreLogo.vue'
 import { normalizeProblem } from '../errors/problem.js'
-import { storeAction, storeIdentity, validateStoreList, validateStoreOps } from '../storeCatalogue.js'
+import { STORE_CONFLICT, STORE_VERSION_INVALID, storeAction, storeIdentity, validateStoreList, validateStoreOps } from '../storeCatalogue.js'
 import { useSession } from '../stores/session.js'
 
 const session = useSession()
@@ -22,6 +23,9 @@ const busy = ref(false)
 const problem = ref(null)
 const revision = ref(0)
 const page = ref(1)
+const pendingDelete = ref(null)
+const deleting = ref(false)
+const deleteLocked = ref(false)
 let generation = 0
 const statusName = value => ops.value.statuses.find(status => status.value === value).name
 const homeLabel = value => value ? 'Да' : 'Нет'
@@ -38,6 +42,8 @@ const headers = [
   { title:'На главной', key:'showOnHome', sortable:false }, { title:'Порядок', key:'displayOrder', sortable:false }
 ]
 async function load() {
+  if (deleting.value) return
+  pendingDelete.value = null
   const current = ++generation
   busy.value = true
   problem.value = null
@@ -48,6 +54,7 @@ async function load() {
     if (current !== generation) return
     ops.value = catalogue
     items.value = data
+    deleteLocked.value = false
     page.value = 1
     revision.value += 1
   } catch (value) { if (current === generation) problem.value = normalizeProblem(value) }
@@ -58,7 +65,27 @@ async function open(path) {
   try { await router.push(path) }
   catch (value) { if (current === generation) problem.value = normalizeProblem(value) }
 }
-function clear() { generation += 1; items.value = []; ops.value = null; problem.value = null; busy.value = false; status.value = ''; search.value = ''; page.value = 1 }
+async function remove() {
+  if (!pendingDelete.value || busy.value || deleteLocked.value || !storeAction(session.user.value, ops.value, 'delete')) return
+  const target = pendingDelete.value
+  pendingDelete.value = null
+  const current = ++generation
+  busy.value = true
+  deleting.value = true
+  problem.value = null
+  try {
+    await session.storeRequest(`/stores/${target.id}`, { method:'DELETE', headers:{ 'Content-Type':'application/json' }, body:JSON.stringify({ version:target.version }) })
+    if (current !== generation) return
+    items.value = items.value.filter(item => item.id !== target.id)
+    page.value = 1
+  } catch (value) {
+    if (current === generation) {
+      problem.value = normalizeProblem(value)
+      if ([STORE_CONFLICT, STORE_VERSION_INVALID].includes(problem.value.type)) deleteLocked.value = true
+    }
+  } finally { if (current === generation) { busy.value = false; deleting.value = false } }
+}
+function clear() { generation += 1; items.value = []; ops.value = null; problem.value = null; busy.value = false; status.value = ''; search.value = ''; page.value = 1; pendingDelete.value = null; deleting.value = false; deleteLocked.value = false }
 watch(() => storeIdentity(session.user.value), clear, { flush:'sync' })
 watch([search, status], () => { page.value = 1 })
 onMounted(load)
@@ -124,12 +151,22 @@ onUnmounted(clear)
         fixed-header
       >
         <template #[`item.actions`]="{ item }">
-          <ActionButton
-            :icon="storeAction(session.user.value, ops, 'edit') ? '$edit' : '$eye'"
-            tooltip-text="Открыть магазин"
-            :disabled="busy"
-            @click="open(`/stores/${item.id}`)"
-          />
+          <div class="actions-container">
+            <ActionButton
+              :icon="storeAction(session.user.value, ops, 'edit') ? '$edit' : '$eye'"
+              tooltip-text="Открыть магазин"
+              :disabled="busy"
+              @click="open(`/stores/${item.id}`)"
+            />
+            <ActionButton
+              v-if="storeAction(session.user.value, ops, 'delete')"
+              icon="$delete"
+              variant="red"
+              tooltip-text="Удалить магазин"
+              :disabled="busy || deleteLocked"
+              @click="pendingDelete = item"
+            />
+          </div>
         </template>
         <template #[`item.logo`]="{ item }">
           <StoreLogo
@@ -145,5 +182,20 @@ onUnmounted(clear)
         </template>
       </v-data-table>
     </v-card>
+    <p
+      v-if="deleteLocked"
+      role="status"
+    >
+      Данные магазина изменились. Обновите список перед удалением.
+    </p>
+    <ConfirmDialog
+      :open="!!pendingDelete"
+      title="Удалить магазин?"
+      :message="`Магазин «${pendingDelete?.name ?? ''}» и логотип будут удалены навсегда.`"
+      action="Удалить магазин"
+      action-icon="$delete"
+      @cancel="pendingDelete = null"
+      @confirm="remove"
+    />
   </section>
 </template>
