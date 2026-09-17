@@ -7,6 +7,7 @@ import { reactive, ref } from 'vue'
 import StoreView from '../src/views/StoreView.vue'
 import StoresView from '../src/views/StoresView.vue'
 import StoreLogo from '../src/components/StoreLogo.vue'
+import StaffFileInput from '../src/components/StaffFileInput.vue'
 import ConfirmDialog from '../src/components/ConfirmDialog.vue'
 import { createSarafanVuetify } from '../src/plugins/vuetify.js'
 import { createInternalProblem, ProblemError } from '../src/errors/problem.js'
@@ -38,7 +39,7 @@ describe('store editor', () => {
     expect(vm().form.status).toBe(1)
     await vm().save()
     expect(h.session.storeRequest).toHaveBeenCalledTimes(2)
-    expect(document.activeElement).toBe(wrapper.get('#logo').element)
+    expect(document.activeElement).toBe(wrapper.get('button[aria-label="Выбрать логотип"]').element)
     await wrapper.get('#status').setValue(0)
     h.session.storeRequest.mockResolvedValueOnce(copy(store))
     await vm().save()
@@ -50,18 +51,18 @@ describe('store editor', () => {
   it('associates corrupt image preview failures with the upload field on repeated attempts', async () => {
     await render()
     for (let attempt = 0; attempt < 2; attempt++) {
-      await vm().selectLogo({ target:{ files:[new globalThis.File(['not a PNG'], 'bad.png', { type:'image/png' })] } })
+      await vm().selectLogo(new globalThis.File(['not a PNG'], 'bad.png', { type:'image/png' }))
       await flushPromises(); await wrapper.get('img').trigger('error'); await flushPromises()
       expect(wrapper.get('#logo').attributes('aria-invalid')).toBe('true')
       expect(wrapper.get('#logo-error').text()).toContain('Не удалось показать')
-      expect(document.activeElement).toBe(wrapper.get('#logo').element)
+      expect(document.activeElement).toBe(wrapper.get('button[aria-label="Выбрать логотип"]').element)
       expect(wrapper.findAll('[role="alert"]')).toHaveLength(0)
     }
     await wrapper.get('#name').setValue('Черновик')
     await vm().save(); expect(h.session.storeRequest).toHaveBeenCalledTimes(2)
     expect(vm().form.name).toBe('Черновик')
     const old = vm().file
-    await vm().selectLogo({ target:{ files:[new globalThis.File(['PNG'], 'good.png', { type:'image/png' })] } })
+    await vm().selectLogo(new globalThis.File(['PNG'], 'good.png', { type:'image/png' }))
     await vm().previewFailed(old); expect(vm().invalidFile).toBeNull()
     expect(vm().problem).toBeNull()
   })
@@ -101,7 +102,7 @@ describe('store editor', () => {
     await wrapper.get('#displayOrder').setValue('10')
     await wrapper.get('[name="showOnHome"]').setValue(true)
     const file = new globalThis.File(['PNG'], 'logo.png', { type:'image/png' })
-    await vm().selectLogo({ target:{ files:[file], value:'secret' } })
+    await vm().selectLogo(file)
     expect(wrapper.get('img').attributes('src')).toBe('blob:logo')
     h.session.storeRequest.mockResolvedValueOnce({ ...store, name:'Новый магазин', displayOrder:10 })
     await wrapper.get('form').trigger('submit'); await flushPromises()
@@ -161,14 +162,14 @@ describe('store editor', () => {
   it('validates file selection and activation without losing the previous replacement', async () => {
     await render()
     await wrapper.get('#status').setValue(1)
-    await vm().save(); expect(document.activeElement).toBe(wrapper.get('#logo').element)
+    await vm().save(); expect(document.activeElement).toBe(wrapper.get('button[aria-label="Выбрать логотип"]').element)
     const good = new globalThis.File(['png'], 'image.png', { type:'image/png' })
-    await vm().selectLogo({ target:{ files:[good] } }); await flushPromises()
-    await vm().selectLogo({ target:{ files:[new globalThis.File(['svg'], 'x.svg', { type:'image/svg+xml' })] } })
+    await vm().selectLogo(good); await flushPromises()
+    await vm().selectLogo(new globalThis.File(['svg'], 'x.svg', { type:'image/svg+xml' }))
     expect(vm().file).toBe(good)
     expect(wrapper.get('#logo-error').text()).toContain('PNG')
-    expect(document.activeElement).toBe(wrapper.get('#logo').element)
-    await vm().selectLogo({ target:{ files:[] } })
+    expect(document.activeElement).toBe(wrapper.get('button[aria-label="Выбрать логотип"]').element)
+    await vm().selectLogo()
     expect(vm().file).toBe(good)
   })
   it.each([STORE_CONFLICT, STORE_VERSION_INVALID])('locks writes until explicit refresh after %s', async type => {
@@ -395,4 +396,41 @@ describe('authenticated logo lifecycle', () => {
     h.session.user.value = { id:2, roles:['operator'] }; await flushPromises()
     wrapper.unmount(); wrapper = null; failed.reject(new Error('secret')); await flushPromises()
   })
+})
+
+it('uses the paperclip picker and retains the accepted filename after an invalid replacement', async () => {
+  await render()
+  const input = wrapper.get('#logo')
+  const choose = vi.spyOn(input.element, 'click')
+  await wrapper.get('button[aria-label="Выбрать логотип"]').trigger('click')
+  expect(choose).toHaveBeenCalledOnce()
+  const good = new globalThis.File(['png'], 'accepted.png', { type:'image/png' })
+  Object.defineProperty(input.element, 'files', { configurable:true, value:[good] })
+  await input.trigger('change'); await flushPromises()
+  expect(vm().file).toBe(good)
+  expect(wrapper.get('.v-file-input').text()).toContain('accepted.png')
+  Object.defineProperty(input.element, 'files', { configurable:true, value:[new globalThis.File(['svg'], 'invalid.svg', { type:'image/svg+xml' })] })
+  await input.trigger('change'); await flushPromises()
+  expect(vm().file).toBe(good)
+  expect(wrapper.get('.v-file-input').text()).toContain('accepted.png')
+  expect(wrapper.get('.v-file-input').text()).not.toContain('invalid.svg')
+  expect(document.activeElement).toBe(wrapper.get('button[aria-label="Выбрать логотип"]').element)
+  expect(wrapper.get('button[aria-label="Выбрать логотип"]').attributes('aria-describedby')).toBe('logo-hint logo-error')
+  vm().locked = true
+  await flushPromises()
+  expect(wrapper.get('button[aria-label="Выбрать логотип"]').attributes('disabled')).toBeDefined()
+})
+
+it('normalizes framework file lists and clearing through the shared picker', async () => {
+  await render(StaffFileInput, { name:'upload', tooltip:'Выбрать файл' })
+  const file = new globalThis.File(['png'], 'long-filename-that-must-not-be-truncated.png', { type:'image/png' })
+  const control = wrapper.findComponent({ name:'VFileInput' })
+  control.vm.$emit('update:modelValue', [file])
+  expect(wrapper.emitted('update:modelValue').at(-1)).toEqual([file])
+  await wrapper.setProps({ modelValue:file })
+  expect(wrapper.text()).toContain(file.name)
+  control.vm.$emit('update:modelValue', [])
+  expect(wrapper.emitted('update:modelValue').at(-1)).toEqual([null])
+  control.vm.$emit('update:modelValue', null)
+  expect(wrapper.emitted('update:modelValue').at(-1)).toEqual([null])
 })

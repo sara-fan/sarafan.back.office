@@ -9,6 +9,7 @@ import { useRoute, useRouter } from 'vue-router'
 import ActionButton from '../components/ActionButton.vue'
 import EditorHeaderActions from '../components/EditorHeaderActions.vue'
 import FormField from '../components/FormField.vue'
+import StaffFileInput from '../components/StaffFileInput.vue'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
 import LegalDocumentReader from '../components/LegalDocumentReader.vue'
 import PageAlertRegion from '../components/PageAlertRegion.vue'
@@ -54,7 +55,6 @@ const preview = ref(null)
 const previewPayload = ref(null)
 const form = ref(null)
 const file = ref(null)
-const uploadInput = ref(null)
 const reader = ref(null)
 const effectiveUntil = ref(null)
 const loaded = ref(false)
@@ -405,29 +405,15 @@ const focusAfter = useValidationFocus(focusRoot, { context:() => [session.user.v
           :error-options="legalFocusOptions"
         >
           <template #control="{ controlAttrs }">
-            <v-file-input
-              ref="uploadInput"
+            <StaffFileInput
               v-model="file"
               v-bind="controlAttrs"
-              class="staff-form-control"
-              data-validation-field="file"
+              name="file"
+              :disabled="busy"
+              tooltip="Выбрать файл Markdown"
               :aria-describedby="'legal-file-guidance ' + controlAttrs['aria-describedby']"
               accept=".md,text/markdown"
-              variant="outlined"
-              density="compact"
-              hide-details
-            >
-              <template #prepend>
-                <ActionButton
-                  icon="$file"
-                  tooltip-text="Выбрать файл Markdown"
-                  :disabled="busy"
-                  :aria-invalid="controlAttrs['aria-invalid']"
-                  :aria-describedby="'legal-file-guidance ' + controlAttrs['aria-describedby']"
-                  @click="uploadInput.click()"
-                />
-              </template>
-            </v-file-input>
+            />
           </template>
         </FormField>
       </fieldset>

@@ -7,6 +7,7 @@ import { useRoute, useRouter } from 'vue-router'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
 import EditorHeaderActions from '../components/EditorHeaderActions.vue'
 import FormField from '../components/FormField.vue'
+import StaffFileInput from '../components/StaffFileInput.vue'
 import PageAlertRegion from '../components/PageAlertRegion.vue'
 import StoreLogo from '../components/StoreLogo.vue'
 import { associatedFieldErrors, createInternalProblem, formPageProblem, normalizeProblem } from '../errors/problem.js'
@@ -97,9 +98,7 @@ async function saveAction() {
 }
 const focusAfter = useValidationFocus(focusRoot, { context:() => [storeIdentity(session.user.value), route.fullPath], active:() => !confirmation.value, ready:() => !busy.value })
 function save() { return focusAfter(saveAction, () => validationFields(problem.value, STORE_ERROR_OPTIONS)) }
-async function selectLogo(event) {
-  const selected = event.target.files?.[0]
-  event.target.value = ''
+async function selectLogo(selected) {
   if (!selected || !editable.value || busy.value || locked.value) return
   return focusAfter(() => {
     problem.value = logoValidation(selected, ops.value.limits)
@@ -217,16 +216,18 @@ onUnmounted(clear)
         />
         <div class="form-field">
           <label for="logo">Логотип</label>
-          <input
+          <StaffFileInput
             v-if="editable"
-            id="logo"
             name="logo"
-            type="file"
+            :model-value="file"
+            :disabled="busy || locked"
+            :clearable="false"
+            tooltip="Выбрать логотип"
             :accept="ops.limits.logoContentTypes.join(',')"
             :aria-invalid="errors('logo').length > 0"
             aria-describedby="logo-hint logo-error"
-            @change="selectLogo"
-          >
+            @update:model-value="selectLogo"
+          />
           <p
             v-if="editable"
             id="logo-hint"
@@ -306,7 +307,7 @@ onUnmounted(clear)
           :error-options="STORE_ERROR_OPTIONS"
         />
       </fieldset>
-      <p class="store-order-hint">
+      <p class="field-hint">
         Меньшее число — раньше в рекомендуемом каталоге и на главной. При равенстве первым идёт магазин с меньшим ID. На главной показываются первые шесть активных выбранных магазинов. Алфавитная сортировка покупателя не меняет сохранённый порядок.
       </p>
     </form>
