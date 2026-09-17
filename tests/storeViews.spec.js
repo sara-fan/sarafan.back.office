@@ -7,6 +7,7 @@ import { reactive, ref } from 'vue'
 import StoreView from '../src/views/StoreView.vue'
 import StoresView from '../src/views/StoresView.vue'
 import StoreLogo from '../src/components/StoreLogo.vue'
+import StaffFileInput from '../src/components/StaffFileInput.vue'
 import ConfirmDialog from '../src/components/ConfirmDialog.vue'
 import { createSarafanVuetify } from '../src/plugins/vuetify.js'
 import { createInternalProblem, ProblemError } from '../src/errors/problem.js'
@@ -38,7 +39,7 @@ describe('store editor', () => {
     expect(vm().form.status).toBe(1)
     await vm().save()
     expect(h.session.storeRequest).toHaveBeenCalledTimes(2)
-    expect(document.activeElement).toBe(wrapper.get('#logo').element)
+    expect(document.activeElement).toBe(wrapper.get('button[aria-label="Выбрать логотип"]').element)
     await wrapper.get('#status').setValue(0)
     h.session.storeRequest.mockResolvedValueOnce(copy(store))
     await vm().save()
@@ -50,18 +51,18 @@ describe('store editor', () => {
   it('associates corrupt image preview failures with the upload field on repeated attempts', async () => {
     await render()
     for (let attempt = 0; attempt < 2; attempt++) {
-      await vm().selectLogo({ target:{ files:[new globalThis.File(['not a PNG'], 'bad.png', { type:'image/png' })] } })
+      await vm().selectLogo(new globalThis.File(['not a PNG'], 'bad.png', { type:'image/png' }))
       await flushPromises(); await wrapper.get('img').trigger('error'); await flushPromises()
       expect(wrapper.get('#logo').attributes('aria-invalid')).toBe('true')
       expect(wrapper.get('#logo-error').text()).toContain('Не удалось показать')
-      expect(document.activeElement).toBe(wrapper.get('#logo').element)
+      expect(document.activeElement).toBe(wrapper.get('button[aria-label="Выбрать логотип"]').element)
       expect(wrapper.findAll('[role="alert"]')).toHaveLength(0)
     }
     await wrapper.get('#name').setValue('Черновик')
     await vm().save(); expect(h.session.storeRequest).toHaveBeenCalledTimes(2)
     expect(vm().form.name).toBe('Черновик')
     const old = vm().file
-    await vm().selectLogo({ target:{ files:[new globalThis.File(['PNG'], 'good.png', { type:'image/png' })] } })
+    await vm().selectLogo(new globalThis.File(['PNG'], 'good.png', { type:'image/png' }))
     await vm().previewFailed(old); expect(vm().invalidFile).toBeNull()
     expect(vm().problem).toBeNull()
   })
@@ -80,21 +81,6 @@ describe('store editor', () => {
     await vm().refresh(); expect(h.push).toHaveBeenCalledTimes(2)
     expect(h.session.storeRequest).toHaveBeenCalledTimes(calls)
   })
-  it.each(['reject', 'abort'])('does not restore a deleted editor after navigation %s', async outcome => {
-    await render(); vm().deleting = true
-    h.session.storeRequest.mockResolvedValueOnce(null)
-    if (outcome === 'reject') h.push.mockRejectedValueOnce(new Error('navigation failed'))
-    else h.push.mockResolvedValueOnce(new Error('navigation aborted'))
-    await vm().remove()
-    expect(vm().committed).toBe('deleted'); expect(vm().form).toBeNull()
-    expect(wrapper.text()).toContain('Магазин удалён.')
-    expect(wrapper.find('button[aria-label="Сохранить изменения"]').exists()).toBe(false)
-    expect(wrapper.find('button[aria-label="Удалить магазин"]').exists()).toBe(false)
-    await vm().save(); await vm().remove()
-    expect(h.session.storeRequest).toHaveBeenCalledTimes(3)
-    await vm().refresh(); expect(h.push).toHaveBeenCalledTimes(2)
-    expect(h.session.storeRequest).toHaveBeenCalledTimes(3)
-  })
   it('renders server status/home errors and wires confirmation actions', async () => {
     await render()
     h.session.storeRequest.mockRejectedValueOnce(createInternalProblem('invalidInput', { errors:{ Status:['Ошибка статуса'], ShowOnHome:['Ошибка выбора'] } }))
@@ -106,8 +92,6 @@ describe('store editor', () => {
     expect(vm().dirty).toBe(true)
     const accept = vm().refresh(); wrapper.findAllComponents(ConfirmDialog)[0].vm.$emit('confirm'); await accept
     expect(vm().dirty).toBe(false)
-    await wrapper.get('button[aria-label="Удалить магазин"]').trigger('click')
-    wrapper.findAllComponents(ConfirmDialog)[1].vm.$emit('cancel'); expect(vm().deleting).toBe(false)
   })
   it('edits atomically and returns only after validated success', async () => {
     await render()
@@ -118,7 +102,7 @@ describe('store editor', () => {
     await wrapper.get('#displayOrder').setValue('10')
     await wrapper.get('[name="showOnHome"]').setValue(true)
     const file = new globalThis.File(['PNG'], 'logo.png', { type:'image/png' })
-    await vm().selectLogo({ target:{ files:[file], value:'secret' } })
+    await vm().selectLogo(file)
     expect(wrapper.get('img').attributes('src')).toBe('blob:logo')
     h.session.storeRequest.mockResolvedValueOnce({ ...store, name:'Новый магазин', displayOrder:10 })
     await wrapper.get('form').trigger('submit'); await flushPromises()
@@ -151,7 +135,7 @@ describe('store editor', () => {
     const edit = ['administrator','shift-manager'].includes(role)
     expect(wrapper.find('button[aria-label="Сохранить изменения"]').exists()).toBe(edit)
     expect(wrapper.find('#logo').exists()).toBe(edit)
-    expect(wrapper.find('button[aria-label="Удалить магазин"]').exists()).toBe(role === 'administrator')
+    expect(wrapper.find('button[aria-label="Удалить магазин"]').exists()).toBe(false)
     if (!edit) { await vm().save(); expect(h.session.storeRequest).toHaveBeenCalledTimes(2) }
     vm().ops.actions.edit = false; await flushPromises()
     expect(wrapper.find('button[aria-label="Сохранить изменения"]').exists()).toBe(false)
@@ -178,14 +162,14 @@ describe('store editor', () => {
   it('validates file selection and activation without losing the previous replacement', async () => {
     await render()
     await wrapper.get('#status').setValue(1)
-    await vm().save(); expect(document.activeElement).toBe(wrapper.get('#logo').element)
+    await vm().save(); expect(document.activeElement).toBe(wrapper.get('button[aria-label="Выбрать логотип"]').element)
     const good = new globalThis.File(['png'], 'image.png', { type:'image/png' })
-    await vm().selectLogo({ target:{ files:[good] } }); await flushPromises()
-    await vm().selectLogo({ target:{ files:[new globalThis.File(['svg'], 'x.svg', { type:'image/svg+xml' })] } })
+    await vm().selectLogo(good); await flushPromises()
+    await vm().selectLogo(new globalThis.File(['svg'], 'x.svg', { type:'image/svg+xml' }))
     expect(vm().file).toBe(good)
     expect(wrapper.get('#logo-error').text()).toContain('PNG')
-    expect(document.activeElement).toBe(wrapper.get('#logo').element)
-    await vm().selectLogo({ target:{ files:[] } })
+    expect(document.activeElement).toBe(wrapper.get('button[aria-label="Выбрать логотип"]').element)
+    await vm().selectLogo()
     expect(vm().file).toBe(good)
   })
   it.each([STORE_CONFLICT, STORE_VERSION_INVALID])('locks writes until explicit refresh after %s', async type => {
@@ -197,19 +181,6 @@ describe('store editor', () => {
     expect(vm().form.name).toBe('Черновик')
     const accepted = vm().refresh(); vm().finish(true); await accepted
     expect(vm().locked).toBe(false); expect(vm().dirty).toBe(false)
-  })
-  it('confirms deletion and handles failures/conflicts without discarding draft', async () => {
-    await render(); await vm().remove(); expect(h.session.storeRequest).toHaveBeenCalledTimes(2)
-    await wrapper.get('#name').setValue('Черновик')
-    await wrapper.get('button[aria-label="Удалить магазин"]').trigger('click')
-    expect(vm().deleting).toBe(true)
-    h.session.storeRequest.mockRejectedValueOnce(new Error('secret'))
-    await vm().remove(); expect(vm().form.name).toBe('Черновик')
-    vm().deleting = true; h.session.storeRequest.mockResolvedValueOnce(null)
-    await vm().remove()
-    const [, request] = h.session.storeRequest.mock.calls.at(-1)
-    expect(request.method).toBe('DELETE'); expect(JSON.parse(request.body)).toEqual({ version:store.version })
-    expect(vm().dirty).toBe(false); expect(h.push).toHaveBeenCalledWith('/stores')
   })
   it('protects dirty refresh, route changes, closure and resolves pending guards on reset', async () => {
     await render(); expect(await h.leave()).toBe(true)
@@ -232,16 +203,15 @@ describe('store editor', () => {
     await vm().refresh(); expect(vm().form.name).toBe(store.name)
     h.push.mockRejectedValueOnce(new Error('secret')); await vm().back(); expect(vm().problem).toBeTruthy()
   })
-  it.each(['ops','details','save','delete'])('ignores late %s completion after identity changes', async phase => {
+  it.each(['ops','details','save'])('ignores late %s completion after identity changes', async phase => {
     const deferred = pending()
     if (phase === 'ops') h.session.storeRequest.mockReturnValueOnce(deferred.promise)
     if (phase === 'details') h.session.storeRequest.mockResolvedValueOnce(copy(ops)).mockReturnValueOnce(deferred.promise)
     await render()
     let action
-    if (phase === 'save' || phase === 'delete') {
+    if (phase === 'save') {
       h.session.storeRequest.mockReturnValueOnce(deferred.promise)
-      if (phase === 'delete') vm().deleting = true
-      action = phase === 'save' ? vm().save() : vm().remove()
+      action = vm().save()
     }
     h.session.user.value = null
     deferred.resolve(phase === 'ops' ? ops : store)
@@ -263,6 +233,53 @@ describe('store editor', () => {
 })
 
 describe('store management list', () => {
+  it('confirms row deletion, sends the row version, and removes it without navigating', async () => {
+    await render(StoresView)
+    await vm().remove(); expect(h.session.storeRequest).toHaveBeenCalledTimes(2)
+    await wrapper.get('button[aria-label="Удалить магазин"]').trigger('click')
+    expect(wrapper.getComponent(ConfirmDialog).props('message')).toContain(store.name)
+    wrapper.getComponent(ConfirmDialog).vm.$emit('cancel'); await flushPromises()
+    expect(vm().pendingDelete).toBeNull(); expect(h.session.storeRequest).toHaveBeenCalledTimes(2)
+    await wrapper.get('button[aria-label="Удалить магазин"]').trigger('click')
+    const request = pending(); h.session.storeRequest.mockReturnValueOnce(request.promise)
+    const action = vm().remove()
+    await vm().remove(); await vm().load(); expect(h.session.storeRequest).toHaveBeenCalledTimes(3)
+    expect(h.session.storeRequest.mock.calls.at(-1)).toEqual(['/stores/1', {
+      method:'DELETE', headers:{ 'Content-Type':'application/json' }, body:JSON.stringify({ version:store.version })
+    }])
+    request.resolve(null); await action
+    expect(vm().items).toEqual([]); expect(vm().page).toBe(1); expect(h.push).not.toHaveBeenCalled()
+  })
+  it.each(['shift-manager','senior-operator','operator'])('hides and guards deletion for %s', async role => {
+    h.session.user.value.roles = [role]; await render(StoresView)
+    expect(wrapper.find('button[aria-label="Удалить магазин"]').exists()).toBe(false)
+    vm().pendingDelete = store; await vm().remove(); expect(h.session.storeRequest).toHaveBeenCalledTimes(2)
+  })
+  it.each([STORE_CONFLICT, STORE_VERSION_INVALID])('requires successful refresh before deletion after %s', async type => {
+    await render(StoresView); vm().pendingDelete = store
+    h.session.storeRequest.mockRejectedValueOnce(new ProblemError({ type, detail:'Обновите данные' }))
+    await vm().remove(); expect(vm().items).toHaveLength(1); expect(vm().deleteLocked).toBe(true)
+    vm().pendingDelete = store; await vm().remove(); expect(h.session.storeRequest).toHaveBeenCalledTimes(3)
+    h.session.storeRequest.mockRejectedValueOnce(new Error('failed refresh'))
+    await vm().load(); expect(vm().deleteLocked).toBe(true)
+    await vm().load(); expect(vm().deleteLocked).toBe(false); expect(vm().pendingDelete).toBeNull()
+  })
+  it('retains rows after deletion failure and permits a confirmed retry', async () => {
+    await render(StoresView); vm().pendingDelete = store
+    h.session.storeRequest.mockRejectedValueOnce(new Error('secret'))
+    await vm().remove(); expect(vm().items).toHaveLength(1); expect(vm().deleteLocked).toBe(false)
+    expect(wrapper.text()).not.toContain('secret')
+    vm().pendingDelete = store; h.session.storeRequest.mockResolvedValueOnce(null)
+    await vm().remove(); expect(vm().items).toEqual([])
+  })
+  it.each(['resolve','reject'])('ignores late deletion %s after identity changes', async outcome => {
+    await render(StoresView); vm().pendingDelete = store
+    const request = pending(); h.session.storeRequest.mockReturnValueOnce(request.promise)
+    const action = vm().remove(); h.session.user.value = null
+    if (outcome === 'resolve') request.resolve(null)
+    else request.reject(new Error('obsolete'))
+    await action; expect(vm().items).toEqual([]); expect(vm().problem).toBeNull(); expect(vm().deleting).toBe(false)
+  })
   it('searches displayed fields in Cyrillic and Latin, combines status, and resets paging and identity', async () => {
     const rows = [store, { ...store, id:2, name:'North Shop', status:1, showOnHome:true, displayOrder:42 }]
     h.session.storeRequest.mockImplementation(async path => path === '/stores/ops' ? copy(ops) : { items:copy(rows) })
@@ -379,4 +396,41 @@ describe('authenticated logo lifecycle', () => {
     h.session.user.value = { id:2, roles:['operator'] }; await flushPromises()
     wrapper.unmount(); wrapper = null; failed.reject(new Error('secret')); await flushPromises()
   })
+})
+
+it('uses the paperclip picker and retains the accepted filename after an invalid replacement', async () => {
+  await render()
+  const input = wrapper.get('#logo')
+  const choose = vi.spyOn(input.element, 'click')
+  await wrapper.get('button[aria-label="Выбрать логотип"]').trigger('click')
+  expect(choose).toHaveBeenCalledOnce()
+  const good = new globalThis.File(['png'], 'accepted.png', { type:'image/png' })
+  Object.defineProperty(input.element, 'files', { configurable:true, value:[good] })
+  await input.trigger('change'); await flushPromises()
+  expect(vm().file).toBe(good)
+  expect(wrapper.get('.v-file-input').text()).toContain('accepted.png')
+  Object.defineProperty(input.element, 'files', { configurable:true, value:[new globalThis.File(['svg'], 'invalid.svg', { type:'image/svg+xml' })] })
+  await input.trigger('change'); await flushPromises()
+  expect(vm().file).toBe(good)
+  expect(wrapper.get('.v-file-input').text()).toContain('accepted.png')
+  expect(wrapper.get('.v-file-input').text()).not.toContain('invalid.svg')
+  expect(document.activeElement).toBe(wrapper.get('button[aria-label="Выбрать логотип"]').element)
+  expect(wrapper.get('button[aria-label="Выбрать логотип"]').attributes('aria-describedby')).toBe('logo-hint logo-error')
+  vm().locked = true
+  await flushPromises()
+  expect(wrapper.get('button[aria-label="Выбрать логотип"]').attributes('disabled')).toBeDefined()
+})
+
+it('normalizes framework file lists and clearing through the shared picker', async () => {
+  await render(StaffFileInput, { name:'upload', tooltip:'Выбрать файл' })
+  const file = new globalThis.File(['png'], 'long-filename-that-must-not-be-truncated.png', { type:'image/png' })
+  const control = wrapper.findComponent({ name:'VFileInput' })
+  control.vm.$emit('update:modelValue', [file])
+  expect(wrapper.emitted('update:modelValue').at(-1)).toEqual([file])
+  await wrapper.setProps({ modelValue:file })
+  expect(wrapper.text()).toContain(file.name)
+  control.vm.$emit('update:modelValue', [])
+  expect(wrapper.emitted('update:modelValue').at(-1)).toEqual([null])
+  control.vm.$emit('update:modelValue', null)
+  expect(wrapper.emitted('update:modelValue').at(-1)).toEqual([null])
 })

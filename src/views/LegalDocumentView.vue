@@ -4,14 +4,17 @@
 // This file is a part of the Sarafan application
 
 import { useValidationFocus, validationFields } from '../validationFocus.js'
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import ActionButton from '../components/ActionButton.vue'
+import EditorHeaderActions from '../components/EditorHeaderActions.vue'
+import FormField from '../components/FormField.vue'
+import StaffFileInput from '../components/StaffFileInput.vue'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
 import LegalDocumentReader from '../components/LegalDocumentReader.vue'
 import PageAlertRegion from '../components/PageAlertRegion.vue'
-import { LEGAL_DOCUMENT_KIND, downloadBytes, moscowDate, moscowDateInput } from '../consentFormatting.js'
-import { associatedFieldErrors, createInternalProblem, normalizeProblem } from '../errors/problem.js'
+import { LEGAL_DOCUMENT_KIND, documentNodes, downloadBytes, moscowDate, moscowDateInput } from '../consentFormatting.js'
+import { createInternalProblem, formPageProblem, normalizeProblem } from '../errors/problem.js'
 import { useSession } from '../stores/session.js'
 
 const legalFocusOptions = {
@@ -57,10 +60,12 @@ const effectiveUntil = ref(null)
 const loaded = ref(false)
 const busy = ref(false)
 const problem = ref(null)
-const confirmDelete = ref(false)
+const pageProblem = computed(() => formPageProblem(problem.value, form.value ? ['kind', 'title', 'displayVersion', 'effectiveDate', 'file'] : [], legalFocusOptions))
 const baseline = ref(null)
 const refreshConfirmation = ref(false)
 let inputVersion = 0
+let previewTimer = null
+let disposed = false
 const BASE64_CHUNK_SIZE = 0x8000
 const title = computed(() => creating
   ? 'Новый правовой документ'
@@ -78,9 +83,19 @@ function newDocument(kind) {
 }
 
 function invalidatePreview() {
+  if (previewTimer) globalThis.clearTimeout(previewTimer)
+  previewTimer = null
   inputVersion += 1
   preview.value = null
   previewPayload.value = null
+}
+
+function schedulePreview() {
+  invalidatePreview()
+  problem.value = null
+  if (creating && !disposed && form.value?.title?.trim() && selectedFile()) {
+    previewTimer = globalThis.setTimeout(previewDocument, 300)
+  }
 }
 
 function selectedFile() {
@@ -138,9 +153,12 @@ watch(() => form.value && [
   form.value.kind,
   form.value.locale,
   form.value.title,
+  form.value.displayVersion,
   form.value.effectiveDate
-], invalidatePreview, { flush:'sync' })
-watch(file, invalidatePreview, { deep:true, flush:'sync' })
+], schedulePreview, { flush:'sync' })
+watch(file, schedulePreview, { deep:true, flush:'sync' })
+watch(() => session.user.value?.id, () => { clearCreationState(); invalidatePreview() }, { flush:'sync' })
+onUnmounted(() => { disposed = true; invalidatePreview() })
 
 async function perform(action) {
   busy.value = true
@@ -197,6 +215,7 @@ function uploadFile() {
 }
 
 async function requestPayload() {
+  const fields = { ...form.value }
   const upload = uploadFile()
   const bytes = new Uint8Array(await upload.arrayBuffer())
   let binary = ''
@@ -204,49 +223,38 @@ async function requestPayload() {
     binary += String.fromCharCode(...bytes.subarray(offset, offset + BASE64_CHUNK_SIZE))
   }
   return {
-    ...form.value,
+    ...fields,
     source:globalThis.btoa(binary),
     fileName:upload.name
   }
 }
 
-async function previewDocumentAction() {
-  if (busy.value || !form.value) return
-  await perform(async () => {
-    const version = inputVersion
+async function previewDocument() {
+  if (previewTimer) globalThis.clearTimeout(previewTimer)
+  previewTimer = null
+  if (disposed || busy.value || !form.value?.title?.trim() || !selectedFile()) return
+  const version = ++inputVersion
+  preview.value = null
+  previewPayload.value = null
+  problem.value = null
+  try {
     const payload = await requestPayload()
+    if (version !== inputVersion || disposed) return
     const rendered = await session.consentRequest('/legal-documents/preview', json('POST', payload))
-    if (version !== inputVersion) return
+    if (version !== inputVersion || disposed) return
+    documentNodes(rendered?.html)
     previewPayload.value = payload
     preview.value = rendered
-  })
+  } catch (value) { if (version === inputVersion && !disposed) problem.value = normalizeProblem(value) }
 }
 
 async function saveAction() {
   if (busy.value || !previewPayload.value) return
   await perform(async () => {
-    const payload = { ...previewPayload.value, displayVersion:form.value.displayVersion }
+    const payload = { ...previewPayload.value }
     await session.consentRequest('/legal-documents', json('POST', payload))
     await router.replace('/legal-documents')
   })
-}
-
-async function deleteDocument() {
-  confirmDelete.value = false
-  busy.value = true
-  problem.value = null
-  try {
-    await session.consentRequest(`/legal-documents/${selected.value.id}`, { method:'DELETE' })
-    await router.push('/legal-documents')
-  } catch (value) {
-    const deletionProblem = normalizeProblem(value)
-    if (deletionProblem.code === 'legal_document_already_effective') {
-      try { selected.value = await session.consentRequest(`/legal-documents/${id}`) } catch { /* preserve the deletion error */ }
-    }
-    problem.value = deletionProblem
-  } finally {
-    busy.value = false
-  }
 }
 
 async function download(document = selected.value) {
@@ -278,7 +286,6 @@ async function confirmRefresh() {
 }
 
 onMounted(load)
-function previewDocument(...args) { return focusAfter(() => previewDocumentAction(...args), () => validationFields(problem.value, legalFocusOptions)) }
 
 function save(...args) { return focusAfter(() => saveAction(...args), () => validationFields(problem.value, legalFocusOptions)) }
 
@@ -286,65 +293,45 @@ const focusAfter = useValidationFocus(focusRoot, { context:() => [session.user.v
 </script>
 
 <template>
-  <section class="settings table-wide">
+  <section class="settings form-medium">
     <header class="header-with-actions">
       <h1 class="primary-heading">
         {{ title }}
       </h1>
-      <div class="header-actions">
-        <ActionButton
+      <EditorHeaderActions
+        form="legal-document-form"
+        :loaded="loaded"
+        :busy="busy"
+        :show-save="creating"
+        :save-disabled="!previewPayload || !(form?.displayVersion || '').trim()"
+        save-tooltip="Сохранить документ"
+        cancel-tooltip="Вернуться к списку"
+        @refresh="requestRefresh"
+        @cancel="cancel"
+      >
+        <template
           v-if="!creating"
-          icon="$print"
-          tooltip-text="Распечатать"
-          :disabled="busy || !selected"
-          @click="printDocument"
-        /><ActionButton
-          v-if="!creating"
-          icon="$download"
-          tooltip-text="Скачать"
-          :disabled="busy || !selected"
-          @click="download()"
-        /><ActionButton
-          v-if="!creating"
-          icon="$delete"
-          :tooltip-text="selected?.canDelete ? 'Удалить документ' : 'Удаление невозможно после начала действия документа'"
-          :disabled="busy || !selected?.canDelete"
-          variant="red"
-          @click="confirmDelete = true"
-        /><ActionButton
-          icon="$refresh"
-          tooltip-text="Обновить данные"
-          :disabled="busy"
-          @click="requestRefresh"
-        /><ActionButton
-          v-if="creating"
-          icon="$eye"
-          icon-size="28"
-          tooltip-text="Предварительный просмотр"
-          :loading="busy"
-          :disabled="!loaded"
-          @click="previewDocument"
-        />
-        <ActionButton
-          v-if="creating"
-          icon="$saveChanges"
-          icon-size="28"
-          variant="blue"
-          tooltip-text="Сохранить документ"
-          :disabled="busy || !previewPayload || !(form?.displayVersion || '').trim()"
-          @click="save"
-        />
-        <ActionButton
-          icon="$close"
-          icon-size="28"
-          tooltip-text="Вернуться к списку"
-          :disabled="busy"
-          @click="cancel"
-        />
-      </div>
+          #before
+        >
+          <ActionButton
+            v-if="!creating"
+            icon="$print"
+            tooltip-text="Распечатать"
+            :disabled="busy || !selected"
+            @click="printDocument"
+          />
+          <ActionButton
+            v-if="!creating"
+            icon="$download"
+            tooltip-text="Скачать"
+            :disabled="busy || !selected"
+            @click="download()"
+          />
+        </template>
+      </EditorHeaderActions>
     </header>
     <hr class="hr">
-    <PageAlertRegion :problem="problem" />
+    <PageAlertRegion :problem="pageProblem" />
     <p
       v-if="busy && !loaded"
       class="empty-state"
@@ -357,74 +344,84 @@ const focusAfter = useValidationFocus(focusRoot, { context:() => [session.user.v
       id="legal-document-form"
       ref="focusRoot"
       class="editor-form staff-form legal-workspace legal-document-form"
-      @submit.prevent="previewDocument"
+      @submit.prevent="save"
     >
       <fieldset
-        class="legal-form-grid"
+        class="legal-form-grid staff-form-grid"
         :disabled="busy"
       >
-        <v-select
-          v-model="form.kind"
+        <FormField
           name="kind"
-          data-validation-field="kind"
-          :error-messages="associatedFieldErrors(problem, 'kind', legalFocusOptions)"
-          :aria-invalid="associatedFieldErrors(problem, 'kind', legalFocusOptions).length > 0"
-          :items="kinds"
-          label="Тип"
-          variant="outlined"
-          density="compact"
-          @update:model-value="changeKind"
-        />
-        <v-text-field
+          label="Тип документа:"
+          :problem="problem"
+          :error-options="legalFocusOptions"
+        >
+          <template #control="{ controlAttrs }">
+            <select
+              v-bind="controlAttrs"
+              v-model="form.kind"
+              @change="changeKind(form.kind)"
+            >
+              <option
+                v-for="kind in kinds"
+                :key="kind.value"
+                :value="kind.value"
+              >
+                {{ kind.title }}
+              </option>
+            </select>
+          </template>
+        </FormField>
+        <FormField
           v-model="form.title"
           name="title"
-          data-validation-field="title"
-          :error-messages="associatedFieldErrors(problem, 'title', legalFocusOptions)"
-          :aria-invalid="associatedFieldErrors(problem, 'title', legalFocusOptions).length > 0"
-          label="Название"
+          label="Название:"
           maxlength="200"
-          variant="outlined"
-          density="compact"
+          :problem="problem"
+          :error-options="legalFocusOptions"
         />
-        <v-text-field
+
+        <FormField
           v-model="form.displayVersion"
           name="displayVersion"
-          data-validation-field="displayVersion"
-          :error-messages="associatedFieldErrors(problem, 'displayVersion', legalFocusOptions)"
-          :aria-invalid="associatedFieldErrors(problem, 'displayVersion', legalFocusOptions).length > 0"
-          class="legal-version"
-          label="Версия"
+          label="Версия:"
           maxlength="64"
-          variant="outlined"
-          density="compact"
+          :problem="problem"
+          :error-options="legalFocusOptions"
         />
-        <v-text-field
+        <FormField
           v-model="form.effectiveDate"
           name="effectiveDate"
-          data-validation-field="effectiveDate"
-          :error-messages="associatedFieldErrors(problem, 'effectiveDate', legalFocusOptions)"
-          :aria-invalid="associatedFieldErrors(problem, 'effectiveDate', legalFocusOptions).length > 0"
-          class="legal-effective-date"
           type="date"
-          label="Дата начала действия"
+          label="Дата начала действия:"
           :min="moscowDateInput()"
-          variant="outlined"
-          density="compact"
+          :problem="problem"
+          :error-options="legalFocusOptions"
         />
-        <v-file-input
-          v-model="file"
-          data-validation-field="file"
-          :error-messages="associatedFieldErrors(problem, 'file', legalFocusOptions)"
-          :aria-invalid="associatedFieldErrors(problem, 'file', legalFocusOptions).length > 0"
-          class="legal-file"
-          accept=".md,text/markdown"
-          label="Исходный файл UTF-8 Markdown (до 256 Кб)"
-          variant="outlined"
-          density="compact"
-        />
+        <FormField
+          name="file"
+          label="Исходный файл:"
+          :problem="problem"
+          :error-options="legalFocusOptions"
+        >
+          <template #control="{ controlAttrs }">
+            <StaffFileInput
+              v-model="file"
+              v-bind="controlAttrs"
+              name="file"
+              :disabled="busy"
+              tooltip="Выбрать файл Markdown"
+              :aria-describedby="'legal-file-guidance ' + controlAttrs['aria-describedby']"
+              accept=".md,text/markdown"
+            />
+          </template>
+        </FormField>
       </fieldset>
-      <p class="format-note">
-        Разрешены заголовки, абзацы, списки, выделение, ссылки и таблицы. HTML, изображения, скрипты, код и внешние стили не допускаются. После сохранения документ нельзя изменить.
+      <p
+        id="legal-file-guidance"
+        class="format-note"
+      >
+        UTF-8 Markdown, до 256 Кб. Разрешены заголовки, абзацы, списки, выделение, ссылки и таблицы. HTML, изображения, скрипты, код и внешние стили не допускаются. После сохранения документ нельзя изменить.
       </p>
     </form>
 
@@ -469,14 +466,6 @@ const focusAfter = useValidationFocus(focusRoot, { context:() => [session.user.v
       @cancel="refreshConfirmation = false"
       @confirm="confirmRefresh"
     />
-    <ConfirmDialog
-      :open="confirmDelete"
-      message="Удалить этот документ? Действие доступно только до даты начала действия и будет записано в журнал."
-      action="Удалить документ"
-      action-icon="$delete"
-      @cancel="confirmDelete = false"
-      @confirm="deleteDocument"
-    />
   </section>
 </template>
 
@@ -484,10 +473,7 @@ const focusAfter = useValidationFocus(focusRoot, { context:() => [session.user.v
 .legal-workspace { padding:20px; overflow-wrap:anywhere; }
 .legal-document-form { padding:0; }
 .legal-preview-surface { padding:18px; margin-top:18px; background:#fff; border:1px solid #dbe5ee; border-radius:4px; }
-.legal-form-grid { display:grid; grid-template-columns:minmax(340px, 1.25fr) minmax(280px, 1fr) minmax(160px, .55fr) minmax(210px, .7fr); gap:10px 12px; }
-.legal-version { max-width:140px; }
-.legal-effective-date { max-width:220px; }
-.legal-file { grid-column:1 / -1; }
+.legal-form-grid { grid-template-columns:minmax(0, 1fr); }
 .format-note { padding:10px 12px; margin:0 0 10px; color:#526a80; font-size:12px; line-height:1.45; background:#f5f9fc; border-left:3px solid #8bc8e7; }
 .document-summary { display:flex; justify-content:flex-end; gap:24px; margin:0 0 14px; }
 .document-summary div { min-width:180px; }
@@ -495,12 +481,7 @@ const focusAfter = useValidationFocus(focusRoot, { context:() => [session.user.v
 .document-summary dd { margin:3px 0 0; color:#294a69; font-size:13px; }
 .reader-surface { padding:18px; background:#f7fafc; border:1px solid #dbe5ee; border-radius:4px; }
 .reader-surface :deep(.legal-document) { max-width:none; }
-@media (max-width:1000px) {
-  .legal-form-grid { grid-template-columns:1fr 1fr; }
-  .legal-version, .legal-effective-date { max-width:none; }
-}
 @media (max-width:700px) {
-  .legal-form-grid { grid-template-columns:1fr; }
   .document-summary { justify-content:flex-start; flex-direction:column; gap:10px; }
 }
 </style>
