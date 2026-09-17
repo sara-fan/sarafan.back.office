@@ -32,13 +32,50 @@ beforeEach(() => {
 afterEach(() => { wrapper?.unmount(); wrapper = null; vi.restoreAllMocks() })
 
 describe('store editor', () => {
+  it('retains the draft and staff identity when Core cannot load its TLD catalogue on save', async () => {
+    await render()
+    await wrapper.get('#name').setValue('Черновик магазина')
+    h.session.storeRequest.mockRejectedValueOnce(new ProblemError({
+      type:'https://sarafan.sw.consulting/problems/tld-catalog-unavailable', detail:'Каталог доменов временно недоступен.'
+    }))
+    await vm().save()
+    expect(vm().form.name).toBe('Черновик магазина')
+    expect(h.session.user.value.id).toBe(1)
+    expect(vm().locked).toBe(false)
+    expect(wrapper.findAll('[role="alert"]')).toHaveLength(1)
+    expect(h.push).not.toHaveBeenCalled()
+  })
+  it('normalizes website addresses on blur and opens safely; invalid addresses stay inline', async () => {
+    const open = vi.spyOn(globalThis, 'open').mockImplementation(() => null)
+    await render()
+    await wrapper.get('#officialUrl').setValue('магазин.рф')
+    await wrapper.get('#officialUrl').trigger('blur')
+    expect(vm().form.officialUrl).toBe('https://xn--80aairftm.xn--p1ai/')
+    await wrapper.get('button[aria-label="Открыть сайт магазина"]').trigger('click')
+    expect(open).toHaveBeenCalledWith(vm().form.officialUrl, '_blank', 'noopener,noreferrer')
+    await wrapper.get('#officialUrl').setValue('example.invalid')
+    expect(wrapper.get('button[aria-label="Открыть сайт магазина"]').attributes('disabled')).toBeDefined()
+    await vm().openWebsite()
+    expect(open).toHaveBeenCalledTimes(1)
+    await vm().save()
+    expect(wrapper.get('#officialUrl-error').text()).toContain('доменом')
+    expect(wrapper.findAll('[role="alert"]')).toHaveLength(0)
+    expect(vm().form.officialUrl).toBe('example.invalid')
+  })
+  it('normalizes before save even without blur', async () => {
+    await render()
+    await wrapper.get('#officialUrl').setValue('example.com')
+    h.session.storeRequest.mockResolvedValueOnce({ ...store, officialUrl:'https://example.com/' })
+    await vm().save()
+    expect(h.session.storeRequest.mock.calls.at(-1)[1].body.get('officialUrl')).toBe('https://example.com/')
+  })
   it('opens an Active store without a logo for repair and still enforces valid writes', async () => {
     h.session.storeRequest.mockResolvedValueOnce(copy(ops)).mockResolvedValueOnce({ ...store, status:1, logoUrl:null })
     await render()
     expect(vm().problem).toBeNull()
     expect(vm().form.status).toBe(1)
     await vm().save()
-    expect(h.session.storeRequest).toHaveBeenCalledTimes(2)
+    expect(h.session.storeRequest).toHaveBeenCalledTimes(3)
     expect(document.activeElement).toBe(wrapper.get('button[aria-label="Выбрать логотип"]').element)
     await wrapper.get('#status').setValue(0)
     h.session.storeRequest.mockResolvedValueOnce(copy(store))
@@ -59,7 +96,7 @@ describe('store editor', () => {
       expect(wrapper.findAll('[role="alert"]')).toHaveLength(0)
     }
     await wrapper.get('#name').setValue('Черновик')
-    await vm().save(); expect(h.session.storeRequest).toHaveBeenCalledTimes(2)
+    await vm().save(); expect(h.session.storeRequest).toHaveBeenCalledTimes(3)
     expect(vm().form.name).toBe('Черновик')
     const old = vm().file
     await vm().selectLogo(new globalThis.File(['PNG'], 'good.png', { type:'image/png' }))
@@ -83,10 +120,10 @@ describe('store editor', () => {
   })
   it('renders server status/home errors and wires confirmation actions', async () => {
     await render()
-    h.session.storeRequest.mockRejectedValueOnce(createInternalProblem('invalidInput', { errors:{ Status:['Ошибка статуса'], ShowOnHome:['Ошибка выбора'] } }))
+    h.session.storeRequest.mockRejectedValueOnce(createInternalProblem('invalidInput', { errors:{ Status:['Ошибка статуса'], DisplayOrder:['Ошибка выбора'] } }))
     await vm().save()
     expect(wrapper.get('#status-error').text()).toContain('Ошибка статуса')
-    expect(wrapper.get('#showOnHome-error').text()).toContain('Ошибка выбора')
+    expect(wrapper.get('#displayOrder-error').text()).toContain('Ошибка выбора')
     await wrapper.get('#name').setValue('Черновик')
     const cancel = vm().refresh(); wrapper.findAllComponents(ConfirmDialog)[0].vm.$emit('cancel'); await cancel
     expect(vm().dirty).toBe(true)
@@ -95,12 +132,12 @@ describe('store editor', () => {
   })
   it('edits atomically and returns only after validated success', async () => {
     await render()
-    expect(wrapper.findAll('label').map(item => item.text())).toContain('Показывать на главной')
-    expect(wrapper.text()).toContain('первые шесть')
+    expect(wrapper.find('[name=showOnHome]').exists()).toBe(false)
+    expect(wrapper.text()).toContain('не более 6')
     expect(wrapper.text()).toContain('160')
     await wrapper.get('#name').setValue('Новый магазин')
     await wrapper.get('#displayOrder').setValue('10')
-    await wrapper.get('[name="showOnHome"]').setValue(true)
+    await wrapper.get('#status').setValue(2)
     const file = new globalThis.File(['PNG'], 'logo.png', { type:'image/png' })
     await vm().selectLogo(file)
     expect(wrapper.get('img').attributes('src')).toBe('blob:logo')
@@ -112,7 +149,7 @@ describe('store editor', () => {
     expect(request.body.get('version')).toBe(store.version)
     expect(request.body.get('logo')).toBe(file)
     expect(request.body.get('displayOrder')).toBe('10')
-    expect(request.body.get('showOnHome')).toBe('true')
+    expect(request.body.get('showOnHome')).toBeNull()
     expect(vm().dirty).toBe(false)
     expect(h.push).toHaveBeenCalledWith('/stores')
   })
@@ -136,7 +173,7 @@ describe('store editor', () => {
     expect(wrapper.find('button[aria-label="Сохранить изменения"]').exists()).toBe(edit)
     expect(wrapper.find('#logo').exists()).toBe(edit)
     expect(wrapper.find('button[aria-label="Удалить магазин"]').exists()).toBe(false)
-    if (!edit) { await vm().save(); expect(h.session.storeRequest).toHaveBeenCalledTimes(2) }
+    if (!edit) { await vm().save(); expect(h.session.storeRequest).toHaveBeenCalledTimes(3) }
     vm().ops.actions.edit = false; await flushPromises()
     expect(wrapper.find('button[aria-label="Сохранить изменения"]').exists()).toBe(false)
     expect(wrapper.get('fieldset').attributes('disabled')).toBeDefined()
@@ -147,7 +184,7 @@ describe('store editor', () => {
     expect(document.activeElement).toBe(wrapper.get('#description').element)
     expect(vm().form.description).toHaveLength(161)
     await wrapper.get('#description').setValue('x'.repeat(160))
-    const type = Object.keys(STORE_ERROR_OPTIONS.types)[0]
+    const type = Object.keys(STORE_ERROR_OPTIONS.types).find(type => type.endsWith("/invalid-store-name"))
     h.session.storeRequest.mockRejectedValueOnce(new ProblemError({ type, detail:'Исправьте название' }))
     await vm().save()
     expect(wrapper.get('#name-error').text()).toBe('Исправьте название')
@@ -176,7 +213,7 @@ describe('store editor', () => {
     await render(); await wrapper.get('#name').setValue('Черновик')
     h.session.storeRequest.mockRejectedValueOnce(new ProblemError({ type, detail:'Обновите данные' }))
     await vm().save(); expect(vm().locked).toBe(true)
-    await vm().save(); expect(h.session.storeRequest).toHaveBeenCalledTimes(3)
+    await vm().save(); expect(h.session.storeRequest).toHaveBeenCalledTimes(4)
     const cancelled = vm().refresh(); vm().finish(false); await cancelled
     expect(vm().form.name).toBe('Черновик')
     const accepted = vm().refresh(); vm().finish(true); await accepted
@@ -233,6 +270,26 @@ describe('store editor', () => {
 })
 
 describe('store management list', () => {
+  it('opens data cells by mouse and keyboard while logo links stay external', async () => {
+    h.session.storeRequest.mockImplementation(async path => path === '/stores/ops' ? copy(ops)
+      : path === '/stores' ? { items:[{ ...store, logoUrl }] } : new globalThis.Blob(['image'], { type:'image/png' }))
+    await render(StoresView)
+    const link = wrapper.get('a[target="_blank"]')
+    expect(link.attributes('href')).toBe(store.officialUrl)
+    expect(link.attributes('rel')).toBe('noopener noreferrer')
+    await link.trigger('click')
+    expect(h.push).not.toHaveBeenCalled()
+    for (const cell of wrapper.findAll('td.list-card-cell')) {
+      await cell.trigger('click'); expect(h.push).toHaveBeenLastCalledWith('/stores/1')
+      await cell.trigger('keydown', { key:'Enter' }); expect(h.push).toHaveBeenLastCalledWith('/stores/1')
+    }
+    h.push.mockClear()
+    await wrapper.get('td.list-card-cell').trigger('keydown', { key:'Escape' })
+    vm().busy = true
+    await wrapper.get('td.list-card-cell').trigger('click')
+    await wrapper.get('td.list-card-cell').trigger('keydown', { key:'Enter' })
+    expect(h.push).not.toHaveBeenCalled()
+  })
   it('confirms row deletion, sends the row version, and removes it without navigating', async () => {
     await render(StoresView)
     await vm().remove(); expect(h.session.storeRequest).toHaveBeenCalledTimes(2)
@@ -281,11 +338,11 @@ describe('store management list', () => {
     await action; expect(vm().items).toEqual([]); expect(vm().problem).toBeNull(); expect(vm().deleting).toBe(false)
   })
   it('searches displayed fields in Cyrillic and Latin, combines status, and resets paging and identity', async () => {
-    const rows = [store, { ...store, id:2, name:'North Shop', status:1, showOnHome:true, displayOrder:42 }]
+    const rows = [store, { ...store, id:2, name:'North Shop', status:1, displayOrder:42 }]
     h.session.storeRequest.mockImplementation(async path => path === '/stores/ops' ? copy(ops) : { items:copy(rows) })
     await render(StoresView)
     const input = wrapper.get('#store-search')
-    for (const [query, ids] of [['  мАГАЗИН  ', [1]], ['nOrTh', [2]], ['акТИВЕН', [2]], ['скрыт', [1]], ['да', [2]], ['нет', [1]], ['42', [2]], ['%', []]]) {
+    for (const [query, ids] of [['  мАГАЗИН  ', [1]], ['nOrTh', [2]], ['общем списке', [2]], ['скрыт', [1]], ['42', [2]], ['%', []]]) {
       vm().page = 2
       await input.setValue(query)
       expect(vm().filtered.map(item => item.id)).toEqual(ids)
@@ -311,9 +368,9 @@ describe('store management list', () => {
   })
   it('supports view-only list actions, filter and page controls; ignores late failures', async () => {
     h.session.user.value.roles = ['operator']
-    h.session.storeRequest.mockImplementation(async path => path === '/stores/ops' ? copy(ops) : { items:[{ ...store, showOnHome:true }] })
+    h.session.storeRequest.mockImplementation(async path => path === '/stores/ops' ? copy(ops) : { items:[{ ...store }] })
     await render(StoresView)
-    expect(wrapper.text()).toContain('Да')
+    expect(wrapper.text()).toContain('Скрыт')
     expect(wrapper.find('button[aria-label="Добавить магазин"]').exists()).toBe(false)
     wrapper.findComponent({ name:'VSelect' }).vm.$emit('update:modelValue', 0)
     wrapper.findComponent({ name:'VDataTable' }).vm.$emit('update:page', 2)
@@ -433,4 +490,35 @@ it('normalizes framework file lists and clearing through the shared picker', asy
   expect(wrapper.emitted('update:modelValue').at(-1)).toEqual([null])
   control.vm.$emit('update:modelValue', null)
   expect(wrapper.emitted('update:modelValue').at(-1)).toEqual([null])
+})
+
+it('blocks duplicate numbers and a seventh Priority store but permits editing existing Priority stores', async () => {
+  const rows = Array.from({ length:6 }, (_, i) => ({ ...store, id:i+1, status:2, displayOrder:i, logoUrl:null }))
+  h.session.storeRequest.mockImplementation(async path => path === '/stores/ops' ? copy(ops) : path === '/stores' ? { items:rows } : rows[0])
+  h.route.params = {}
+  await render()
+  expect(vm().form.displayOrder).toBe('6')
+  expect(wrapper.get('#status option[value="2"]').element.disabled).toBe(true)
+  await wrapper.get('#displayOrder').setValue('0')
+  expect(wrapper.get('#displayOrder-error').text()).toContain('уже используется')
+  expect(wrapper.get('button[aria-label="Сохранить изменения"]').element.disabled).toBe(true)
+  expect(wrapper.find('.page-alert').exists()).toBe(false)
+  wrapper.unmount()
+  h.route.params = { id:'1' }
+  await render()
+  expect(wrapper.get('#status option[value="2"]').element.disabled).toBe(false)
+  expect(vm().placementErrors).toEqual({})
+  await wrapper.get('#displayOrder').setValue('1')
+  expect(vm().placementErrors).toHaveProperty('displayOrder')
+})
+
+it('retains a draft when server-side placement checks detect a concurrent change', async () => {
+  await render()
+  await wrapper.get('#name').setValue('Черновик')
+  h.session.storeRequest.mockRejectedValueOnce(new ProblemError({ type:'https://sarafan.sw.consulting/problems/store-display-order-conflict', detail:'Порядок занят', errors:{ displayOrder:['Порядок занят'] } }))
+  await vm().save()
+  expect(wrapper.get('#displayOrder-error').text()).toBe('Порядок занят')
+  expect(vm().form.name).toBe('Черновик')
+  expect(wrapper.find('.page-alert').exists()).toBe(false)
+  expect(h.push).not.toHaveBeenCalled()
 })

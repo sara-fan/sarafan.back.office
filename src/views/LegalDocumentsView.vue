@@ -4,6 +4,7 @@
 // This file is a part of the Sarafan application
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
+import ListText from '../components/ListText.vue'
 import ActionButton from '../components/ActionButton.vue'
 import ListFilterBar from '../components/ListFilterBar.vue'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
@@ -186,6 +187,12 @@ onMounted(load)
         height="var(--staff-table-height)"
         fixed-header
       >
+        <template #[`item.displayVersion`]="{ item }">
+          <ListText :text="item.displayVersion" />
+        </template>
+        <template #[`item.statusTitle`]="{ item }">
+          <ListText :text="item.statusTitle" />
+        </template>
         <template #[`item.actions`]="{ item }">
           <div class="actions-container">
             <ActionButton
@@ -206,11 +213,11 @@ onMounted(load)
           </div>
         </template>
         <template #[`item.title`]="{ item }">
-          <span class="document-title">{{ item.title }}</span>
-          <span class="document-kind">{{ item.kindTitle }}</span>
+          <span class="document-title"><ListText :text="item.title" /></span>
+          <span class="document-kind"><ListText :text="item.kindTitle" /></span>
         </template>
         <template #[`item.effectiveAt`]="{ item }">
-          {{ moscowDate(item.effectiveAt) }}
+          <ListText :text="moscowDate(item.effectiveAt)" />
         </template>
       </v-data-table>
     </v-card>

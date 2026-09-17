@@ -352,6 +352,7 @@ const focusAfter = useValidationFocus(focusRoot, { context:() => [session.user.v
       title="Отменить изменения?"
       message="Несохранённые изменения будут потеряны."
       action="Продолжить без сохранения"
+      action-icon="$continue"
       @cancel="cancelConfirmation"
       @confirm="acceptConfirmation"
     />

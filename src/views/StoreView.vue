@@ -10,8 +10,10 @@ import FormField from '../components/FormField.vue'
 import StaffFileInput from '../components/StaffFileInput.vue'
 import PageAlertRegion from '../components/PageAlertRegion.vue'
 import StoreLogo from '../components/StoreLogo.vue'
+import ActionButton from '../components/ActionButton.vue'
+import { normalizeStoreAddress } from '../storeAddress.js'
 import { associatedFieldErrors, createInternalProblem, formPageProblem, normalizeProblem } from '../errors/problem.js'
-import { STORE_CONFLICT, STORE_VERSION_INVALID, STORE_FIELDS, STORE_ERROR_OPTIONS, storeAction, storeIdentity, storeForm, storePayload, storeValidation, logoValidation, validateStore, validateStoreOps } from '../storeCatalogue.js'
+import { STORE_CONFLICT, STORE_VERSION_INVALID, STORE_FIELDS, STORE_ERROR_OPTIONS, storeAction, storeIdentity, validateStoreList, nextStoreOrder, storePlacementErrors, storeForm, storePayload, storeValidation, logoValidation, validateStore, validateStoreOps } from '../storeCatalogue.js'
 import { useSession } from '../stores/session.js'
 import { useDiscardChanges } from '../useDiscardChanges.js'
 import { useValidationFocus, validationFields } from '../validationFocus.js'
@@ -21,8 +23,17 @@ const route = useRoute()
 const router = useRouter()
 const focusRoot = ref(null)
 const creating = computed(() => !route.params.id)
+const website = computed(() => ops.value && form.value ? normalizeStoreAddress(form.value.officialUrl, ops.value.officialUrlRules) : null)
+function normalizeWebsite() { if (website.value) form.value.officialUrl = website.value }
+function openWebsite() {
+  if (!website.value) return
+  const address = website.value
+  if (editable.value) normalizeWebsite()
+  globalThis.open(address, '_blank', 'noopener,noreferrer')
+}
 const details = ref(null)
 const ops = ref(null)
+const catalogue = ref([])
 const form = ref(null)
 const file = shallowRef(null)
 const invalidFile = shallowRef(null)
@@ -36,8 +47,11 @@ let generation = 0
 const dirty = computed(() => !!form.value && (file.value !== null || JSON.stringify(form.value) !== baseline.value))
 const { confirmation, confirmDiscard, finish } = useDiscardChanges(dirty)
 const editable = computed(() => !committed.value && storeAction(session.user.value, ops.value, creating.value ? 'create' : 'edit'))
-const errors = field => associatedFieldErrors(problem.value, field, STORE_ERROR_OPTIONS)
-const pageProblem = computed(() => formPageProblem(problem.value, form.value ? STORE_FIELDS : [], STORE_ERROR_OPTIONS))
+const placementErrors = computed(() => form.value && ops.value ? storePlacementErrors(form.value, catalogue.value, details.value?.id, ops.value.limits.maxPriorityStores) : {})
+const priorityFull = computed(() => catalogue.value.filter(item => item.id !== details.value?.id && item.status === 2).length >= (ops.value?.limits.maxPriorityStores ?? 0))
+const fieldProblem = computed(() => problem.value ?? (Object.keys(placementErrors.value).length ? createInternalProblem("invalidInput", { errors:placementErrors.value }) : null))
+const errors = field => associatedFieldErrors(fieldProblem.value, field, STORE_ERROR_OPTIONS)
+const pageProblem = computed(() => formPageProblem(fieldProblem.value, form.value ? STORE_FIELDS : [], STORE_ERROR_OPTIONS))
 function apply(value) {
   details.value = value
   form.value = storeForm(value)
@@ -52,12 +66,16 @@ async function load() {
   busy.value = true
   problem.value = null
   try {
-    const catalogue = validateStoreOps(await session.storeRequest('/stores/ops'))
+    const metadata = validateStoreOps(await session.storeRequest('/stores/ops'))
     if (current !== generation) return
-    const value = creating.value ? null : validateStore(await session.storeRequest(`/stores/${route.params.id}`), catalogue, route.params.id)
+    const value = creating.value ? null : validateStore(await session.storeRequest(`/stores/${route.params.id}`), metadata, route.params.id)
     if (current !== generation) return
-    ops.value = catalogue
+    const stores = validateStoreList(await session.storeRequest("/stores"), metadata)
+    if (current !== generation) return
+    ops.value = metadata
+    catalogue.value = stores
     apply(value)
+    if (!value) { form.value.displayOrder = String(nextStoreOrder(stores)); baseline.value = JSON.stringify(form.value) }
   } catch (value) { if (current === generation) problem.value = normalizeProblem(value) }
   finally { if (current === generation) busy.value = false }
 }
@@ -81,7 +99,9 @@ function failure(value) {
 }
 async function saveAction() {
   if (busy.value || locked.value || !editable.value || !form.value) return
+  normalizeWebsite()
   problem.value = invalidFile.value ? previewProblem() : storeValidation(form.value, ops.value, file.value, !!details.value?.logoUrl)
+  if (!problem.value && Object.keys(placementErrors.value).length) problem.value = createInternalProblem("invalidInput", { errors:placementErrors.value })
   if (problem.value) return
   const current = ++generation
   busy.value = true
@@ -116,6 +136,7 @@ function clear() {
   generation += 1
   details.value = null; form.value = null; ops.value = null; file.value = null
   invalidFile.value = null
+  catalogue.value = []
   baseline.value = ''; problem.value = null; busy.value = false; locked.value = false
   committed.value = ''
   finish(false)
@@ -137,7 +158,7 @@ onUnmounted(clear)
         :loaded="!!form || !!committed"
         :busy="busy"
         :show-save="editable"
-        :save-disabled="locked || (!creating && !dirty)"
+        :save-disabled="locked || Object.keys(placementErrors).length > 0 || (!creating && !dirty)"
         @refresh="refresh"
         @cancel="back"
       />
@@ -178,7 +199,7 @@ onUnmounted(clear)
           v-model="form.name"
           name="name"
           label="Название"
-          :problem="problem"
+          :problem="fieldProblem"
           :error-options="STORE_ERROR_OPTIONS"
         />
         <div class="form-field">
@@ -211,23 +232,48 @@ onUnmounted(clear)
           v-model="form.officialUrl"
           name="officialUrl"
           label="Официальный сайт"
-          :problem="problem"
+          :problem="fieldProblem"
           :error-options="STORE_ERROR_OPTIONS"
-        />
+        >
+          <template #control="{ controlAttrs }">
+            <div class="staff-form-control store-website-control">
+              <ActionButton
+                icon="$link"
+                tooltip-text="Открыть сайт магазина"
+                :disabled="!website"
+                @click="openWebsite"
+              />
+              <input
+                v-bind="controlAttrs"
+                v-model="form.officialUrl"
+                @blur="normalizeWebsite"
+              >
+            </div>
+          </template>
+        </FormField>
         <div class="form-field">
           <label for="logo">Логотип</label>
-          <StaffFileInput
-            v-if="editable"
-            name="logo"
-            :model-value="file"
-            :disabled="busy || locked"
-            :clearable="false"
-            tooltip="Выбрать логотип"
-            :accept="ops.limits.logoContentTypes.join(',')"
-            :aria-invalid="errors('logo').length > 0"
-            aria-describedby="logo-hint logo-error"
-            @update:model-value="selectLogo"
-          />
+          <div class="staff-form-control store-logo-control">
+            <StaffFileInput
+              v-if="editable"
+              name="logo"
+              :model-value="file"
+              :disabled="busy || locked"
+              :clearable="false"
+              tooltip="Выбрать логотип"
+              :accept="ops.limits.logoContentTypes.join(',')"
+              :aria-invalid="errors('logo').length > 0"
+              aria-describedby="logo-hint logo-error"
+              @update:model-value="selectLogo"
+            />
+            <StoreLogo
+              :url="details?.logoUrl"
+              :file="file"
+              :revision="revision"
+              class="store-logo-preview"
+              @invalid-file="previewFailed"
+            />
+          </div>
           <p
             v-if="editable"
             id="logo-hint"
@@ -238,13 +284,6 @@ onUnmounted(clear)
             Анимация WebP: до {{ ops.limits.logoMaxFrames }} кадров; сумма площадей холста по всем кадрам — до {{ ops.limits.logoMaxAnimationPixels }} пикселей.
             Распакованные метаданные PNG — до {{ ops.limits.logoMaxMetadataBytes }} байт. Новый файл заменит логотип при сохранении.
           </p>
-          <StoreLogo
-            :url="details?.logoUrl"
-            :file="file"
-            :revision="revision"
-            class="staff-form-value"
-            @invalid-file="previewFailed"
-          />
           <div
             id="logo-error"
             class="field-error"
@@ -268,6 +307,7 @@ onUnmounted(clear)
               v-for="status in ops.statuses"
               :key="status.value"
               :value="status.value"
+              :disabled="status.routeAlias === 'priority' && priorityFull && form.status !== status.value"
             >
               {{ status.name }}
             </option>
@@ -282,40 +322,23 @@ onUnmounted(clear)
             >{{ error }}</span>
           </div>
         </div>
-        <label class="check"><input
-          v-model="form.showOnHome"
-          name="showOnHome"
-          type="checkbox"
-          :aria-invalid="errors('showOnHome').length > 0"
-          aria-describedby="showOnHome-error"
-        >Показывать на главной</label>
-        <div
-          id="showOnHome-error"
-          class="field-error"
-        >
-          <span
-            v-for="error in errors('showOnHome')"
-            :key="error"
-          >{{ error }}</span>
-        </div>
         <FormField
           v-model="form.displayOrder"
           name="displayOrder"
           label="Порядок показа"
           inputmode="numeric"
-          :problem="problem"
+          :hint="`Меньшее число — раньше в общем списке и на главной странице. Номер должен быть уникален для всех магазинов, включая скрытые. На главной странице можно показывать не более ${ops.limits.maxPriorityStores} магазинов.`"
+          :problem="fieldProblem"
           :error-options="STORE_ERROR_OPTIONS"
         />
       </fieldset>
-      <p class="field-hint">
-        Меньшее число — раньше в рекомендуемом каталоге и на главной. При равенстве первым идёт магазин с меньшим ID. На главной показываются первые шесть активных выбранных магазинов. Алфавитная сортировка покупателя не меняет сохранённый порядок.
-      </p>
     </form>
     <ConfirmDialog
       :open="confirmation"
       title="Отменить изменения?"
       message="Несохранённые изменения будут потеряны."
       action="Продолжить без сохранения"
+      action-icon="$continue"
       @cancel="finish(false)"
       @confirm="finish(true)"
     />
@@ -323,5 +346,11 @@ onUnmounted(clear)
 </template>
 
 <style scoped>
+.store-website-control { display:flex; align-items:center; gap:var(--staff-input-action-gap); }
+.store-website-control input { flex:1; }
+.store-logo-control { display:flex; align-items:center; gap:8px; }
+.store-logo-control > .staff-form-control { flex:1; min-width:0; }
+.store-logo-preview { flex:0 1 auto; max-width:30%; }
+.store-logo-preview :deep(img) { display:block; width:auto; height:calc(var(--staff-form-control-height) * 0.7); max-width:100%; max-height:calc(var(--staff-form-control-height) * 0.7); object-fit:contain; }
 @media(max-width:550px) { .header-with-actions { flex-wrap:wrap; } .header-with-actions h1 { flex-basis:100%; } }
 </style>
