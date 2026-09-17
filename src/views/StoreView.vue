@@ -3,7 +3,7 @@
 // All rights reserved.
 // This file is a part of the Sarafan application
 import { computed, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { isNavigationFailure, NavigationFailureType, useRoute, useRouter } from 'vue-router'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
 import EditorHeaderActions from '../components/EditorHeaderActions.vue'
 import FormField from '../components/FormField.vue'
@@ -83,7 +83,7 @@ async function back() {
   const current = generation
   try {
     const failure = await router.push('/stores')
-    if (failure) throw failure
+    if (failure && !isNavigationFailure(failure, NavigationFailureType.aborted | NavigationFailureType.cancelled)) throw failure
   }
   catch (value) { if (current === generation) problem.value = normalizeProblem(value) }
 }
@@ -194,10 +194,11 @@ onUnmounted(clear)
       novalidate
       @submit.prevent="save"
     >
-      <fieldset :disabled="busy || !editable || locked">
+      <fieldset :disabled="busy">
         <FormField
           v-model="form.name"
           name="name"
+          :disabled="!editable || locked"
           label="Название"
           :problem="fieldProblem"
           :error-options="STORE_ERROR_OPTIONS"
@@ -208,6 +209,7 @@ onUnmounted(clear)
             id="description"
             v-model="form.description"
             name="description"
+            :disabled="!editable || locked"
             rows="3"
             :aria-invalid="errors('description').length > 0"
             aria-describedby="description-hint description-error"
@@ -231,6 +233,7 @@ onUnmounted(clear)
         <FormField
           v-model="form.officialUrl"
           name="officialUrl"
+          :disabled="!editable || locked"
           label="Официальный сайт"
           :problem="fieldProblem"
           :error-options="STORE_ERROR_OPTIONS"
@@ -300,6 +303,7 @@ onUnmounted(clear)
             id="status"
             v-model="form.status"
             name="status"
+            :disabled="!editable || locked"
             :aria-invalid="errors('status').length > 0"
             aria-describedby="status-error"
           >
@@ -325,6 +329,7 @@ onUnmounted(clear)
         <FormField
           v-model="form.displayOrder"
           name="displayOrder"
+          :disabled="!editable || locked"
           label="Порядок показа"
           inputmode="numeric"
           :hint="`Меньшее число — раньше в общем списке и на главной странице. Номер должен быть уникален для всех магазинов, включая скрытые. На главной странице можно показывать не более ${ops.limits.maxPriorityStores} магазинов.`"

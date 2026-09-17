@@ -4,6 +4,7 @@
 import { mount, flushPromises } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { reactive, ref } from 'vue'
+import { createRouter, createMemoryHistory } from 'vue-router'
 import StoreView from '../src/views/StoreView.vue'
 import StoresView from '../src/views/StoresView.vue'
 import StoreLogo from '../src/components/StoreLogo.vue'
@@ -16,7 +17,7 @@ import { store, ops, logoUrl, pending } from './fixtures/stores.js'
 
 const h = vi.hoisted(() => ({ session:{}, push:vi.fn(), leave:null, update:null, route:null }))
 vi.mock('../src/stores/session.js', () => ({ useSession:() => h.session }))
-vi.mock('vue-router', () => ({ useRoute:() => h.route, useRouter:() => ({ push:h.push }), onBeforeRouteLeave:fn => { h.leave = fn }, onBeforeRouteUpdate:fn => { h.update = fn } }))
+vi.mock('vue-router', async importOriginal => ({ ...await importOriginal(), useRoute:() => h.route, useRouter:() => ({ push:h.push }), onBeforeRouteLeave:fn => { h.leave = fn }, onBeforeRouteUpdate:fn => { h.update = fn } }))
 let wrapper
 const vm = () => wrapper.vm.$.setupState
 const copy = value => globalThis.structuredClone(value)
@@ -32,6 +33,22 @@ beforeEach(() => {
 afterEach(() => { wrapper?.unmount(); wrapper = null; vi.restoreAllMocks() })
 
 describe('store editor', () => {
+  it('preserves the draft without an alert when the discard guard cancels navigation', async () => {
+    await render()
+    await wrapper.get('#name').setValue('Несохранённый магазин')
+    const router = createRouter({ history:createMemoryHistory(), routes:[{ path:'/:pathMatch(.*)*', component:{} }] })
+    await router.push('/stores/1')
+    router.beforeEach(() => h.leave())
+    h.push.mockImplementation(path => router.push(path))
+    const navigation = vm().back()
+    await flushPromises()
+    expect(vm().confirmation).toBe(true)
+    vm().finish(false)
+    await navigation
+    expect(vm().form.name).toBe('Несохранённый магазин')
+    expect(vm().problem).toBeNull()
+    expect(router.currentRoute.value.path).toBe('/stores/1')
+  })
   it('retains the draft and staff identity when Core cannot load its TLD catalogue on save', async () => {
     await render()
     await wrapper.get('#name').setValue('Черновик магазина')
@@ -44,6 +61,17 @@ describe('store editor', () => {
     expect(vm().locked).toBe(false)
     expect(wrapper.findAll('[role="alert"]')).toHaveLength(1)
     expect(h.push).not.toHaveBeenCalled()
+  })
+  it('keeps the website action available while a conflict locks mutations', async () => {
+    const open = vi.spyOn(globalThis, 'open').mockImplementation(() => null)
+    await render()
+    vm().locked = true
+    await flushPromises()
+    expect(wrapper.get('#officialUrl').element.matches(':disabled')).toBe(true)
+    const action = wrapper.get('button[aria-label="Открыть сайт магазина"]')
+    expect(action.element.matches(':disabled')).toBe(false)
+    action.element.click()
+    expect(open).toHaveBeenCalledWith(store.officialUrl, '_blank', 'noopener,noreferrer')
   })
   it('normalizes website addresses on blur and opens safely; invalid addresses stay inline', async () => {
     const open = vi.spyOn(globalThis, 'open').mockImplementation(() => null)
@@ -176,7 +204,15 @@ describe('store editor', () => {
     if (!edit) { await vm().save(); expect(h.session.storeRequest).toHaveBeenCalledTimes(3) }
     vm().ops.actions.edit = false; await flushPromises()
     expect(wrapper.find('button[aria-label="Сохранить изменения"]').exists()).toBe(false)
-    expect(wrapper.get('fieldset').attributes('disabled')).toBeDefined()
+    expect(wrapper.get('fieldset').element.disabled).toBe(false)
+    for (const name of ['name', 'description', 'officialUrl', 'status', 'displayOrder']) {
+      expect(wrapper.get('#' + name).element.matches(':disabled')).toBe(true)
+    }
+    const open = vi.spyOn(globalThis, 'open').mockImplementation(() => null)
+    const action = wrapper.get('button[aria-label="Открыть сайт магазина"]')
+    expect(action.element.matches(':disabled')).toBe(false)
+    action.element.click()
+    expect(open).toHaveBeenCalledWith(store.officialUrl, '_blank', 'noopener,noreferrer')
   })
   it('preserves drafts through validation failures and uses canonical field errors', async () => {
     await render()

@@ -87,6 +87,7 @@ async function deleteDocument() {
   problem.value = null
   try {
     await session.consentRequest(`/legal-documents/${document.id}`, { method:'DELETE' })
+    rows.value = rows.value.filter(row => row.id !== document.id)
     await reloadDocuments()
   } catch (value) {
     const deletionProblem = normalizeProblem(value)

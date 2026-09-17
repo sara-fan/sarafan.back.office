@@ -321,6 +321,15 @@ it('uses the shared legal-document list layout, routes actions, filters, and ret
   expect(wrapper.find('button[aria-label="Повторить загрузку"]').exists()).toBe(false)
   await click('Обновить данные'); expect(wrapper.find('.page-alert').exists()).toBe(false)
 })
+it('removes a committed deletion even when refreshing the list fails', async () => {
+  render(LegalDocumentsView); await flushPromises()
+  h.session.consentRequest.mockResolvedValueOnce(null).mockRejectedValueOnce(failure())
+  await click('Удалить документ'); await confirm()
+  expect(vm().rows).toEqual([])
+  expect(wrapper.find('button[aria-label="Удалить документ"]').exists()).toBe(false)
+  expect(wrapper.find('.page-alert').exists()).toBe(true)
+  expect(vm().problem.code).toBe('ui_network_unavailable')
+})
 it('guards list deletion and refreshes availability after deletion failures', async () => {
   render(LegalDocumentsView); await flushPromises()
 
