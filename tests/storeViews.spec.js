@@ -263,6 +263,27 @@ describe('store editor', () => {
 })
 
 describe('store management list', () => {
+  it('searches displayed fields in Cyrillic and Latin, combines status, and resets paging and identity', async () => {
+    const rows = [store, { ...store, id:2, name:'North Shop', status:1, showOnHome:true, displayOrder:42 }]
+    h.session.storeRequest.mockImplementation(async path => path === '/stores/ops' ? copy(ops) : { items:copy(rows) })
+    await render(StoresView)
+    const input = wrapper.get('#store-search')
+    for (const [query, ids] of [['  мАГАЗИН  ', [1]], ['nOrTh', [2]], ['акТИВЕН', [2]], ['скрыт', [1]], ['да', [2]], ['нет', [1]], ['42', [2]], ['%', []]]) {
+      vm().page = 2
+      await input.setValue(query)
+      expect(vm().filtered.map(item => item.id)).toEqual(ids)
+      expect(vm().page).toBe(1)
+    }
+    await input.setValue('North')
+    vm().status = 0; await flushPromises(); expect(vm().filtered).toEqual([])
+    vm().status = 1; await flushPromises(); expect(vm().filtered).toHaveLength(1)
+    wrapper.getComponent({ name:'VTextField' }).vm.$emit('update:modelValue', null)
+    await flushPromises(); expect(vm().search).toBe(''); expect(vm().filtered).toHaveLength(1)
+    await input.setValue('North')
+    await vm().load(); expect(vm().search).toBe('North')
+    h.session.user.value = null; await flushPromises()
+    expect(vm().search).toBe(''); expect(vm().filtered).toEqual([])
+  })
   it('keeps Active stores with missing logos available for staff repair', async () => {
     h.session.storeRequest.mockResolvedValueOnce(copy(ops)).mockResolvedValueOnce({ items:[{ ...store, status:1, logoUrl:null }] })
     await render(StoresView)

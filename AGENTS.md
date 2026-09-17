@@ -61,7 +61,7 @@ For other comment-capable formats, use the same three lines with that format's n
 
 - Legal-document lists display and filter Core-calculated `status`: `outdated` (Не актуальный), `current` (Актуальный), `future` (Будущий). Combine status with the existing list filters; do not infer currency from the browser clock or deletion availability.
 
-- Use `DateRangeFilterBar` for search, status and two date controls on list pages. It owns the four-column desktop layout and responsive breakpoints; generic filter-grid rules must exclude it. Views retain filter state, events and mutation locks.
+- Use `ListFilterBar` on every list page. It always places free-text search first, growing to fill the remaining row width. All other filters, including dates, use the global `--staff-filter-width` (220px) across views. Keep one horizontal row, with horizontal scrolling on narrow screens. Views retain filter state, events and mutation locks.
 
 - Following Logibooks as a non-normative reference, keep text/date filters enabled during read-only refreshes and disable selectors individually while loading; never disable the entire filter row for a read. Keep Sarafan's 300 ms search debounce and invalidate in-flight server-list results immediately when search changes; mutation-specific locks remain separate.
 
@@ -102,7 +102,6 @@ For other comment-capable formats, use the same three lines with that format's n
 - `staff-list` owns shared filter, table surface, density, header, interlacing and hover styles. `staff-form` owns shared horizontal labels, controls, hints, errors, password controls and narrow-screen stacking.
 - Keep feature CSS to layout and feature-specific presentation. Add reusable control or table styling to the corresponding shared set in `src/styles.css` instead of duplicating it in a view.
 - Present read-only values inside an editor with the same `staff-form` label and value alignment as editable controls. For large forms with many attributes, prefer disabled `staff-form` controls with a light-gray background; use label/value rows for compact read-only blocks. Feature views own their field order and column layout.
-- Preserve the Orders filter's wide-screen order as search, status, creation start and creation end in one four-column row. Shared list rules must not replace that feature layout.
 - Format displayed monetary amounts with `Intl.NumberFormat('ru-RU')`, two fractional digits and a comma decimal separator. Monetary form inputs must be normalized to the same ungrouped presentation while accepting either `,` or `.`; API payloads remain numeric.
 
 - Application logger adapters fix service/version identity, event catalogue, severities and catalogue validation after configurable test/runtime options; callers cannot override these invariants.

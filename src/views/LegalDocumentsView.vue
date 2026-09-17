@@ -5,6 +5,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import ActionButton from '../components/ActionButton.vue'
+import ListFilterBar from '../components/ListFilterBar.vue'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
 import PageAlertRegion from '../components/PageAlertRegion.vue'
 import { moscowDate } from '../consentFormatting.js'
@@ -136,22 +137,11 @@ onMounted(load)
     </header>
     <hr class="hr">
     <PageAlertRegion :problem="problem" />
-    <fieldset
-      class="filter-bar"
+    <ListFilterBar
+      v-model:search="search"
+      search-id="legal-document-search"
       :aria-busy="busy"
     >
-      <v-text-field
-        id="legal-document-search"
-        v-model="search"
-        class="filter-control filter-search"
-        label="Поиск"
-        prepend-inner-icon="$search"
-        variant="solo"
-        density="compact"
-        active
-        hide-details
-        clearable
-      />
       <v-select
         v-model="kind"
         :disabled="busy"
@@ -175,7 +165,7 @@ onMounted(load)
         active
         hide-details
       />
-    </fieldset>
+    </ListFilterBar>
     <v-card
       v-if="!problem"
       class="table-card"

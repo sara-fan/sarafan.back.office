@@ -3,6 +3,7 @@
 // All rights reserved.
 // This file is a part of the Sarafan application
 import ActionButton from '../components/ActionButton.vue'
+import ListFilterBar from '../components/ListFilterBar.vue'
 import { useRouter } from 'vue-router'
 import { computed, onMounted, ref, watch } from 'vue'
 import PageAlertRegion from '../components/PageAlertRegion.vue'
@@ -111,22 +112,11 @@ onMounted(load)
     </header>
     <hr class="hr">
     <PageAlertRegion :problem="problem" />
-    <fieldset
-      class="filter-bar"
+    <ListFilterBar
+      v-model:search="search"
+      search-id="user-search"
       :aria-busy="busy"
     >
-      <v-text-field
-        id="user-search"
-        v-model="search"
-        class="filter-control filter-search"
-        label="Поиск"
-        prepend-inner-icon="$search"
-        variant="solo"
-        density="compact"
-        active
-        hide-details
-        clearable
-      />
       <v-select
         v-model="role"
         :disabled="busy"
@@ -149,7 +139,7 @@ onMounted(load)
         active
         hide-details
       />
-    </fieldset>
+    </ListFilterBar>
     <v-card
       v-if="!problem"
       class="table-card"

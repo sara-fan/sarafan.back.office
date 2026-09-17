@@ -6,6 +6,7 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import ActionButton from '../components/ActionButton.vue'
+import ListFilterBar from '../components/ListFilterBar.vue'
 import PageAlertRegion from '../components/PageAlertRegion.vue'
 import { AUDIT_ACTIONS, LEGAL_DOCUMENT_KIND, moscowDate, moscowTime } from '../consentFormatting.js'
 import { createInternalProblem, normalizeProblem } from '../errors/problem.js'
@@ -226,22 +227,12 @@ onUnmounted(() => {
     </header>
     <hr class="hr">
     <PageAlertRegion :problem="visibleProblem" />
-    <fieldset
-      class="filter-bar"
+    <ListFilterBar
+      :search="search"
+      search-id="legal-audit-search"
       :aria-busy="busy"
+      @update:search="onSearchInput"
     >
-      <v-text-field
-        :model-value="search"
-        class="filter-control filter-search"
-        label="Поиск"
-        prepend-inner-icon="$search"
-        variant="solo"
-        density="compact"
-        active
-        hide-details
-        clearable
-        @update:model-value="onSearchInput"
-      />
       <v-select
         :disabled="busy"
         :model-value="kind"
@@ -266,7 +257,7 @@ onUnmounted(() => {
         hide-details
         @update:model-value="onActionChange"
       />
-    </fieldset>
+    </ListFilterBar>
     <v-card
       v-if="!problem"
       class="table-card"
