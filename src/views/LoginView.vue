@@ -8,7 +8,7 @@ import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import FormField from '../components/FormField.vue'
 import PageAlertRegion from '../components/PageAlertRegion.vue'
-import { createInternalProblem, hasOnlyPresentedFieldErrors, normalizeProblem, problemFieldErrors } from '../errors/problem.js'
+import { createInternalProblem, formPageProblem, normalizeProblem, problemFieldErrors } from '../errors/problem.js'
 import { safeReturn } from '../roles.js'
 import { useSession } from '../stores/session.js'
 const focusRoot = ref(null)
@@ -22,7 +22,7 @@ const reveal = ref(false)
 const busy = ref(false)
 const problem = ref(null)
 const passwordErrors = computed(() => problemFieldErrors(problem.value, 'password'))
-const pageProblem = computed(() => hasOnlyPresentedFieldErrors(problem.value, ['email', 'password']) ? null : problem.value)
+const pageProblem = computed(() => formPageProblem(problem.value, ['email', 'password']))
 async function submitAction() {
   if (busy.value) return
   problem.value = null

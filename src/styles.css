@@ -96,13 +96,14 @@ fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
 .staff-form-grid .form-field, .staff-form-grid .staff-form-row { margin-bottom: 0; }
 .staff-form .form-field label, .staff-form-label { overflow: hidden; margin-bottom: 0; color: #263d55; font-size: 14px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
 .staff-form .form-field > input, .staff-form .form-field > select, .staff-form .form-field > textarea, .staff-form .password-control, .staff-form .field-hint, .staff-form .form-field > .field-error { grid-column: 2; }
-.staff-form .form-field input:not([type="checkbox"]), .staff-form textarea { width: 100%; min-height: var(--staff-form-control-height); padding: 9px 11px; color: var(--ink); background: #fff; border: 1px solid #b9cad8; border-radius: 4px; }
+.staff-form .form-field input:not([type="checkbox"]), .staff-form .form-field select, .staff-form textarea { width: 100%; min-width: 0; min-height: var(--staff-form-control-height); padding: 9px 11px; color: var(--ink); background: #fff; border: 1px solid #b9cad8; border-radius: 4px; }
 .staff-form textarea { width: 100%; resize: vertical; }
 .staff-form .password-control { grid-template-columns: minmax(0, 1fr) 40px; }
 .staff-form .password-control .action-button { width: 36px; height: 36px; color: #4b4b4b; }
 .staff-form .field-hint { margin: 1px 0 0; color: var(--muted); font-size: 12px; line-height: 1.35; }
 .staff-form .field-error:empty { display: none; margin: 0; }
 .staff-form-control { min-width: 0; }
+.staff-form .form-field > .staff-form-control { grid-column: 2; }
 .staff-form .role-options { margin: 0; }
 .staff-form .protection-note { margin: 0 0 8px; }
 .staff-form .v-field { min-height: var(--staff-form-control-height); background: #fff; border-radius: 4px; }
@@ -175,6 +176,7 @@ button:disabled { cursor: default; opacity: .4; }
   .staff-form .form-field, .staff-form-row { grid-template-columns: 1fr; gap: 5px; align-items: start; }
   .staff-form .form-field > input, .staff-form .form-field > select, .staff-form .form-field > textarea, .staff-form .password-control, .staff-form .field-hint, .staff-form .form-field > .field-error { grid-column: 1; }
   .staff-form-value { grid-column: 1; }
+  .staff-form .form-field > .staff-form-control { grid-column: 1; }
   .staff-form .form-field label, .staff-form-label { white-space: normal; }
   .role-options { grid-template-columns: 1fr; }
   .login-layout { padding: 24px 18px; }

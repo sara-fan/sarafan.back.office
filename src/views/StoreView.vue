@@ -9,7 +9,7 @@ import EditorHeaderActions from '../components/EditorHeaderActions.vue'
 import FormField from '../components/FormField.vue'
 import PageAlertRegion from '../components/PageAlertRegion.vue'
 import StoreLogo from '../components/StoreLogo.vue'
-import { associatedFieldErrors, createInternalProblem, hasOnlyPresentedFieldErrors, normalizeProblem } from '../errors/problem.js'
+import { associatedFieldErrors, createInternalProblem, formPageProblem, normalizeProblem } from '../errors/problem.js'
 import { STORE_CONFLICT, STORE_VERSION_INVALID, STORE_FIELDS, STORE_ERROR_OPTIONS, storeAction, storeIdentity, storeForm, storePayload, storeValidation, logoValidation, validateStore, validateStoreOps } from '../storeCatalogue.js'
 import { useSession } from '../stores/session.js'
 import { useDiscardChanges } from '../useDiscardChanges.js'
@@ -36,10 +36,7 @@ const dirty = computed(() => !!form.value && (file.value !== null || JSON.string
 const { confirmation, confirmDiscard, finish } = useDiscardChanges(dirty)
 const editable = computed(() => !committed.value && storeAction(session.user.value, ops.value, creating.value ? 'create' : 'edit'))
 const errors = field => associatedFieldErrors(problem.value, field, STORE_ERROR_OPTIONS)
-const pageProblem = computed(() => {
-  if (hasOnlyPresentedFieldErrors(problem.value, STORE_FIELDS)) return null
-  return problem.value && STORE_FIELDS.some(field => errors(field).length) && !problem.value.errors ? null : problem.value
-})
+const pageProblem = computed(() => formPageProblem(problem.value, form.value ? STORE_FIELDS : [], STORE_ERROR_OPTIONS))
 function apply(value) {
   details.value = value
   form.value = storeForm(value)

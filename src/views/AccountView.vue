@@ -9,7 +9,7 @@ import { useRoute, useRouter } from 'vue-router'
 import FormField from '../components/FormField.vue'
 import PageAlertRegion from '../components/PageAlertRegion.vue'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
-import { CORE_PROBLEM_TYPES, hasOnlyPresentedFieldErrors, normalizeProblem, problemFieldErrors } from '../errors/problem.js'
+import { CORE_PROBLEM_TYPES, formPageProblem, normalizeProblem, problemFieldErrors } from '../errors/problem.js'
 import { accountPayload } from '../forms.js'
 import { landing, roleLabel, ROLES } from '../roles.js'
 import { useSession } from '../stores/session.js'
@@ -36,7 +36,7 @@ const refreshConfirmation = ref(false)
 const lastAdministrator = ref(false)
 const roleErrors = computed(() => problemFieldErrors(problem.value, 'roles'))
 const presentedErrorFields = ['firstName', 'lastName', 'patronymic', 'email', 'password', 'confirmation', ...(!profile ? ['roles'] : [])]
-const pageProblem = computed(() => hasOnlyPresentedFieldErrors(problem.value, presentedErrorFields) ? null : problem.value)
+const pageProblem = computed(() => formPageProblem(problem.value, loaded.value ? presentedErrorFields : [], { types:accountProblemFields }))
 const roleDescriptions = computed(() => lastAdministrator.value ? 'roles-error last-administrator-note' : 'roles-error')
 const returnPath = computed(() => profile ? landing(session.user.value) : '/users')
 const roleRank = new Map(Object.keys(ROLES).map((code, index) => [code, index]))

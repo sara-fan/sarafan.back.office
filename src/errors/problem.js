@@ -2,7 +2,7 @@
 // All rights reserved.
 // This file is a part of the Sarafan application
 
-import { PROBLEM_TYPE_ROOT, createProblemTools } from '@sara-fan/ui-shared/problems'
+import { PROBLEM_TYPE_ROOT, ProblemError, createProblemTools } from '@sara-fan/ui-shared/problems'
 import { validationFields } from '@sara-fan/ui-shared/validation-focus'
 import { EVENTS } from '../observability/catalogue.js'
 import { uiLogger } from '../observability/logger.js'
@@ -63,15 +63,6 @@ export const { INTERNAL_PROBLEM_TYPES, createInternalProblem, normalizeProblem, 
   }
 })
 
-export function hasOnlyPresentedFieldErrors(value, fields) {
-  if (!value?.errors || typeof value.errors !== 'object' || Array.isArray(value.errors)) return false
-  const presented = new Set(fields.map(field => field.toLowerCase()))
-  const entries = Object.entries(value.errors)
-  return entries.length > 0 && entries.every(([field, messages]) =>
-    presented.has(field.toLowerCase()) && Array.isArray(messages) && messages.length > 0
-  )
-}
-
 export function associatedFieldErrors(value, field, options = {}) {
   if (!value) return []
   const matches = fields => fields.some(name => name.toLowerCase() === field.toLowerCase())
@@ -80,4 +71,18 @@ export function associatedFieldErrors(value, field, options = {}) {
       ? problemFieldErrors(value, name) : [])
   if (messages.length) return [...new Set(messages)]
   return matches(validationFields(value, options)) ? [presentProblem(value)] : []
+}
+
+// Project only the alert presentation; retain the original problem for fields and focus.
+export function formPageProblem(value, fields, options = {}) {
+  if (!value || !fields.length) return value
+  const presented = new Set(fields.map(field => field.toLowerCase()))
+  const shown = fields.flatMap(field => associatedFieldErrors(value, field, options))
+  if (!shown.length) return value
+  const remaining = Object.entries(value.errors ?? {}).filter(([name, messages]) =>
+    !validationFields({ errors:{ [name]:messages } }, { aliases:options.aliases })
+      .some(field => presented.has(field.toLowerCase())))
+  if (!remaining.length) return null
+  const messages = remaining.flatMap(([, messages]) => messages)
+  return new ProblemError({ ...value, errors:Object.fromEntries(remaining), detail:[...new Set(messages)].join(' ') })
 }

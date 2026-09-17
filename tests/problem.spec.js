@@ -9,7 +9,7 @@ import {
   associatedFieldErrors,
   ProblemError,
   createInternalProblem,
-  hasOnlyPresentedFieldErrors,
+  formPageProblem,
   normalizeProblem,
   presentProblem,
   problemFieldErrors,
@@ -111,9 +111,9 @@ describe('shared problem model', () => {
       errors: { phone: ['Введите номер телефона'] }
     })
     expect(problemFieldErrors(validation, 'phone')).toEqual(['Введите номер телефона'])
-    expect(hasOnlyPresentedFieldErrors(validation, ['phone'])).toBe(true)
-    expect(hasOnlyPresentedFieldErrors(validation, ['email'])).toBe(false)
-    expect(hasOnlyPresentedFieldErrors(createInternalProblem('unexpectedError'), ['phone'])).toBe(false)
+    expect(formPageProblem(validation, ['phone'])).toBeNull()
+    expect(formPageProblem(validation, ['email'])).toBe(validation)
+    expect(formPageProblem(createInternalProblem('unexpectedError'), ['phone'])).not.toBeNull()
     expect(suppressProblem(validation, { operation: 'validation.local', logger })).toBe(validation)
     expect(suppressProblem(new Error('hidden'), {
       detail: 'Безопасная диагностика',
@@ -128,4 +128,24 @@ describe('shared problem model', () => {
   it('rejects unknown internal catalogue keys', () => {
     expect(() => createInternalProblem('missing')).toThrow(TypeError)
   })
+})
+
+it('projects only unpresented validation errors into alerts without mutating the source', () => {
+  const options = { types:{ 'urn:upload':['file'] }, aliases:{ source:'file' } }
+  const canonical = new ProblemError({ type:'urn:upload', detail:'Исправьте файл' })
+  expect(formPageProblem(null, ['file'], options)).toBeNull()
+  expect(formPageProblem(canonical, [], options)).toBe(canonical)
+  expect(formPageProblem(canonical, ['file'], options)).toBeNull()
+  const problem = new ProblemError({ type:'urn:validation', detail:'Исправьте файл', instance:'urn:test', errors:{ 'Source.Content':['Исправьте файл'], Unknown:['Общая ошибка'] } })
+  const projected = formPageProblem(problem, ['FILE'], options)
+  expect(projected).toBeInstanceOf(ProblemError)
+  expect(presentProblem(projected)).toBe('Общая ошибка')
+  expect(projected.errors).toEqual({ Unknown:['Общая ошибка'] })
+  expect(projected.instance).toBe(problem.instance)
+  expect(problem.errors).toHaveProperty('Source.Content')
+  expect(problem.detail).toBe('Исправьте файл')
+  const duplicate = new ProblemError({ type:'urn:upload', detail:'Исправьте файл', errors:{ Unknown:['Исправьте файл'] } })
+  expect(formPageProblem(duplicate, ['file'], options).errors).toEqual({ Unknown:['Исправьте файл'] })
+  expect(presentProblem(formPageProblem(duplicate, ['file'], options))).toBe('Исправьте файл')
+  expect(formPageProblem(new ProblemError({ type:'urn:validation', errors:{ Source:['Исправьте файл'] } }), ['file'], options)).toBeNull()
 })
