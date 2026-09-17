@@ -284,4 +284,5 @@ it('focuses account fields, grouped roles and remote errors after save', async (
   expect(w.get('[name="email"]').attributes('aria-invalid')).toBe('true')
   expect(w.get('[name="email"]').attributes('aria-describedby')).toContain('email-error')
   expect(w.get('#email-error').text()).toBe('Этот адрес уже используется')
+  expect(w.find('.page-alert').exists()).toBe(false)
 })

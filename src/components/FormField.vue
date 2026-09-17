@@ -18,34 +18,40 @@ const reveal = ref(false)
 <template>
   <div class="form-field">
     <label :for="name">{{ label }}</label>
-    <div
-      v-if="revealable"
-      class="password-control"
+    <slot
+      name="control"
+      :control-attrs="{ ...$attrs, id:name, name, 'aria-invalid':errors.length > 0, 'aria-describedby':`${hint ? `${name}-hint ` : ''}${name}-error` }"
     >
-      <input
+      <div
+        v-if="revealable"
+        class="password-control"
+      >
+        <input
+          :id="name"
+          v-model="model"
+          v-bind="$attrs"
+          :type="reveal ? 'text' : type"
+          :name="name"
+          :aria-invalid="errors.length > 0"
+          :aria-describedby="`${hint ? `${name}-hint ` : ''}${name}-error`"
+        >
+        <ActionButton
+          :icon="reveal ? '$eyeOff' : '$eye'"
+          :tooltip-text="reveal ? 'Скрыть пароль' : 'Показать пароль'"
+          @click="reveal = !reveal"
+        />
+      </div><input
+        v-else
         :id="name"
         v-model="model"
         v-bind="$attrs"
-        :type="reveal ? 'text' : type"
+        :type="type"
         :name="name"
         :aria-invalid="errors.length > 0"
         :aria-describedby="`${hint ? `${name}-hint ` : ''}${name}-error`"
       >
-      <ActionButton
-        :icon="reveal ? '$eyeOff' : '$eye'"
-        :tooltip-text="reveal ? 'Скрыть пароль' : 'Показать пароль'"
-        @click="reveal = !reveal"
-      />
-    </div><input
-      v-else
-      :id="name"
-      v-model="model"
-      v-bind="$attrs"
-      :type="type"
-      :name="name"
-      :aria-invalid="errors.length > 0"
-      :aria-describedby="`${hint ? `${name}-hint ` : ''}${name}-error`"
-    ><p
+    </slot>
+    <p
       v-if="hint"
       :id="`${name}-hint`"
       class="field-hint"

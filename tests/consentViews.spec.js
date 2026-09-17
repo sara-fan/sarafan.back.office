@@ -11,7 +11,7 @@ import LegalDocumentAuditView from '../src/views/LegalDocumentAuditView.vue'
 import PrivacyRequestsView from '../src/views/PrivacyRequestsView.vue'
 import LegalDocumentReader from '../src/components/LegalDocumentReader.vue'
 import ConfirmDialog from '../src/components/ConfirmDialog.vue'
-import { createInternalProblem } from '../src/errors/problem.js'
+import { createInternalProblem, ProblemError } from '../src/errors/problem.js'
 import { LEGAL_DOCUMENT_KIND, documentNodes, moscowDate, moscowDateInput, moscowTime, isDocumentId } from '../src/consentFormatting.js'
 const h = vi.hoisted(() => ({ session:{}, router:{}, route:{} }))
 vi.mock('../src/stores/session.js', () => ({ useSession:() => h.session }))
@@ -78,7 +78,7 @@ beforeEach(() => {
   globalThis.URL.createObjectURL = vi.fn(() => 'blob:test'); globalThis.URL.revokeObjectURL = vi.fn()
   vi.spyOn(globalThis.HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
 })
-afterEach(() => { wrapper?.unmount(); vi.restoreAllMocks(); vi.unstubAllGlobals() })
+afterEach(() => { wrapper?.unmount(); vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.useRealTimers() })
 
 it.each([PrivacyRequestsView, LegalDocumentAuditView])('keeps server-list filters focused and ignores superseded replies during debounce', async view => {
   vi.useFakeTimers()
@@ -137,10 +137,13 @@ it('shows and combines legal document status filters with search and kind', asyn
 it('requires a current server preview before immutable creation and preserves failed forms', async () => {
   render(LegalDocumentView, { path:'/legal-documents/new', params:{}, query:{} }); await flushPromises()
   expect(wrapper.text()).not.toContain('Загрузка правового документа')
-  expect(wrapper.findAllComponents({name:'VTextField'}).some(field => field.props('label') === 'Версия')).toBe(true)
-  expect(wrapper.findComponent({name:'VFileInput'}).props('label')).toContain('256 Кб')
-  await wrapper.get('form').trigger('submit'); await flushPromises()
-  expect(wrapper.text()).toContain('Загрузите файл Markdown с расширением .md')
+  expect(wrapper.get('label[for="displayVersion"]').text()).toBe('Версия:')
+  expect(wrapper.get('#legal-file-guidance').text()).toContain('256 Кб')
+  const groups = wrapper.findAll('.header-action-groups > .header-actions')
+  expect(groups).toHaveLength(1)
+  expect(groups[0].findAll('button').map(button => button.attributes('aria-label'))).toEqual(['Обновить данные', 'Сохранить документ', 'Вернуться к списку'])
+  expect(wrapper.get('button[aria-label="Сохранить документ"]').attributes('form')).toBe('legal-document-form')
+  expect(wrapper.find('button[aria-label="Предварительный просмотр"]').exists()).toBe(false)
   vm().file = { name:'bad.pdf', size:4 }; await vm().previewDocument(); expect(wrapper.text()).toContain('Выберите файл Markdown с расширением .md')
   vm().file = { name:'empty.md', size:0 }; await vm().previewDocument(); expect(wrapper.text()).toContain('Выбранный файл пуст')
   vm().file = { name:'big.md', size:262145 }; await vm().previewDocument(); expect(wrapper.text()).toContain('Размер файла не должен превышать 256 Кб')
@@ -161,6 +164,9 @@ it('requires a current server preview before immutable creation and preserves fa
   expect(wrapper.text()).not.toContain('Канонический текст')
   expect(wrapper.get('button[aria-label="Сохранить документ"]').attributes('disabled')).toBeDefined()
   vm().form.displayVersion = 'v2'; await nextTick()
+  expect(vm().preview).toBeNull()
+  expect(wrapper.get('button[aria-label="Сохранить документ"]').attributes('disabled')).toBeDefined()
+  await vm().previewDocument(); await nextTick()
   expect(vm().preview).not.toBeNull()
   expect(wrapper.get('button[aria-label="Сохранить документ"]').attributes('disabled')).toBeUndefined()
   h.session.consentRequest.mockRejectedValueOnce(failure()); await vm().save()
@@ -248,30 +254,20 @@ it('shows a minimal read-only document with header print/download actions and it
 
   const print = wrapper.get('button[aria-label="Распечатать"]')
   const download = wrapper.get('button[aria-label="Скачать"]')
-  const deleteAction = wrapper.get('button[aria-label="Удалить документ"]')
+  const groups = wrapper.findAll('.header-action-groups > .header-actions')
+  expect(groups).toHaveLength(2)
+  expect(groups[0].findAll('button').map(button => button.attributes('aria-label'))).toEqual(['Распечатать', 'Скачать'])
+  expect(groups[1].findAll('button').map(button => button.attributes('aria-label'))).toEqual(['Обновить данные', 'Вернуться к списку'])
+  expect(wrapper.find('button[aria-label="Сохранить документ"]').exists()).toBe(false)
+  expect(wrapper.find('button[aria-label="Удалить документ"]').exists()).toBe(false)
   expect(print.text()).toBe(''); expect(print.find('.fa-print').exists()).toBe(true)
   expect(download.text()).toBe(''); expect(download.find('.fa-download').exists()).toBe(true)
-  expect(deleteAction.text()).toBe(''); expect(deleteAction.find('.fa-trash-can').exists()).toBe(true)
   await print.trigger('click'); expect(globalThis.print).toHaveBeenCalled()
   await download.trigger('click'); await flushPromises()
   expect(h.session.consentRequest).toHaveBeenCalledWith(`/legal-documents/${id}/source`, expect.any(Object), 'blob')
   await click('Вернуться к списку'); expect(h.router.push).toHaveBeenCalledWith('/legal-documents')
 
-  await click('Удалить документ')
-  expect(openConfirm().props()).toMatchObject({ action:'Удалить документ', actionIcon:'$delete' })
-  openConfirm().vm.$emit('cancel'); await nextTick()
-  expect(h.session.consentRequest).not.toHaveBeenCalledWith(`/legal-documents/${id}`, { method:'DELETE' })
-  await click('Удалить документ'); await confirm()
-  expect(h.session.consentRequest).toHaveBeenCalledWith(`/legal-documents/${id}`, { method:'DELETE' })
 
-  const boundary = failure(); boundary.code = 'legal_document_already_effective'
-  h.session.consentRequest.mockRejectedValueOnce(boundary).mockResolvedValueOnce({ ...doc, canDelete:false })
-  await click('Удалить документ'); await confirm()
-  expect(vm().problem.code).toBe('legal_document_already_effective')
-  const disabledDelete = wrapper.get('button[aria-label="Удаление невозможно после начала действия документа"]')
-  expect(disabledDelete.attributes('disabled')).toBeDefined()
-  await disabledDelete.trigger('click')
-  expect(openConfirm()).toBeUndefined()
 })
 
 it('uses the shared legal-document list layout, routes actions, filters, and retries failures', async () => {
@@ -635,15 +631,21 @@ it('uses the same safe document format, print and exact source download as the c
 })
 it('connects every legal-document form control to its submitted value', async () => {
   render(LegalDocumentView, { path:'/legal-documents/new', params:{}, query:{} }); await flushPromises()
-  const fields = wrapper.findAllComponents({name:'VTextField'})
-  fields.find(x => x.props('label') === 'Название').vm.$emit('update:modelValue','Название из формы')
-  fields.find(x => x.props('label') === 'Версия').vm.$emit('update:modelValue','v3')
-  fields.find(x => x.props('label') === 'Дата начала действия').vm.$emit('update:modelValue','2027-03-01')
-  expect(fields.find(x => x.props('label') === 'Версия').classes()).toContain('legal-version')
-  expect(fields.find(x => x.props('label') === 'Дата начала действия').classes()).toContain('legal-effective-date')
-  wrapper.findComponent({name:'VFileInput'}).vm.$emit('update:modelValue',[upload()])
-  await nextTick(); expect(vm().form).toMatchObject({title:'Название из формы',displayVersion:'v3',effectiveDate:'2027-03-01'})
-  wrapper.findComponent({name:'VSelect'}).vm.$emit('update:modelValue',LEGAL_DOCUMENT_KIND.PRIVACY_POLICY); await nextTick()
+  await wrapper.get('#title').setValue('Название из формы')
+  await wrapper.get('#displayVersion').setValue('v3')
+  await wrapper.get('#effectiveDate').setValue('2027-03-01')
+  const input = wrapper.get('#file')
+  const choose = vi.spyOn(input.element, 'click')
+  await wrapper.get('button[aria-label="Выбрать файл Markdown"]').trigger('click')
+  expect(choose).toHaveBeenCalledOnce()
+  Object.defineProperty(input.element, 'files', { configurable:true, value:[upload()] })
+  await input.trigger('change')
+  expect(vm().form).toMatchObject({title:'Название из формы',displayVersion:'v3',effectiveDate:'2027-03-01'})
+  await wrapper.get('#kind').setValue(String(LEGAL_DOCUMENT_KIND.PRIVACY_POLICY))
+  expect(vm().form.kind).toBe(LEGAL_DOCUMENT_KIND.PRIVACY_POLICY)
+  for (const name of ['kind','title','displayVersion','effectiveDate','file']) {
+    expect(wrapper.get('label[for="'+name+'"]').attributes('for')).toBe(wrapper.get('[name="'+name+'"]').attributes('id'))
+  }
   expect(wrapper.text()).not.toContain('Категория куки:')
   expect(vm().form).not.toHaveProperty('cookieCategories')
   h.session.consentRequest.mockResolvedValueOnce({ html:doc.html }); await vm().previewDocument(); await nextTick()
@@ -663,11 +665,12 @@ it('recovers a persisted audit filter for retired legal kind zero', async () => 
 })
 
 
-it('focuses the upload control on missing files and the relevant metadata after preview rejection', async () => {
+it('keeps focus in the active control during background preview validation', async () => {
   render(LegalDocumentView, { path:'/legal-documents/new', params:{}, query:{} }, document.body)
   await flushPromises()
+  wrapper.get('[name="title"]').element.focus()
   await vm().previewDocument()
-  expect(document.activeElement.closest('[data-validation-field]')?.getAttribute('data-validation-field')).toBe('file')
+  expect(vm().problem).toBeNull()
   vm().file = upload()
   h.session.consentRequest.mockRejectedValueOnce(createInternalProblem('invalidInput', { errors:{ Title:['Исправьте название'] } }))
   await vm().previewDocument()
@@ -678,7 +681,121 @@ it('focuses the upload control on missing files and the relevant metadata after 
   expect(document.getElementById(title.attributes('aria-describedby')).textContent).toContain('Исправьте название')
   h.session.consentRequest.mockRejectedValueOnce(createInternalProblem('invalidInput', { errors:{ Source:['Исправьте файл'], FileName:['Неверное имя файла'] } }))
   await vm().previewDocument()
-  const uploadControl = wrapper.findComponent({ name:'VFileInput' })
-  expect(uploadControl.props('errorMessages')).toEqual(['Исправьте файл', 'Неверное имя файла'])
-  expect(document.activeElement.closest('[data-validation-field]')?.getAttribute('data-validation-field')).toBe('file')
+  expect(wrapper.get('#file-error').text()).toContain('Исправьте файл')
+  expect(wrapper.get('#file-error').text()).toContain('Неверное имя файла')
+  expect(document.activeElement).toBe(wrapper.get('[name="title"]').element)
+  expect(wrapper.get('button[aria-label="Выбрать файл Markdown"]').attributes('aria-describedby')).toBe('legal-file-guidance file-error')
+})
+
+it('automatically previews complete input after debounce and immediately hides obsolete content', async () => {
+  render(LegalDocumentView, { path:'/legal-documents/new', params:{}, query:{} }); await flushPromises()
+  vi.useFakeTimers()
+  vm().form.title = ' '
+  vm().file = upload()
+  await vi.advanceTimersByTimeAsync(300)
+  expect(h.session.consentRequest).not.toHaveBeenCalled()
+  vm().form.title = 'Первое'
+  await vi.advanceTimersByTimeAsync(200)
+  vm().form.title = 'Второе'
+  await vi.advanceTimersByTimeAsync(299)
+  expect(h.session.consentRequest).not.toHaveBeenCalled()
+  await vi.advanceTimersByTimeAsync(1); await flushPromises()
+  expect(wrapper.find('.legal-preview-surface').exists()).toBe(true)
+  expect(JSON.parse(h.session.consentRequest.mock.lastCall[1].body).title).toBe('Второе')
+  vm().form.title = ''
+  await nextTick()
+  expect(wrapper.find('.legal-preview-surface').exists()).toBe(false)
+  expect(vm().previewPayload).toBeNull()
+  vm().form.title = 'Третье'
+  h.session.consentRequest.mockResolvedValueOnce({ html:'<script>bad</script>' })
+  await vi.advanceTimersByTimeAsync(300); await flushPromises()
+  expect(vm().preview).toBeNull()
+  expect(vm().problem).not.toBeNull()
+  vm().file = null
+  await vi.advanceTimersByTimeAsync(300)
+  expect(h.session.consentRequest).toHaveBeenCalledTimes(2)
+})
+
+it.each(['resolve', 'reject'])('discards stale preview responses: %s', async outcome => {
+  render(LegalDocumentView, { path:'/legal-documents/new', params:{}, query:{} }); await flushPromises()
+  vi.useFakeTimers()
+  let finish
+  h.session.consentRequest.mockImplementationOnce(() => new Promise((resolve, reject) => { finish = outcome === 'resolve' ? resolve : reject }))
+  vm().file = upload()
+  await vi.advanceTimersByTimeAsync(300); await flushPromises()
+  expect(vm().busy).toBe(false)
+  vm().form.title = 'Новое название'
+  finish(outcome === 'resolve' ? { html:doc.html } : failure())
+  await flushPromises()
+  expect(vm().preview).toBeNull()
+  expect(vm().problem).toBeNull()
+  await vi.advanceTimersByTimeAsync(300); await flushPromises()
+  expect(vm().preview).not.toBeNull()
+})
+
+it.each(['refresh', 'identity', 'unmount'])('discards pending preview after %s', async action => {
+  render(LegalDocumentView, { path:'/legal-documents/new', params:{}, query:{} }); await flushPromises()
+  vi.useFakeTimers()
+  const state = vm()
+  let finish
+  h.session.consentRequest.mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
+  state.file = upload()
+  await vi.advanceTimersByTimeAsync(300); await flushPromises()
+  if (action === 'refresh') await state.load()
+  if (action === 'identity') h.session.user.value = null
+  if (action === 'unmount') wrapper.unmount()
+  finish({ html:doc.html }); await flushPromises()
+  expect(state.preview).toBeNull()
+  expect(state.previewPayload).toBeNull()
+})
+
+it('discards obsolete file reads before requesting a preview', async () => {
+  render(LegalDocumentView, { path:'/legal-documents/new', params:{}, query:{} }); await flushPromises()
+  vi.useFakeTimers()
+  let finish
+  vm().file = { ...upload(), arrayBuffer:() => new Promise(resolve => { finish = resolve }) }
+  await vi.advanceTimersByTimeAsync(300)
+  vm().file = null
+  finish(new globalThis.TextEncoder().encode('# Old').buffer)
+  await flushPromises()
+  expect(h.session.consentRequest).not.toHaveBeenCalled()
+  vm().file = upload()
+  wrapper.unmount()
+  await vi.advanceTimersByTimeAsync(300)
+  expect(h.session.consentRequest).not.toHaveBeenCalled()
+})
+
+it('revalidates the exact version after a conflict before enabling save', async () => {
+  render(LegalDocumentView, { path:'/legal-documents/new', params:{}, query:{} }); await flushPromises()
+  vi.useFakeTimers()
+  vm().file = upload()
+  vm().form.displayVersion = 'duplicate'
+  h.session.consentRequest.mockRejectedValueOnce(createInternalProblem('invalidInput', { errors:{ DisplayVersion:['Версия уже существует'] } }))
+  await vi.advanceTimersByTimeAsync(300); await flushPromises()
+  expect(vm().preview).toBeNull()
+  expect(wrapper.get('#displayVersion-error').text()).toContain('Версия уже существует')
+  vm().form.displayVersion = 'unique'
+  expect(vm().problem).toBeNull()
+  await vi.advanceTimersByTimeAsync(300); await flushPromises()
+  expect(vm().previewPayload.displayVersion).toBe('unique')
+  await vm().save()
+  expect(JSON.parse(h.session.consentRequest.mock.lastCall[1].body).displayVersion).toBe('unique')
+})
+
+it('shows legal validation only at its field and retains unrelated errors in the alert', async () => {
+  render(LegalDocumentView, { path:'/legal-documents/new', params:{}, query:{} }); await flushPromises()
+  vm().problem = new ProblemError({ type:'https://sarafan.sw.consulting/problems/legal-document-version-conflict', detail:'Версия уже существует' })
+  await nextTick()
+  expect(wrapper.get('#displayVersion-error').text()).toBe('Версия уже существует')
+  expect(wrapper.find('.page-alert').exists()).toBe(false)
+  vm().problem = createInternalProblem('invalidInput', { detail:'Ошибка файла', errors:{ Source:['Ошибка файла'], Unknown:['Ошибка вне формы'] } })
+  await nextTick()
+  expect(wrapper.get('#file-error').text()).toBe('Ошибка файла')
+  expect(wrapper.get('.page-alert').text()).toBe('Ошибка вне формы')
+  vm().problem = failure(); await nextTick()
+  expect(wrapper.find('.page-alert').exists()).toBe(true)
+  vm().form = null
+  vm().problem = createInternalProblem('invalidInput', { detail:'Ошибка загрузки', errors:{ Title:['Ошибка названия'] } })
+  await nextTick()
+  expect(wrapper.get('.page-alert').text()).toBe('Ошибка загрузки')
 })
