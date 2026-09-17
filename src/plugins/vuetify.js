@@ -21,6 +21,7 @@ export const sarafanAliases = {
   login: 'fas fa-right-to-bracket',
   logout: 'fas fa-right-from-bracket',
   orders: 'fas fa-cart-shopping',
+  stores: 'fas fa-store',
   privacyRequests: 'fas fa-clipboard-list',
   print: 'fas fa-print',
   profile: 'fas fa-user',
