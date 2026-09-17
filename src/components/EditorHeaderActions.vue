@@ -10,6 +10,7 @@ defineProps({
   loaded:{ type:Boolean, default:true },
   busy:Boolean,
   saveDisabled:Boolean,
+  showSave:{ type:Boolean, default:true },
   saveTooltip:{ type:String, default:'Сохранить изменения' }
 })
 const emit = defineEmits(['refresh', 'cancel'])
@@ -17,13 +18,14 @@ const emit = defineEmits(['refresh', 'cancel'])
 
 <template>
   <div class="header-actions">
+    <slot name="before" />
     <ActionButton
       icon="$refresh"
       tooltip-text="Обновить данные"
       :disabled="busy"
       @click="emit('refresh')"
     /><ActionButton
-      v-if="loaded"
+      v-if="loaded && showSave"
       type="submit"
       :form="form"
       variant="blue"

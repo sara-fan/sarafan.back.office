@@ -14,6 +14,8 @@ import LegalDocumentAuditView from './views/LegalDocumentAuditView.vue'
 import PrivacyRequestsView from './views/PrivacyRequestsView.vue'
 import OrderView from './views/OrderView.vue'
 import OrdersView from './views/OrdersView.vue'
+import StoresView from './views/StoresView.vue'
+import StoreView from './views/StoreView.vue'
 import StatusView from './views/StatusView.vue'
 
 export function createAppRouter(history = createWebHistory(), session = useSession()) {
@@ -30,6 +32,9 @@ export function createAppRouter(history = createWebHistory(), session = useSessi
     { path:'/legal-documents/:id([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})', component:LegalDocumentView, meta:{ action:'manageLegalDocuments' } },
     { path:'/privacy-requests', component:PrivacyRequestsView, meta:{ action:'manageConsentWithdrawalRequests' } },
     { path:'/orders', component:OrdersView, meta:{ action:'manualQuotes' } },
+    { path:'/stores', component:StoresView, meta:{ action:'viewStores' } },
+    { path:'/stores/new', component:StoreView, meta:{ action:'createStore' } },
+    { path:'/stores/:id([1-9]\\d*)', component:StoreView, meta:{ action:'viewStores' } },
     { path:'/orders/:orderNumber(\\d{8}-[1-9]\\d*)', component:OrderView, meta:{ action:'manualQuotes' } },
     { path:'/profile', component:AccountView },
     { path:'/forbidden', component:StatusView, props:{ forbidden:true } },

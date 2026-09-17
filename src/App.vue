@@ -118,6 +118,13 @@ watch(() => user.value?.id, async (id, _previous, onCleanup) => {
             title="Заказы"
           />
           <v-list-item
+            v-if="can(user, 'viewStores')"
+            to="/stores"
+            class="drawer-link"
+            prepend-icon="$stores"
+            title="Магазины"
+          />
+          <v-list-item
             v-if="can(user, 'manageConsentWithdrawalRequests')"
             to="/privacy-requests"
             title="Перс. данные"
