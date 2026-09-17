@@ -4,7 +4,9 @@
 // This file is a part of the Sarafan application
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
+import ListText from '../components/ListText.vue'
 import ActionButton from '../components/ActionButton.vue'
+import ListFilterBar from '../components/ListFilterBar.vue'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
 import PageAlertRegion from '../components/PageAlertRegion.vue'
 import { moscowDate } from '../consentFormatting.js'
@@ -85,6 +87,7 @@ async function deleteDocument() {
   problem.value = null
   try {
     await session.consentRequest(`/legal-documents/${document.id}`, { method:'DELETE' })
+    rows.value = rows.value.filter(row => row.id !== document.id)
     await reloadDocuments()
   } catch (value) {
     const deletionProblem = normalizeProblem(value)
@@ -136,22 +139,11 @@ onMounted(load)
     </header>
     <hr class="hr">
     <PageAlertRegion :problem="problem" />
-    <fieldset
-      class="filter-bar"
+    <ListFilterBar
+      v-model:search="search"
+      search-id="legal-document-search"
       :aria-busy="busy"
     >
-      <v-text-field
-        id="legal-document-search"
-        v-model="search"
-        class="filter-control filter-search"
-        label="Поиск"
-        prepend-inner-icon="$search"
-        variant="solo"
-        density="compact"
-        active
-        hide-details
-        clearable
-      />
       <v-select
         v-model="kind"
         :disabled="busy"
@@ -175,7 +167,7 @@ onMounted(load)
         active
         hide-details
       />
-    </fieldset>
+    </ListFilterBar>
     <v-card
       v-if="!problem"
       class="table-card"
@@ -196,6 +188,12 @@ onMounted(load)
         height="var(--staff-table-height)"
         fixed-header
       >
+        <template #[`item.displayVersion`]="{ item }">
+          <ListText :text="item.displayVersion" />
+        </template>
+        <template #[`item.statusTitle`]="{ item }">
+          <ListText :text="item.statusTitle" />
+        </template>
         <template #[`item.actions`]="{ item }">
           <div class="actions-container">
             <ActionButton
@@ -216,11 +214,11 @@ onMounted(load)
           </div>
         </template>
         <template #[`item.title`]="{ item }">
-          <span class="document-title">{{ item.title }}</span>
-          <span class="document-kind">{{ item.kindTitle }}</span>
+          <span class="document-title"><ListText :text="item.title" /></span>
+          <span class="document-kind"><ListText :text="item.kindTitle" /></span>
         </template>
         <template #[`item.effectiveAt`]="{ item }">
-          {{ moscowDate(item.effectiveAt) }}
+          <ListText :text="moscowDate(item.effectiveAt)" />
         </template>
       </v-data-table>
     </v-card>

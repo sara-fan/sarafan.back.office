@@ -5,7 +5,9 @@
 
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import ListText from '../components/ListText.vue'
 import ActionButton from '../components/ActionButton.vue'
+import ListFilterBar from '../components/ListFilterBar.vue'
 import PageAlertRegion from '../components/PageAlertRegion.vue'
 import { AUDIT_ACTIONS, LEGAL_DOCUMENT_KIND, moscowDate, moscowTime } from '../consentFormatting.js'
 import { createInternalProblem, normalizeProblem } from '../errors/problem.js'
@@ -226,22 +228,12 @@ onUnmounted(() => {
     </header>
     <hr class="hr">
     <PageAlertRegion :problem="visibleProblem" />
-    <fieldset
-      class="filter-bar"
+    <ListFilterBar
+      :search="search"
+      search-id="legal-audit-search"
       :aria-busy="busy"
+      @update:search="onSearchInput"
     >
-      <v-text-field
-        :model-value="search"
-        class="filter-control filter-search"
-        label="Поиск"
-        prepend-inner-icon="$search"
-        variant="solo"
-        density="compact"
-        active
-        hide-details
-        clearable
-        @update:model-value="onSearchInput"
-      />
       <v-select
         :disabled="busy"
         :model-value="kind"
@@ -266,7 +258,7 @@ onUnmounted(() => {
         hide-details
         @update:model-value="onActionChange"
       />
-    </fieldset>
+    </ListFilterBar>
     <v-card
       v-if="!problem"
       class="table-card"
@@ -293,22 +285,25 @@ onUnmounted(() => {
         @update:items-per-page="onPageSizeChange"
         @update:sort-by="onSortChange"
       >
+        <template #[`item.displayVersion`]="{ item }">
+          <ListText :text="item.displayVersion" />
+        </template>
         <template #[`item.at`]="{ item }">
-          {{ moscowTime(item.at) }}
+          <ListText :text="moscowTime(item.at)" />
         </template>
         <template #[`item.action`]="{ item }">
-          {{ AUDIT_ACTIONS[item.action] || item.action }}
+          <ListText :text="AUDIT_ACTIONS[item.action] || item.action" />
         </template>
         <template #[`item.title`]="{ item }">
-          <span class="document-title">{{ item.title }}</span>
-          <span class="document-kind">{{ kindName(item.kind) }}</span>
-          <span class="document-id">{{ item.documentId }}</span>
+          <span class="document-title"><ListText :text="item.title" /></span>
+          <span class="document-kind"><ListText :text="kindName(item.kind)" /></span>
+          <span class="document-id"><ListText :text="item.documentId" /></span>
         </template>
         <template #[`item.effectiveAt`]="{ item }">
-          {{ moscowDate(item.effectiveAt) }}
+          <ListText :text="moscowDate(item.effectiveAt)" />
         </template>
         <template #[`item.actorName`]="{ item }">
-          {{ item.actorName || `ID ${item.actorId}` }}
+          <ListText :text="item.actorName || `ID ${item.actorId}`" />
         </template>
       </v-data-table-server>
     </v-card>

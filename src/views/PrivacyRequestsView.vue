@@ -5,8 +5,9 @@
 
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { validDate } from '../orderFormatting.js'
+import ListText from '../components/ListText.vue'
 import ActionButton from '../components/ActionButton.vue'
-import DateRangeFilterBar from '../components/DateRangeFilterBar.vue'
+import ListFilterBar from '../components/ListFilterBar.vue'
 import PageAlertRegion from '../components/PageAlertRegion.vue'
 import { moscowTime } from '../consentFormatting.js'
 import { createInternalProblem, normalizeProblem } from '../errors/problem.js'
@@ -244,24 +245,14 @@ onUnmounted(() => {
     </header>
     <hr class="hr">
     <PageAlertRegion :problem="visibleProblem" />
-    <DateRangeFilterBar
+    <ListFilterBar
+      :search="search"
+      search-id="privacy-request-search"
+      inputmode="numeric"
       :aria-busy="busy"
       :disabled="Boolean(processingKey)"
+      @update:search="onSearchInput"
     >
-      <v-text-field
-        id="privacy-request-search"
-        :model-value="search"
-        class="filter-control filter-search"
-        label="Поиск"
-        prepend-inner-icon="$search"
-        inputmode="numeric"
-        variant="solo"
-        density="compact"
-        active
-        hide-details
-        clearable
-        @update:model-value="onSearchInput"
-      />
       <v-select
         :disabled="busy"
         :model-value="processed"
@@ -302,7 +293,7 @@ onUnmounted(() => {
         clearable
         @update:model-value="onDateChange('requestedTo', $event)"
       />
-    </DateRangeFilterBar>
+    </ListFilterBar>
     <v-card
       v-if="!problem || rows.length"
       class="table-card"
@@ -343,13 +334,13 @@ onUnmounted(() => {
           </div>
         </template>
         <template #[`item.customerId`]="{ item }">
-          <span class="customer-id">№ {{ item.customerId }}</span>
+          <span class="customer-id"><ListText :text="`№ ${item.customerId}`" /></span>
         </template>
         <template #[`item.requestedAt`]="{ item }">
-          {{ moscowTime(item.requestedAt) }}
+          <ListText :text="moscowTime(item.requestedAt)" />
         </template>
         <template #[`item.processed`]="{ item }">
-          <span :class="['status-pill', { inactive:item.processed }]">{{ item.processed ? 'Обработан' : 'Ожидает ручной обработки' }}</span>
+          <span :class="['status-pill', { inactive:item.processed }]"><ListText :text="item.processed ? 'Обработан' : 'Ожидает ручной обработки'" /></span>
         </template>
       </v-data-table-server>
     </v-card>

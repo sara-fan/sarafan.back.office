@@ -2,7 +2,9 @@
 // Copyright (C) 2026 Maxim [maxirmx] Samsonov (www.sw.consulting)
 // All rights reserved.
 // This file is a part of the Sarafan application
+import ListText from '../components/ListText.vue'
 import ActionButton from '../components/ActionButton.vue'
+import ListFilterBar from '../components/ListFilterBar.vue'
 import { useRouter } from 'vue-router'
 import { computed, onMounted, ref, watch } from 'vue'
 import PageAlertRegion from '../components/PageAlertRegion.vue'
@@ -111,22 +113,11 @@ onMounted(load)
     </header>
     <hr class="hr">
     <PageAlertRegion :problem="problem" />
-    <fieldset
-      class="filter-bar"
+    <ListFilterBar
+      v-model:search="search"
+      search-id="user-search"
       :aria-busy="busy"
     >
-      <v-text-field
-        id="user-search"
-        v-model="search"
-        class="filter-control filter-search"
-        label="Поиск"
-        prepend-inner-icon="$search"
-        variant="solo"
-        density="compact"
-        active
-        hide-details
-        clearable
-      />
       <v-select
         v-model="role"
         :disabled="busy"
@@ -149,7 +140,7 @@ onMounted(load)
         active
         hide-details
       />
-    </fieldset>
+    </ListFilterBar>
     <v-card
       v-if="!problem"
       class="table-card"
@@ -170,6 +161,9 @@ onMounted(load)
         height="var(--staff-table-height)"
         fixed-header
       >
+        <template #[`item.email`]="{ item }">
+          <ListText :text="item.email" />
+        </template>
         <template #[`item.actions`]="{ item }">
           <div class="actions-container">
             <ActionButton
@@ -190,7 +184,7 @@ onMounted(load)
           </div>
         </template>
         <template #[`item.displayName`]="{ item }">
-          <span class="staff-name">{{ item.displayName }}</span><span
+          <span class="staff-name"><ListText :text="item.displayName" /></span><span
             v-if="item.id === session.user.value?.id"
             class="current-user"
           > (вы)</span>
@@ -201,11 +195,11 @@ onMounted(load)
               v-for="code in item.roles"
               :key="code"
               class="role-chip"
-            >{{ roleLabel(code) }}</span>
+            ><ListText :text="roleLabel(code)" /></span>
           </div>
         </template>
         <template #[`item.isActive`]="{ item }">
-          <span :class="['status-pill', { inactive:!item.isActive }]">{{ item.isActive ? 'Активен' : 'Отключён' }}</span>
+          <span :class="['status-pill', { inactive:!item.isActive }]"><ListText :text="item.isActive ? 'Активен' : 'Отключён'" /></span>
         </template>
       </v-data-table>
     </v-card>

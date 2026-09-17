@@ -200,6 +200,11 @@ export function createSession() {
   return {
     user:readonly(user), ready:readonly(ready), restoring:readonly(restoring), restoreProblem:readonly(restoreProblem), notice:readonly(notice), loginProblem:readonly(loginProblem), legalDocumentOps:readonly(legalDocumentOps), orderOps:readonly(orderOps),
     viewStateMemory, ensureReady, restoreSession, login, logout, saveUser, saveProfile, getLegalDocumentOps, getOrderOps,
+    storeRequest: (path, options = {}, responseType = 'json') => {
+      const pathname = typeof path === 'string' ? path.split('?')[0] : ''
+      if (!/^\/stores(?:\/ops|\/[1-9]\d*(?:\/logo)?)?$/u.test(pathname)) throw createInternalProblem('invalidInput')
+      return request(path, options, { supplementary:true, responseType })
+    },
     consentRequest: (path, options = {}, responseType = 'json') => {
       const pathname = typeof path === 'string' ? path.split('?')[0] : ''
       if (!CONSENT_REQUEST_PATH_PATTERN.test(pathname)) throw createInternalProblem('invalidInput')

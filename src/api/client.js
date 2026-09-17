@@ -17,6 +17,10 @@ const ENCODED_PATH_BOUNDARIES = /%(?:2e|2f|5c)/iu
 const LEGAL_DOCUMENT_ROUTE_PATTERN = new RegExp(`(/legal-documents/)${UUID_PATH_PATTERN}(?=/source$|$)`, 'iu')
 
 const API_ROUTE_TEMPLATES = new Set([
+  '/api/v1/backoffice/stores',
+  '/api/v1/backoffice/stores/ops',
+  '/api/v1/backoffice/stores/{id}',
+  '/api/v1/backoffice/stores/{id}/logo',
   '/api/v1/backoffice/legal-documents',
   '/api/v1/backoffice/legal-documents/ops',
   '/api/v1/backoffice/legal-documents/{id}',
@@ -35,7 +39,7 @@ const API_ROUTE_TEMPLATES = new Set([
 
 function routeTemplate(path) {
   try {
-    const pathname = new globalThis.URL(path, ROUTE_VALIDATION_ORIGIN).pathname.replace(/(\/backoffice\/orders\/)\d{8}-[1-9]\d*(?=\/product$|$)/u, '$1{number}').replace(LEGAL_DOCUMENT_ROUTE_PATTERN, '$1{id}').replace(/(\/backoffice\/users\/)\d+$/u, '$1{id}')
+    const pathname = new globalThis.URL(path, ROUTE_VALIDATION_ORIGIN).pathname.replace(/(\/backoffice\/stores\/)[1-9]\d*(?=\/logo$|$)/u, '$1{id}').replace(/(\/backoffice\/orders\/)\d{8}-[1-9]\d*(?=\/product$|$)/u, '$1{number}').replace(LEGAL_DOCUMENT_ROUTE_PATTERN, '$1{id}').replace(/(\/backoffice\/users\/)\d+$/u, '$1{id}')
     return API_ROUTE_TEMPLATES.has(pathname) ? pathname : undefined
   } catch {
     return undefined

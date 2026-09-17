@@ -5,8 +5,9 @@
 
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import ListText from '../components/ListText.vue'
 import ActionButton from '../components/ActionButton.vue'
-import DateRangeFilterBar from '../components/DateRangeFilterBar.vue'
+import ListFilterBar from '../components/ListFilterBar.vue'
 import PageAlertRegion from '../components/PageAlertRegion.vue'
 import { moscowTime } from '../consentFormatting.js'
 import { createInternalProblem, normalizeProblem } from '../errors/problem.js'
@@ -289,22 +290,12 @@ onUnmounted(() => {
     </header>
     <hr class="hr">
     <PageAlertRegion :problem="visibleProblem" />
-    <DateRangeFilterBar
+    <ListFilterBar
+      :search="search"
+      search-id="order-search"
       :aria-busy="busy"
+      @update:search="onSearchInput"
     >
-      <v-text-field
-        id="order-search"
-        :model-value="search"
-        class="filter-control filter-search"
-        label="Поиск"
-        prepend-inner-icon="$search"
-        variant="solo"
-        density="compact"
-        active
-        hide-details
-        clearable
-        @update:model-value="onSearchInput"
-      />
       <v-select
         :disabled="busy"
         :model-value="selectedStatus"
@@ -341,7 +332,7 @@ onUnmounted(() => {
         clearable
         @update:model-value="onCreatedToChange"
       />
-    </DateRangeFilterBar>
+    </ListFilterBar>
     <v-card
       v-if="!problem || rows.length"
       class="table-card"
@@ -369,6 +360,12 @@ onUnmounted(() => {
         @update:items-per-page="onItemsPerPageChange"
         @update:sort-by="onSortChange"
       >
+        <template #[`item.orderNumber`]="{ item }">
+          <ListText :text="item.orderNumber" />
+        </template>
+        <template #[`item.quantity`]="{ item }">
+          <ListText :text="item.quantity" />
+        </template>
         <template #[`item.actions`]="{ item }">
           <div class="actions-container">
             <ActionButton
@@ -381,29 +378,29 @@ onUnmounted(() => {
           </div>
         </template>
         <template #[`item.status`]="{ item }">
-          <span class="status-pill">{{ orderStatusName(item.status, ops) }}</span>
+          <span class="status-pill"><ListText :text="orderStatusName(item.status, ops)" /></span>
         </template>
         <template #[`item.productName`]="{ item }">
           <div class="order-product">
-            <span>{{ item.productName || 'Товар не указан' }}</span>
+            <span><ListText :text="item.productName || 'Товар не указан'" /></span>
             <a
               :href="safeOrderSource(item.sourceUrl)"
               target="_blank"
               rel="noopener noreferrer"
-            >Страница товара</a>
+            ><ListText text="Страница товара" /></a>
           </div>
         </template>
         <template #[`item.storeName`]="{ item }">
-          {{ item.storeName || 'Магазин не указан' }}
+          <ListText :text="item.storeName || 'Магазин не указан'" />
         </template>
         <template #[`item.sellerPrice`]="{ item }">
-          {{ formatOrderMoney(item.sellerPrice, ops) }}
+          <ListText :text="formatOrderMoney(item.sellerPrice, ops)" />
         </template>
         <template #[`item.createdAt`]="{ item }">
-          {{ moscowTime(item.createdAt) }}
+          <ListText :text="moscowTime(item.createdAt)" />
         </template>
         <template #[`item.updatedAt`]="{ item }">
-          {{ moscowTime(item.updatedAt) }}
+          <ListText :text="moscowTime(item.updatedAt)" />
         </template>
       </v-data-table-server>
     </v-card>
@@ -413,7 +410,7 @@ onUnmounted(() => {
 <style scoped>
 .orders-table { --staff-table-height:max(320px, calc(100vh - 300px)); }
 .orders-table :deep(td.order-card-cell) { cursor:pointer; }
-.order-product { display:grid; gap:2px; min-width:200px; }
+.order-product { display:grid; gap:2px; min-width:0; }
 .order-product a { color:#176da5; font-size:12px; text-decoration:underline; text-underline-offset:2px; }
 .order-product a:hover { color:#1d3e85; }
 </style>

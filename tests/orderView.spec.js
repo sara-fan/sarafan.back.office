@@ -167,6 +167,9 @@ describe('staff order card', () => {
     await render(); expect(vm().editable).toBe(true)
     vm().details.canEditProduct = false
     expect(vm().editable).toBe(false)
+    await flushPromises()
+    expect(wrapper.find('button[aria-label="Сохранить изменения"]').exists()).toBe(false)
+    expect(wrapper.findAll('.header-actions button').map(button => button.attributes('aria-label'))).toEqual(['Обновить данные', 'Отменить'])
   })
   it('reloads a changed order number only after the dirty draft is confirmed', async () => {
     await render()
