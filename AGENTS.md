@@ -144,6 +144,8 @@ For other comment-capable formats, use the same three lines with that format's n
 
 ## Validation focus
 
+- Store upload guidance consumes the Core-owned dimension, pixel, frame, aggregate animation and PNG metadata limits from Ops; do not duplicate numeric limits in the client. Core is authoritative for binary validation.
+
 - FR-PUB-006–014 (linked feature source cites Product Spec v1.57), Core #40/#41 and back.office #19 govern `/stores`. Use Active/Hidden only; all staff view, administrators create/delete, administrators and shift managers edit. Combine Core action metadata with the local deny-by-default matrix. Keep catalogue DTO validation, limits, canonical field mappings and multipart construction in `storeCatalogue.js`.
 - Store requests use the named `storeRequest` recoverable policy: transport/protocol/5xx errors retain staff identity and drafts; authentication failures keep the normal session policy. Save all fields and optional logo atomically, preserve Version, and lock update/delete after conflicts until explicit reload. Fetch Hidden logos with staff authorization and revoke object URLs on replacement, navigation and identity changes. Never use staff logo routes as unauthenticated image sources.
 - Store drafts and responses are scoped to staff ID/roles and route generation. Ordinary token refresh of the same identity must not discard drafts. Use `useDiscardChanges` for dirty editor navigation/refresh and browser closure protection; page refresh also retries logo loads.
