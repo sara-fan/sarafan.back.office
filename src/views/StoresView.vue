@@ -37,7 +37,7 @@ const filtered = computed(() => {
 })
 const statusItems = computed(() => [{ title:'Все статусы', value:'' }, ...(ops.value?.statuses ?? []).map(item => ({ title:item.name, value:item.value }))])
 const headers = [
-  { title:'', key:'actions', sortable:false }, { title:'Логотип', key:'logo', sortable:false },
+  { title:'', key:'actions', sortable:false }, { title:'Изображение', key:'logo', sortable:false },
   { title:'Название', key:'name', sortable:false }, { title:'Статус', key:'status', sortable:false },
   { title:'Порядок', key:'displayOrder', sortable:false }
 ]
@@ -187,8 +187,8 @@ onUnmounted(clear)
         </template>
         <template #[`item.logo`]="{ item }">
           <component
-            :is="safeStoreUrl(item.officialUrl) && item.logoUrl ? 'a' : 'span'"
-            :href="safeStoreUrl(item.officialUrl) && item.logoUrl ? item.officialUrl : undefined"
+            :is="safeStoreUrl(item.officialUrl) ? 'a' : 'span'"
+            :href="safeStoreUrl(item.officialUrl) ? item.officialUrl : undefined"
             :aria-label="`Открыть сайт магазина ${item.name}`"
             target="_blank"
             rel="noopener noreferrer"
@@ -215,7 +215,7 @@ onUnmounted(clear)
     <ConfirmDialog
       :open="!!pendingDelete"
       title="Удалить магазин?"
-      :message="`Магазин «${pendingDelete?.name ?? ''}» и логотип будут удалены навсегда.`"
+      :message="`Магазин «${pendingDelete?.name ?? ''}» и загруженное изображение будут удалены навсегда.`"
       action="Удалить магазин"
       action-icon="$delete"
       @cancel="pendingDelete = null"

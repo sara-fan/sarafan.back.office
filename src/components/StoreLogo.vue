@@ -48,14 +48,14 @@ onUnmounted(clear)
       v-if="source"
       :key="source"
       :src="source"
-      alt="Логотип магазина"
+      alt="Изображение магазина"
       @error="failed"
     >
     <span
       v-else-if="problem"
       role="status"
-    >Логотип недоступен. {{ presentProblem(problem) }}</span>
-    <span v-else>Нет логотипа</span>
+    >Изображение недоступно. {{ presentProblem(problem) }}</span>
+    <span v-else>Изображение не выбрано</span>
   </div>
 </template>
 <style scoped>

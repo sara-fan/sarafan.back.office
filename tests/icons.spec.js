@@ -19,6 +19,8 @@ const applicationAliases = {
   edit:'fa-pen-to-square',
   eye:'fa-eye',
   eyeOff:'fa-eye-slash',
+  generateImage:'fa-wand-magic-sparkles',
+  info:'fa-circle-info',
   legalDocuments:'fa-file-contract',
   login:'fa-right-to-bracket',
   logout:'fa-right-from-bracket',

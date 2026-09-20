@@ -18,6 +18,8 @@ export const sarafanAliases = {
   edit: 'fas fa-pen-to-square',
   eye: 'fas fa-eye',
   eyeOff: 'fas fa-eye-slash',
+  generateImage: 'fas fa-wand-magic-sparkles',
+  info: 'fas fa-circle-info',
   legalDocuments: 'fas fa-file-contract',
   link: 'fas fa-arrow-up-right-from-square',
   login: 'fas fa-right-to-bracket',
