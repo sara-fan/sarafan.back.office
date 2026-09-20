@@ -39,7 +39,9 @@ describe('store contracts and atomic payload', () => {
     null, {}, ...['name','description','officialUrl'].flatMap(key => [null, '', 'x'.repeat(2050)].map(value => ({ ...store, [key]:value }))),
     ...Object.entries({ id:0, status:3, displayOrder:-1, version:'bad', createdAt:'bad', updatedAt:'2026-09-17', logoUrl:'https://evil.test/logo' }).map(([key,value]) => ({ ...store, [key]:value })),
     { ...store, version:'00000000-0000-0000-0000-000000000000' }, { ...store, logoUrl:5 },
-    { ...store, displayOrder:2147483648 }, { ...store, officialUrl:'javascript:alert(1)' }, { ...store, logoUrl:logoUrl.replace('/1/', '/2/') }
+    { ...store, displayOrder:2147483648 }, { ...store, officialUrl:'javascript:alert(1)' },
+    ...['https://127.0.0.1/', 'https://[::1]/', 'https://shop.invalid/'].map(officialUrl => ({ ...store, officialUrl })),
+    { ...store, logoUrl:logoUrl.replace('/1/', '/2/') }
   ])('rejects malformed or unsafe metadata %#', value => expect(() => validateStore(value, ops)).toThrow())
   it.each([null, 'https://', 'http://[bad', 'javascript:alert(1)', '//shop.test', 'https://a:b@shop.test', 'https://shop.test/ bad', 'https://shop.test/\\bad', 'https://shop.test/\n'])('rejects URL %s', value => expect(safeStoreUrl(value)).toBe(false))
   it('accepts Latin and Cyrillic HTTP destinations without an IANA requirement', () => {
@@ -57,20 +59,20 @@ describe('store contracts and atomic payload', () => {
       expect(storeAction(user, null, 'view')).toBe(false)
     }
   })
-  it('uses published limits, permits 140–160, enforces activation and integer order', () => {
+  it('uses published limits, requires an image for every status and enforces integer order', () => {
     const form = storeForm(store)
     expect(storeForm()).toEqual({ name:'', description:'', officialUrl:'', status:0, displayOrder:'0' })
-    expect(storeValidation(form, ops, null, false)).toBeNull()
-    for (const count of [140,141,160]) expect(storeValidation({ ...form, description:'a'.repeat(count) }, ops, null, false)).toBeNull()
-    expect(storeValidation({ ...form, description:'a'.repeat(161) }, ops, null, false).errors.description).toBeTruthy()
-    expect(storeValidation({ ...form, status:1 }, ops, null, false).errors.logo).toBeTruthy()
-    expect(storeValidation({ ...form, status:1 }, ops, null, true)).toBeNull()
-    expect(storeValidation({ ...form, status:8, displayOrder:'', name:'' }, ops, null, false).errors).toHaveProperty('status')
-    for (const displayOrder of ['-1','1.5','2147483648','Infinity']) expect(storeValidation({ ...form, displayOrder }, ops, null, false).errors.displayOrder).toBeTruthy()
+    expect(storeValidation(form, ops, null, { existing:true })).toBeNull()
+    for (const count of [140,141,160]) expect(storeValidation({ ...form, description:'a'.repeat(count) }, ops, null, { existing:true })).toBeNull()
+    expect(storeValidation({ ...form, description:'a'.repeat(161) }, ops, null, { existing:true }).errors.description).toBeTruthy()
+    for (const status of [0,1,2]) expect(storeValidation({ ...form, status }, ops, null).errors.logo).toBeTruthy()
+    expect(storeValidation({ ...form, status:8, displayOrder:'', name:'' }, ops, null, { existing:true }).errors).toHaveProperty('status')
+    for (const displayOrder of ['-1','1.5','2147483648','Infinity']) expect(storeValidation({ ...form, displayOrder }, ops, null, { existing:true }).errors.displayOrder).toBeTruthy()
     const file = new globalThis.File(['png'], 'logo.png', { type:'image/png' })
-    expect(storeValidation({ ...form, status:1 }, ops, file, false)).toBeNull()
+    expect(storeValidation({ ...form, status:1 }, ops, file)).toBeNull()
+    expect(storeValidation(form, ops, file, { generatedStale:true }).errors.logo).toContain('Название изменилось. Сформируйте изображение заново или загрузите другое.')
     const bad = new globalThis.File(['svg'], 'secret.svg', { type:'image/svg+xml' })
-    expect(storeValidation(form, ops, bad, false).errors.logo).toBeTruthy()
+    expect(storeValidation(form, ops, bad).errors.logo).toBeTruthy()
     expect(logoValidation(null, ops.limits)).toBeNull()
     expect(logoValidation(new globalThis.File([], 'empty.png', { type:'image/png' }), ops.limits)).toBeTruthy()
     expect(logoValidation({ type:'image/png', size:2097153 }, ops.limits)).toBeTruthy()
@@ -103,5 +105,5 @@ it('allocates free numbers and validates placement across all statuses excluding
   expect(storePlacementErrors({ displayOrder:'6', status:2 }, six, null, 6)).toHaveProperty('status')
   expect(storePlacementErrors({ displayOrder:'0', status:2 }, six, 1, 6)).toEqual({})
   expect(storePlacementErrors({ displayOrder:'bad', status:0 }, [], null, 6)).toEqual({})
-  expect(storeValidation({ ...storeForm(store), status:2 }, ops, null, false).errors.logo).toBeTruthy()
+  expect(storeValidation({ ...storeForm(store), status:2 }, ops, null, { existing:true })).toBeNull()
 })

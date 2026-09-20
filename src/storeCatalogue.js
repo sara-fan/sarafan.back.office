@@ -12,7 +12,8 @@ export const STORE_VERSION_INVALID = `${PROBLEM_TYPE_ROOT}invalid-store-version`
 export const STORE_ERROR_OPTIONS = { types:Object.fromEntries(Object.entries({
   'store-display-order-conflict':'displayOrder', 'store-priority-limit-exceeded':'status',
   'invalid-store-name':'name', 'invalid-store-description':'description', 'invalid-store-url':'officialUrl',
-  'invalid-store-status':'status', 'invalid-store-display-order':'displayOrder', 'store-logo-required':'logo',
+  'invalid-store-status':'status', 'invalid-store-display-order':'displayOrder',
+  'store-logo-required':'logo',
   'invalid-store-logo-size':'logo', 'invalid-store-logo-type':'logo', 'invalid-store-logo-content':'logo'
 }).map(([key, value]) => [`${PROBLEM_TYPE_ROOT}${key}`, [value]])) }
 const positive = value => Number.isInteger(value) && value > 0 && value <= 2147483647
@@ -53,7 +54,7 @@ export function storeIdentity(user) {
 export function validateStore(value, ops, id) {
   if (!value || !positive(value.id) || (id !== undefined && value.id !== Number(id))
     || !['name', 'description', 'officialUrl'].every(key => typeof value[key] === 'string' && value[key].trim().length > 0 && value[key].length <= ops.limits[`${key}MaxLength`])
-    || !safeStoreUrl(value.officialUrl) || !ops.statuses.some(item => item.value === value.status)
+    || !normalizeStoreAddress(value.officialUrl, ops.officialUrlRules) || !ops.statuses.some(item => item.value === value.status)
     || !Number.isInteger(value.displayOrder) || value.displayOrder < 0 || value.displayOrder > 2147483647
     || !uuid(value.version) || !['createdAt', 'updatedAt'].every(key => typeof value[key] === 'string' && /^\d{4}-\d{2}-\d{2}T.+(?:Z|\+00:00)$/u.test(value[key]) && Number.isFinite(Date.parse(value[key])))
     || !(value.logoUrl === null || (typeof value.logoUrl === 'string' && new RegExp(`^/api/v1/backoffice/stores/${value.id}/logo\\?v=[0-9a-f]{64}$`, 'u').test(value.logoUrl)))) protocol()
@@ -75,7 +76,7 @@ export function logoValidation(file, limits) {
     : file.size <= 0 || file.size > limits.logoMaxBytes ? `Размер файла должен быть от 1 до ${limits.logoMaxBytes} байт.` : null
   return message ? createInternalProblem('invalidInput', { errors:{ logo:[message] } }) : null
 }
-export function storeValidation(form, ops, file, hasLogo) {
+export function storeValidation(form, ops, file, image = {}) {
   const errors = {}
   for (const key of ['name', 'description', 'officialUrl']) {
     const limit = ops.limits[`${key}MaxLength`]
@@ -86,7 +87,8 @@ export function storeValidation(form, ops, file, hasLogo) {
   if (!/^\d+$/u.test(form.displayOrder) || !Number.isInteger(Number(form.displayOrder)) || Number(form.displayOrder) > 2147483647) errors.displayOrder = ['Укажите целое число от 0 до 2147483647.']
   const logoProblem = logoValidation(file, ops.limits)
   if (logoProblem) Object.assign(errors, logoProblem.errors)
-  else if (form.status !== 0 && !file && !hasLogo) errors.logo = ['Для показа магазина необходим логотип.']
+  else if (!file && !image.existing) errors.logo = ['Загрузите изображение магазина или сформируйте его из названия.']
+  else if (file && image.generatedStale) errors.logo = ['Название изменилось. Сформируйте изображение заново или загрузите другое.']
   return Object.keys(errors).length ? createInternalProblem('invalidInput', { errors }) : null
 }
 export function storePayload(form, version, file) {

@@ -12,6 +12,7 @@ import PageAlertRegion from '../components/PageAlertRegion.vue'
 import StoreLogo from '../components/StoreLogo.vue'
 import ActionButton from '../components/ActionButton.vue'
 import { normalizeStoreAddress } from '../storeAddress.js'
+import { generateStoreImage, storeImageName } from '../storeImageGenerator.js'
 import { associatedFieldErrors, createInternalProblem, formPageProblem, normalizeProblem } from '../errors/problem.js'
 import { STORE_CONFLICT, STORE_VERSION_INVALID, STORE_FIELDS, STORE_ERROR_OPTIONS, storeAction, storeIdentity, validateStoreList, nextStoreOrder, storePlacementErrors, storeForm, storePayload, storeValidation, logoValidation, validateStore, validateStoreOps } from '../storeCatalogue.js'
 import { useSession } from '../stores/session.js'
@@ -36,10 +37,12 @@ const ops = ref(null)
 const catalogue = ref([])
 const form = ref(null)
 const file = shallowRef(null)
+const generatedForName = ref('')
 const invalidFile = shallowRef(null)
 const baseline = ref('')
 const problem = ref(null)
 const busy = ref(false)
+const generating = ref(false)
 const locked = ref(false)
 const committed = ref('')
 const revision = ref(0)
@@ -57,6 +60,7 @@ function apply(value) {
   form.value = storeForm(value)
   baseline.value = JSON.stringify(form.value)
   file.value = null
+  generatedForName.value = ''
   invalidFile.value = null
   locked.value = false
   revision.value += 1
@@ -98,9 +102,12 @@ function failure(value) {
   if ([STORE_CONFLICT, STORE_VERSION_INVALID].includes(problem.value.type)) locked.value = true
 }
 async function saveAction() {
-  if (busy.value || locked.value || !editable.value || !form.value) return
+  if (busy.value || generating.value || locked.value || !editable.value || !form.value) return
   normalizeWebsite()
-  problem.value = invalidFile.value ? previewProblem() : storeValidation(form.value, ops.value, file.value, !!details.value?.logoUrl)
+  problem.value = invalidFile.value ? previewProblem() : storeValidation(form.value, ops.value, file.value, {
+    existing:Boolean(details.value?.logoUrl),
+    generatedStale:Boolean(generatedForName.value && generatedForName.value !== storeImageName(form.value.name))
+  })
   if (!problem.value && Object.keys(placementErrors.value).length) problem.value = createInternalProblem("invalidInput", { errors:placementErrors.value })
   if (problem.value) return
   const current = ++generation
@@ -122,9 +129,27 @@ async function selectLogo(selected) {
   if (!selected || !editable.value || busy.value || locked.value) return
   return focusAfter(() => {
     problem.value = logoValidation(selected, ops.value.limits)
-    if (!problem.value) { invalidFile.value = null; file.value = selected }
+    if (!problem.value) { invalidFile.value = null; generatedForName.value = ''; file.value = selected }
   }, () => validationFields(problem.value, STORE_ERROR_OPTIONS))
 }
+async function generateLogoAction() {
+  if (!editable.value || busy.value || generating.value || locked.value || !form.value || !storeImageName(form.value.name)) return
+  const current = generation
+  const name = storeImageName(form.value.name)
+  problem.value = null
+  generating.value = true
+  try {
+    const selected = await generateStoreImage(name)
+    if (current !== generation) return
+    problem.value = logoValidation(selected, ops.value.limits)
+    if (!problem.value) { invalidFile.value = null; generatedForName.value = name; file.value = selected }
+  } catch {
+    if (current === generation) problem.value = createInternalProblem('invalidInput', {
+      errors:{ logo:['Не удалось сформировать изображение. Повторите попытку или загрузите готовый файл.'] }
+    })
+  } finally { if (current === generation) generating.value = false }
+}
+function generateLogo() { return focusAfter(generateLogoAction, () => validationFields(problem.value, STORE_ERROR_OPTIONS)) }
 function previewProblem() {
   return createInternalProblem('invalidInput', { errors:{ logo:['Не удалось показать выбранное изображение. Выберите корректный файл PNG, JPEG или WebP.'] } })
 }
@@ -134,10 +159,10 @@ function previewFailed(selected) {
 }
 function clear() {
   generation += 1
-  details.value = null; form.value = null; ops.value = null; file.value = null
+  details.value = null; form.value = null; ops.value = null; file.value = null; generatedForName.value = ''
   invalidFile.value = null
   catalogue.value = []
-  baseline.value = ''; problem.value = null; busy.value = false; locked.value = false
+  baseline.value = ''; problem.value = null; busy.value = false; generating.value = false; locked.value = false
   committed.value = ''
   finish(false)
 }
@@ -158,7 +183,7 @@ onUnmounted(clear)
         :loaded="!!form || !!committed"
         :busy="busy"
         :show-save="editable"
-        :save-disabled="locked || Object.keys(placementErrors).length > 0 || (!creating && !dirty)"
+        :save-disabled="generating || locked || Object.keys(placementErrors).length > 0 || (!creating && !dirty)"
         @refresh="refresh"
         @cancel="back"
       />
@@ -203,33 +228,23 @@ onUnmounted(clear)
           :problem="fieldProblem"
           :error-options="STORE_ERROR_OPTIONS"
         />
-        <div class="form-field">
-          <label for="description">Описание</label>
-          <textarea
-            id="description"
-            v-model="form.description"
-            name="description"
-            :disabled="!editable || locked"
-            rows="3"
-            :aria-invalid="errors('description').length > 0"
-            aria-describedby="description-hint description-error"
-          />
-          <p
-            id="description-hint"
-            class="field-hint"
-          >
-            {{ form.description.length }} / {{ ops.limits.descriptionMaxLength }}. Рекомендуется не более {{ ops.limits.descriptionRecommendedLength }} символов.
-          </p>
-          <div
-            id="description-error"
-            class="field-error"
-          >
-            <span
-              v-for="error in errors('description')"
-              :key="error"
-            >{{ error }}</span>
-          </div>
-        </div>
+        <FormField
+          v-model="form.description"
+          name="description"
+          :disabled="!editable || locked"
+          label="Описание"
+          :hint="`${form.description.length} / ${ops.limits.descriptionMaxLength}. Рекомендуется не более ${ops.limits.descriptionRecommendedLength} символов.`"
+          :problem="fieldProblem"
+          :error-options="STORE_ERROR_OPTIONS"
+        >
+          <template #control="{ controlAttrs }">
+            <textarea
+              v-bind="controlAttrs"
+              v-model="form.description"
+              rows="3"
+            />
+          </template>
+        </FormField>
         <FormField
           v-model="form.officialUrl"
           name="officialUrl"
@@ -255,15 +270,32 @@ onUnmounted(clear)
           </template>
         </FormField>
         <div class="form-field">
-          <label for="logo">Логотип</label>
+          <div class="store-image-label">
+            <label for="logo">Изображение магазина</label>
+            <ActionButton
+              icon="$info"
+              :icon-size="16"
+              tooltip-text="Убедитесь, что изображение не нарушает авторские права"
+            />
+          </div>
           <div class="staff-form-control store-logo-control">
+            <ActionButton
+              v-if="editable"
+              icon="$generateImage"
+              tooltip-text="Сформировать изображение из названия"
+              :disabled="busy || generating || locked || !storeImageName(form.name)"
+              :loading="generating"
+              :aria-invalid="errors('logo').length > 0"
+              aria-describedby="logo-hint logo-error"
+              @click="generateLogo"
+            />
             <StaffFileInput
               v-if="editable"
               name="logo"
               :model-value="file"
-              :disabled="busy || locked"
+              :disabled="busy || generating || locked"
               :clearable="false"
-              tooltip="Выбрать логотип"
+              tooltip="Выбрать изображение магазина"
               :accept="ops.limits.logoContentTypes.join(',')"
               :aria-invalid="errors('logo').length > 0"
               aria-describedby="logo-hint logo-error"
@@ -285,7 +317,8 @@ onUnmounted(clear)
             Статичный PNG, JPEG или WebP, до {{ ops.limits.logoMaxBytes }} байт.
             Не более {{ ops.limits.logoMaxDimension }} пикселей по каждой стороне и {{ ops.limits.logoMaxPixels }} пикселей всего.
             Анимация WebP: до {{ ops.limits.logoMaxFrames }} кадров; сумма площадей холста по всем кадрам — до {{ ops.limits.logoMaxAnimationPixels }} пикселей.
-            Распакованные метаданные PNG — до {{ ops.limits.logoMaxMetadataBytes }} байт. Новый файл заменит логотип при сохранении.
+            Распакованные метаданные PNG — до {{ ops.limits.logoMaxMetadataBytes }} байт. Новый файл заменит изображение при сохранении.
+            Изображение обязательно: загрузите готовый файл или сформируйте его из названия магазина.
           </p>
           <div
             id="logo-error"
@@ -354,6 +387,7 @@ onUnmounted(clear)
 .store-website-control { display:flex; align-items:center; gap:var(--staff-input-action-gap); }
 .store-website-control input { flex:1; }
 .store-logo-control { display:flex; align-items:center; gap:8px; }
+.store-image-label { display:flex; align-items:center; gap:4px; }
 .store-logo-control > .staff-form-control { flex:1; min-width:0; }
 .store-logo-preview { flex:0 1 auto; max-width:30%; }
 .store-logo-preview :deep(img) { display:block; width:auto; height:calc(var(--staff-form-control-height) * 0.7); max-width:100%; max-height:calc(var(--staff-form-control-height) * 0.7); object-fit:contain; }
