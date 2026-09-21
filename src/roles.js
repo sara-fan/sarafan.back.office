@@ -12,6 +12,8 @@ const permissions = Object.freeze({
   access: Object.keys(ROLES),
   manualQuotes: Object.keys(ROLES),
   viewStores: Object.keys(ROLES),
+  viewServiceCatalogue: Object.keys(ROLES),
+  manageServiceCatalogue: ['administrator'],
   createStore: ['administrator'],
   editStore: ['administrator', 'shift-manager'],
   deleteStore: ['administrator'],
@@ -42,6 +44,8 @@ export function safeReturn(value, user) {
   if (value === '/profile') return profileRoute(user)
   if (can(user, 'createStore') && value === '/stores/new') return value
   if (can(user, 'viewStores') && /^\/stores(?:\/[1-9]\d*)?$/u.test(value)) return value
+  if (can(user, 'manageServiceCatalogue') && value === '/service-catalogue/new') return value
+  if (can(user, 'viewServiceCatalogue') && /^\/service-catalogue(?:\/(?:audit|[1-9]\d*))?$/u.test(value)) return value
   if (can(user, 'manageUsers') && /^\/users(?:\/(?:new|[1-9]\d*))?$/u.test(value)) return value
   if (can(user, 'manageLegalDocuments') && /^\/legal-documents(?:\/(?:new|audit|[0-9a-fA-F]{8}-(?:[0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}))?$/u.test(value)) return value
   if (can(user, 'manageConsentWithdrawalRequests') && value === '/privacy-requests') return value

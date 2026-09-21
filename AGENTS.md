@@ -88,6 +88,12 @@ For other comment-capable formats, use the same three lines with that format's n
 - Require back-office passwords to contain 8 to 18 characters and describe both limits in characters. Keep UI validation and guidance aligned with Core; do not ask users to count encoded bytes.
 - Serve on its own origin/container at sb.sw.consulting. Keep logging identity and runtime configuration independent of the customer application.
 
+## Service pricing catalogue
+
+- Core #43 and Product Spec v1.57 govern `/service-catalogue`. Consume Core Ops as the sole source for service, price-method and audit-action labels and aliases, numeric limits and caller capabilities. The catalogue accepts only RUB and USD; reject Ops or catalogue data that exposes EUR or another currency even though unrelated features may support it.
+- Keep local authorization deny-by-default and combine it with Core capabilities: every authenticated staff role may view catalogue entries and audit history, while only Administrator may create, update or delete entries. Preserve current versions on updates and deletions, lock mutations after conflicts until refresh, and retain drafts and staff identity for catalogue transport, protocol and 5xx failures.
+- Validate Percent, Fixed and Manual parameter shapes strictly. Treat availability as inclusive Moscow calendar dates, detect same-service overlaps locally for prompt feedback, and preserve authoritative server conflict handling. Audit before/after snapshots use the same typed catalogue DTO contract and remain viewable after entry deletion.
+
 ## Action buttons
 
 - Leave table action-button column headings blank in every list view; retain accessible action names and tooltips on the buttons.
