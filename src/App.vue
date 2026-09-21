@@ -125,6 +125,13 @@ watch(() => user.value?.id, async (id, _previous, onCleanup) => {
             title="Магазины"
           />
           <v-list-item
+            v-if="can(user, 'viewServiceCatalogue')"
+            to="/service-catalogue"
+            class="drawer-link"
+            prepend-icon="$serviceCatalogue"
+            title="Тарифы услуг"
+          />
+          <v-list-item
             v-if="can(user, 'manageConsentWithdrawalRequests')"
             to="/privacy-requests"
             title="Перс. данные"

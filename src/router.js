@@ -16,6 +16,9 @@ import OrderView from './views/OrderView.vue'
 import OrdersView from './views/OrdersView.vue'
 import StoresView from './views/StoresView.vue'
 import StoreView from './views/StoreView.vue'
+import ServiceCatalogueView from './views/ServiceCatalogueView.vue'
+import ServiceCatalogueEntryView from './views/ServiceCatalogueEntryView.vue'
+import ServiceCatalogueAuditView from './views/ServiceCatalogueAuditView.vue'
 import StatusView from './views/StatusView.vue'
 
 export function createAppRouter(history = createWebHistory(), session = useSession()) {
@@ -35,6 +38,10 @@ export function createAppRouter(history = createWebHistory(), session = useSessi
     { path:'/stores', component:StoresView, meta:{ action:'viewStores' } },
     { path:'/stores/new', component:StoreView, meta:{ action:'createStore' } },
     { path:'/stores/:id([1-9]\\d*)', component:StoreView, meta:{ action:'viewStores' } },
+    { path:'/service-catalogue', component:ServiceCatalogueView, meta:{ action:'viewServiceCatalogue' } },
+    { path:'/service-catalogue/new', component:ServiceCatalogueEntryView, meta:{ action:'manageServiceCatalogue' } },
+    { path:'/service-catalogue/audit', component:ServiceCatalogueAuditView, meta:{ action:'viewServiceCatalogue' } },
+    { path:'/service-catalogue/:id([1-9]\\d*)', component:ServiceCatalogueEntryView, meta:{ action:'viewServiceCatalogue' } },
     { path:'/orders/:orderNumber(\\d{8}-[1-9]\\d*)', component:OrderView, meta:{ action:'manualQuotes' } },
     { path:'/profile', component:AccountView },
     { path:'/forbidden', component:StatusView, props:{ forbidden:true } },

@@ -34,6 +34,7 @@ export const sarafanAliases = {
   save: 'fas fa-floppy-disk',
   saveChanges: 'fas fa-check-double',
   search: 'fas fa-magnifying-glass',
+  serviceCatalogue: 'fas fa-tags',
   staff: 'fas fa-users'
 }
 

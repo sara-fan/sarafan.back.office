@@ -7,11 +7,13 @@ import { UUID_PATH_PATTERN, createApiClient } from '../api/client.js'
 import { CORE_PROBLEM_TYPES, INTERNAL_PROBLEM_TYPES, createInternalProblem, suppressProblem } from '../errors/problem.js'
 import { validateOrderOps } from '../orderFormatting.js'
 import { can } from '../roles.js'
+import { serviceCatalogueIdentity, validateServiceCatalogueOps } from '../serviceCatalogue.js'
 
 const BASE = '/api/v1/backoffice'
 const json = (method, body) => ({ method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
 const CONSENT_REQUEST_PATH_PATTERN = new RegExp(`^/(legal-documents(?:/(?:ops|preview|audit|${UUID_PATH_PATTERN}(?:/source)?))?|consents/withdrawal-requests(?:/processed)?)$`, 'iu')
 const ORDER_REQUEST_PATH_PATTERN = /^\/orders(?:\/ops|\/\d{8}-[1-9]\d*(?:\/product)?)?$/u
+const SERVICE_CATALOGUE_REQUEST_PATH_PATTERN = /^\/service-catalogue(?:\/ops|\/audit|\/[1-9]\d*)?$/u
 
 function isServiceUnavailable(problem) {
   return problem?.type === INTERNAL_PROBLEM_TYPES.protocolError
@@ -35,13 +37,24 @@ export function createSession() {
   const loginProblem = ref(null)
   const legalDocumentOps = ref(null)
   const orderOps = ref(null)
+  const serviceCatalogueOps = ref(null)
   let token = ''
   let epoch = 0
   let refreshing = null
   let initialization = null
   let legalDocumentOpsRequest = null
   let orderOpsRequest = null
+  let serviceCatalogueOpsRequest = null
+  let serviceCatalogueOpsIdentity = ''
+  let serviceCatalogueOpsRequestIdentity = ''
   const client = createApiClient({ getAccessToken: () => token, refreshSession })
+
+  function clearServiceCatalogueOps() {
+    serviceCatalogueOps.value = null
+    serviceCatalogueOpsRequest = null
+    serviceCatalogueOpsIdentity = ''
+    serviceCatalogueOpsRequestIdentity = ''
+  }
 
   function clearSession(message = '', problem = null) {
     epoch += 1
@@ -54,6 +67,7 @@ export function createSession() {
     legalDocumentOpsRequest = null
     orderOps.value = null
     orderOpsRequest = null
+    clearServiceCatalogueOps()
   }
   function forceLogoff(problem) {
     const unavailable = serviceUnavailableProblem(problem)
@@ -67,6 +81,7 @@ export function createSession() {
       throw createInternalProblem('protocolError')
     }
     if (user.value?.id !== session.user.id) viewStateMemory.clear()
+    if (serviceCatalogueIdentity(user.value) !== serviceCatalogueIdentity(session.user)) clearServiceCatalogueOps()
     token = session.accessToken
     user.value = session.user
     notice.value = ''
@@ -197,9 +212,31 @@ export function createSession() {
     }
     return orderOpsRequest
   }
+  async function getServiceCatalogueOps() {
+    const identity = serviceCatalogueIdentity(user.value)
+    if (serviceCatalogueOps.value && serviceCatalogueOpsIdentity === identity) return serviceCatalogueOps.value
+    if (!serviceCatalogueOpsRequest || serviceCatalogueOpsRequestIdentity !== identity) {
+      const pending = request('/service-catalogue/ops', {}, { supplementary:true })
+        .then(value => {
+          if (identity !== serviceCatalogueIdentity(user.value)) throw createInternalProblem('sessionRestoreUnavailable')
+          serviceCatalogueOps.value = validateServiceCatalogueOps(value)
+          serviceCatalogueOpsIdentity = identity
+          return serviceCatalogueOps.value
+        })
+        .finally(() => {
+          if (serviceCatalogueOpsRequest === pending) {
+            serviceCatalogueOpsRequest = null
+            serviceCatalogueOpsRequestIdentity = ''
+          }
+        })
+      serviceCatalogueOpsRequest = pending
+      serviceCatalogueOpsRequestIdentity = identity
+    }
+    return serviceCatalogueOpsRequest
+  }
   return {
-    user:readonly(user), ready:readonly(ready), restoring:readonly(restoring), restoreProblem:readonly(restoreProblem), notice:readonly(notice), loginProblem:readonly(loginProblem), legalDocumentOps:readonly(legalDocumentOps), orderOps:readonly(orderOps),
-    viewStateMemory, ensureReady, restoreSession, login, logout, saveUser, saveProfile, getLegalDocumentOps, getOrderOps,
+    user:readonly(user), ready:readonly(ready), restoring:readonly(restoring), restoreProblem:readonly(restoreProblem), notice:readonly(notice), loginProblem:readonly(loginProblem), legalDocumentOps:readonly(legalDocumentOps), orderOps:readonly(orderOps), serviceCatalogueOps:readonly(serviceCatalogueOps),
+    viewStateMemory, ensureReady, restoreSession, login, logout, saveUser, saveProfile, getLegalDocumentOps, getOrderOps, getServiceCatalogueOps,
     storeRequest: (path, options = {}, responseType = 'json') => {
       const pathname = typeof path === 'string' ? path.split('?')[0] : ''
       if (!/^\/stores(?:\/ops|\/[1-9]\d*(?:\/logo)?)?$/u.test(pathname)) throw createInternalProblem('invalidInput')
@@ -213,6 +250,11 @@ export function createSession() {
     orderRequest: (path, options = {}) => {
       const pathname = typeof path === 'string' ? path.split('?')[0] : ''
       if (!ORDER_REQUEST_PATH_PATTERN.test(pathname)) throw createInternalProblem('invalidInput')
+      return request(path, options, { supplementary:true })
+    },
+    serviceCatalogueRequest: (path, options = {}) => {
+      const pathname = typeof path === 'string' ? path.split('?')[0] : ''
+      if (!SERVICE_CATALOGUE_REQUEST_PATH_PATTERN.test(pathname)) throw createInternalProblem('invalidInput')
       return request(path, options, { supplementary:true })
     },
     listUsers: () => request('/users'), getUser: id => request(`/users/${id}`), getRoles: () => request('/users/ops'),
