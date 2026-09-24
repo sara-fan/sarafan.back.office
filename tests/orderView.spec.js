@@ -52,7 +52,7 @@ describe('staff order card', () => {
     expect(wrapper.get('.saved-limit').text()).not.toContain('15.09.2026')
     expect(wrapper.get('.total-line').text()).toContain('Стоимость, USD40,00')
     expect(wrapper.findAll('.header-actions button').map(button => button.attributes('aria-label'))).toEqual([
-      'Обновить данные', 'Сохранить изменения', 'Отменить'
+      'Расчёт стоимости', 'Обновить данные', 'Сохранить изменения', 'Отменить'
     ])
     expect(wrapper.find('.merchandise-summary').exists()).toBe(false)
     const result = { ...details, product:{ ...details.product, productName:'Новое название', storeName:'Новый магазин' }, updatedAt:'2026-09-15T12:00:00.123456Z' }
@@ -169,7 +169,7 @@ describe('staff order card', () => {
     expect(vm().editable).toBe(false)
     await flushPromises()
     expect(wrapper.find('button[aria-label="Сохранить изменения"]').exists()).toBe(false)
-    expect(wrapper.findAll('.header-actions button').map(button => button.attributes('aria-label'))).toEqual(['Обновить данные', 'Отменить'])
+    expect(wrapper.findAll('.header-actions button').map(button => button.attributes('aria-label'))).toEqual(['Расчёт стоимости', 'Обновить данные', 'Отменить'])
   })
   it('reloads a changed order number only after the dirty draft is confirmed', async () => {
     await render()

@@ -318,6 +318,7 @@ onUnmounted(() => {
         active
         hide-details
         clearable
+        clear-icon="$brush"
         @update:model-value="onCreatedFromChange"
       />
       <v-text-field
@@ -330,6 +331,7 @@ onUnmounted(() => {
         active
         hide-details
         clearable
+        clear-icon="$brush"
         @update:model-value="onCreatedToChange"
       />
     </ListFilterBar>

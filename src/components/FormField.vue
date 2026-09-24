@@ -7,7 +7,7 @@ import ActionButton from './ActionButton.vue'
 import { associatedFieldErrors } from '../errors/problem.js'
 defineOptions({ inheritAttrs:false })
 const props = defineProps({
-  name:{ type:String, required:true }, label:{ type:String, required:true }, problem:{ type:Object, default:null },
+  name:{ type:String, required:true }, label:{ type:String, required:true }, labelFor:{ type:String, default:undefined }, problem:{ type:Object, default:null },
   type:{ type:String, default:'text' }, hint:{ type:String, default:'' }, revealable:Boolean,
   errorOptions:{ type:Object, default:() => ({}) }
 })
@@ -17,7 +17,7 @@ const reveal = ref(false)
 </script>
 <template>
   <div class="form-field">
-    <label :for="name">{{ label }}</label>
+    <label :for="labelFor || name">{{ label }}</label>
     <slot
       name="control"
       :control-attrs="{ ...$attrs, id:name, name, 'aria-invalid':errors.length > 0, 'aria-describedby':`${hint ? `${name}-hint ` : ''}${name}-error` }"
@@ -40,7 +40,28 @@ const reveal = ref(false)
           :tooltip-text="reveal ? 'Скрыть пароль' : 'Показать пароль'"
           @click="reveal = !reveal"
         />
-      </div><input
+      </div>
+      <div
+        v-else-if="type === 'date'"
+        class="staff-form-control date-control"
+      >
+        <input
+          :id="name"
+          v-model="model"
+          v-bind="$attrs"
+          type="date"
+          :name="name"
+          :aria-invalid="errors.length > 0"
+          :aria-describedby="`${hint ? `${name}-hint ` : ''}${name}-error`"
+        >
+        <ActionButton
+          icon="$brush"
+          :tooltip-text="`Очистить дату: ${label.replace(/:$/, '')}`"
+          :disabled="Boolean($attrs.disabled) || !model"
+          @click="model = ''"
+        />
+      </div>
+      <input
         v-else
         :id="name"
         v-model="model"
@@ -69,3 +90,7 @@ const reveal = ref(false)
     </div>
   </div>
 </template>
+<style scoped>
+.date-control { display:flex; align-items:center; gap:4px; min-width:0; }
+.date-control input { flex:1; min-width:0; }
+</style>

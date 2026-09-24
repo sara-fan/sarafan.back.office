@@ -40,6 +40,7 @@ const serviceName = value => ops.value?.services.find(item => item.value === val
 const methodName = value => ops.value?.priceMethods.find(item => item.value === value)?.name ?? ''
 const serviceItems = computed(() => [{ title:'Все услуги', value:'' }, ...(ops.value?.services ?? []).map(item => ({ title:item.name, value:item.value }))])
 const methodItems = computed(() => [{ title:'Все способы', value:'' }, ...(ops.value?.priceMethods ?? []).map(item => ({ title:item.name, value:item.value }))])
+const nameOrder = new Intl.Collator('ru-RU', { sensitivity:'base' })
 const filtered = computed(() => {
   const query = search.value.trim().toLocaleLowerCase('ru')
   return items.value.filter(item => (service.value === '' || item.service === service.value)
@@ -49,10 +50,10 @@ const filtered = computed(() => {
 })
 const headers = [
   { title:'', key:'actions', sortable:false, width:'100px' },
-  { title:'Услуга', key:'service', sortable:false },
-  { title:'Способ расчёта', key:'priceMethod', sortable:false },
-  { title:'Параметры', key:'parameters', sortable:false },
-  { title:'Период действия', key:'availability', sortable:false }
+  { title:'Услуга', key:'service', sortRaw:(a, b) => nameOrder.compare(serviceName(a.service), serviceName(b.service)) },
+  { title:'Способ расчёта', key:'priceMethod', sortRaw:(a, b) => nameOrder.compare(methodName(a.priceMethod), methodName(b.priceMethod)) },
+  { title:'Параметры', key:'parameters', sortRaw:(a, b) => nameOrder.compare(formatServiceCatalogueParameters(a, ops.value), formatServiceCatalogueParameters(b, ops.value)) },
+  { title:'Период действия', key:'availability', sortRaw:(a, b) => (a.availableFrom ?? '').localeCompare(b.availableFrom ?? '') }
 ]
 
 function cellProps({ item, column }) {
@@ -65,6 +66,8 @@ function cellProps({ item, column }) {
     }
   }
 }
+
+const isProduct = item => ops.value?.services.some(service => service.value === item.service && service.routeAlias === 'product')
 
 async function load() {
   const current = ++generation
@@ -94,7 +97,7 @@ async function open(path) {
 }
 
 async function remove() {
-  if (!pendingDelete.value || busy.value || deleteLocked.value || !serviceCatalogueAction(session.user.value, ops.value, 'delete')) return
+  if (!pendingDelete.value || isProduct(pendingDelete.value) || busy.value || deleteLocked.value || !serviceCatalogueAction(session.user.value, ops.value, 'delete')) return
   const target = pendingDelete.value
   pendingDelete.value = null
   const current = ++generation
@@ -130,7 +133,7 @@ onUnmounted(clear)
   <section class="settings staff-list">
     <header class="header-with-actions">
       <h1 class="primary-heading">
-        Тарифы услуг <span class="count">{{ filtered.length }}</span>
+        Тарифы <span class="count">{{ filtered.length }}</span>
       </h1>
       <div class="header-action-groups">
         <div class="header-actions">
@@ -211,13 +214,13 @@ onUnmounted(clear)
         <template #[`item.actions`]="{ item }">
           <div class="actions-container">
             <ActionButton
-              :icon="serviceCatalogueAction(session.user.value, ops, 'edit') ? '$edit' : '$eye'"
+              :icon="serviceCatalogueAction(session.user.value, ops, 'edit') && !isProduct(item) ? '$edit' : '$eye'"
               tooltip-text="Открыть тариф"
               :disabled="busy"
               @click="open(`/service-catalogue/${item.id}`)"
             />
             <ActionButton
-              v-if="serviceCatalogueAction(session.user.value, ops, 'delete')"
+              v-if="serviceCatalogueAction(session.user.value, ops, 'delete') && !isProduct(item)"
               icon="$delete"
               variant="red"
               tooltip-text="Удалить тариф"
@@ -249,7 +252,7 @@ onUnmounted(clear)
     <ConfirmDialog
       :open="!!pendingDelete"
       title="Удалить тариф?"
-      :message="`Тариф услуги «${serviceName(pendingDelete?.service)}» будет удалён. Запись останется в журнале.`"
+      :message="`Тариф для услуги «${serviceName(pendingDelete?.service)}» будет удалён. Запись останется в журнале.`"
       action="Удалить тариф"
       action-icon="$delete"
       @cancel="pendingDelete = null"

@@ -5,13 +5,14 @@
 import { PROBLEM_TYPE_ROOT, createInternalProblem } from './errors/problem.js'
 import { can } from './roles.js'
 
-export const SERVICE_CATALOGUE_FIELDS = ['service', 'priceMethod', 'percentage', 'minimumAmount', 'maximumAmount', 'amount', 'currency', 'availableFrom', 'availableBy']
+export const SERVICE_CATALOGUE_FIELDS = ['service', 'priceMethod', 'percentage', 'minimumAmount', 'maximumAmount', 'amount', 'currency', 'bands', 'availableFrom', 'availableBy']
 export const SERVICE_CATALOGUE_CONFLICT = `${PROBLEM_TYPE_ROOT}service-catalogue-update-conflict`
 export const SERVICE_CATALOGUE_VERSION_INVALID = `${PROBLEM_TYPE_ROOT}invalid-service-catalogue-version`
 export const SERVICE_CATALOGUE_OVERLAP = `${PROBLEM_TYPE_ROOT}service-catalogue-period-overlap`
 export const SERVICE_CATALOGUE_ERROR_OPTIONS = { types:Object.fromEntries(Object.entries({
   'invalid-service-catalogue-service':'service',
   'invalid-service-catalogue-method':'priceMethod',
+  'invalid-service-catalogue-bands':'bands',
   'invalid-service-catalogue-currency':'currency',
   'invalid-service-catalogue-percentage':'percentage',
   'invalid-service-catalogue-amount':'amount',
@@ -20,15 +21,17 @@ export const SERVICE_CATALOGUE_ERROR_OPTIONS = { types:Object.fromEntries(Object
   'invalid-service-catalogue-dates':['availableFrom', 'availableBy'],
   'invalid-service-catalogue-version':'version',
   'service-catalogue-update-conflict':'version',
+  'service-catalogue-product-reserved':'service',
   'service-catalogue-period-overlap':['service', 'availableFrom', 'availableBy']
 }).map(([suffix, fields]) => [`${PROBLEM_TYPE_ROOT}${suffix}`, Array.isArray(fields) ? fields : [fields]])) }
 
 const SERVICE_VALUES = [0, 100, 200, 300, 400, 500, 600, 700]
 const SERVICE_ALIASES = ['product', 'us-warehouse-delivery', 'international-delivery', 'domestic-delivery', 'service-commission', 'warehouse-photo', 'product-inspection', 'shipment-insurance']
-const METHOD_VALUES = [0, 100, 200]
-const METHOD_ALIASES = ['percent', 'fixed', 'manual']
+const METHOD_VALUES = [0, 100, 200, 300, 400]
+const METHOD_ALIASES = ['percent', 'fixed', 'manual', 'auto', 'stepped']
 const CURRENCY_VALUES = [643, 840]
 const CURRENCY_ALIASES = ['rub', 'usd']
+const MERCHANDISE_CURRENCY = 840
 const AUDIT_VALUES = [0, 100, 200]
 const AUDIT_ALIASES = ['created', 'updated', 'deleted']
 const uuid = value => typeof value === 'string' && /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/iu.test(value) && !/^0{8}-0{4}-0{4}-0{4}-0{12}$/u.test(value)
@@ -71,10 +74,17 @@ export function validateServiceCatalogueOps(value) {
     || !finite(value.limits?.maximumAmount) || value.limits.maximumAmount !== 99999999.99
     || value.limits.amountDecimalPlaces !== 2 || value.limits.maximumPercentage !== 100
     || value.limits.percentageDecimalPlaces !== 4 || value.limits.auditSearchMaxLength !== 200
-    || value.limits.auditPageSizeMaximum !== 100) protocol()
+    || value.limits.auditPageSizeMaximum !== 100 || value.limits.maximumBands !== 100) protocol()
   validateEnum(value.services, SERVICE_VALUES, SERVICE_ALIASES)
   validateEnum(value.priceMethods, METHOD_VALUES, METHOD_ALIASES)
+  if (value.services.some(item => !Array.isArray(item.allowedPriceMethods) || item.allowedPriceMethods.length !== value.priceMethods.length
+    || new Set(item.allowedPriceMethods).size !== item.allowedPriceMethods.length
+    || item.allowedPriceMethods.some(method => !value.priceMethods.some(option => option.value === method)))) protocol()
   validateEnum(value.currencies, CURRENCY_VALUES, CURRENCY_ALIASES)
+  if (value.currencies.some(item => typeof item.symbol !== 'string' || !item.symbol)) protocol()
+  if (value.services.some(item => !Array.isArray(item.allowedCurrencies) || item.allowedCurrencies.length !== value.currencies.length
+    || new Set(item.allowedCurrencies).size !== item.allowedCurrencies.length
+    || item.allowedCurrencies.some(currency => !value.currencies.some(option => option.value === currency)))) protocol()
   validateEnum(value.auditActions, AUDIT_VALUES, AUDIT_ALIASES)
   if (value.currencies.some(item => item.value === 978 || item.routeAlias === 'eur')) protocol()
   return value
@@ -90,12 +100,12 @@ export function serviceCatalogueIdentity(user) {
 }
 
 export function validateServiceCatalogueEntry(value, ops, id) {
-  const service = ops?.services?.some(item => item.value === value?.service)
+  const service = ops?.services?.find(item => item.value === value?.service)
   const method = ops?.priceMethods?.find(item => item.value === value?.priceMethod)
-  const currency = value?.currency === null || ops?.currencies?.some(item => item.value === value?.currency)
+  const currency = ops?.currencies?.some(item => item.value === value?.currency)
   if (!value || !positiveInteger(value.id) || (id !== undefined && value.id !== Number(id)) || !service || !method || !currency
-    || !validDate(value.availableFrom) || !validDate(value.availableBy, true)
-    || value.availableBy !== null && value.availableBy < value.availableFrom
+    || !validDate(value.availableFrom, true) || !validDate(value.availableBy, true)
+    || value.availableFrom !== null && value.availableBy !== null && value.availableBy < value.availableFrom
     || !validTimestamp(value.createdAt) || !validTimestamp(value.updatedAt) || !uuid(value.version)
     || !nullableFinite(value.percentage) || !nullableFinite(value.minimumAmount)
     || !nullableFinite(value.maximumAmount) || !nullableFinite(value.amount)) protocol()
@@ -104,14 +114,26 @@ export function validateServiceCatalogueEntry(value, ops, id) {
       && (value.minimumAmount === null || value.minimumAmount >= 0 && value.minimumAmount <= ops.limits.maximumAmount && hasScale(value.minimumAmount, ops.limits.amountDecimalPlaces))
       && (value.maximumAmount === null || value.maximumAmount >= 0 && value.maximumAmount <= ops.limits.maximumAmount && hasScale(value.maximumAmount, ops.limits.amountDecimalPlaces))
       && (value.minimumAmount === null || value.maximumAmount === null || value.maximumAmount >= value.minimumAmount)
-      && value.amount === null && value.currency === null
+      && value.amount === null && value.currency === MERCHANDISE_CURRENCY
     : method.routeAlias === 'fixed'
       ? value.percentage === null && value.minimumAmount === null && value.maximumAmount === null
         && value.amount >= 0 && value.amount <= ops.limits.maximumAmount && hasScale(value.amount, ops.limits.amountDecimalPlaces) && value.currency !== null
       : value.percentage === null && value.minimumAmount === null && value.maximumAmount === null
         && value.amount === null && value.currency !== null
   if (!validShape) protocol()
+  if (!service.allowedCurrencies.includes(value.currency) || !service.allowedPriceMethods.includes(value.priceMethod)) protocol()
+  if (method.routeAlias === 'stepped') {
+    if (value.intervalCurrency !== MERCHANDISE_CURRENCY || !validBands(value.bands, ops)) protocol()
+  } else if (value.intervalCurrency !== null || !Array.isArray(value.bands) || value.bands.length !== 0) protocol()
   return value
+}
+
+function validBands(bands, ops) {
+  if (!Array.isArray(bands) || !bands.length || bands.length > ops.limits.maximumBands) return false
+  const amount = value => finite(value) && value >= 0 && value <= ops.limits.maximumAmount && hasScale(value, ops.limits.amountDecimalPlaces)
+  return bands.every((band, index) => band && amount(band.amount)
+    && (index === 0 ? band.from === null : amount(band.from) && band.from === bands[index - 1].by)
+    && (index === bands.length - 1 ? band.by === null : amount(band.by) && (band.from === null || band.by > band.from)))
 }
 
 export function validateServiceCatalogueList(value, ops) {
@@ -122,21 +144,25 @@ export function validateServiceCatalogueList(value, ops) {
     const previous = items[index - 1]
     const current = items[index]
     if (current.service < previous.service
-      || current.service === previous.service && current.availableFrom > previous.availableFrom
+      || current.service === previous.service && previous.availableFrom === null && current.availableFrom !== null
+      || current.service === previous.service && current.availableFrom !== null && previous.availableFrom !== null && current.availableFrom > previous.availableFrom
       || current.service === previous.service && current.availableFrom === previous.availableFrom && current.id < previous.id) protocol()
   }
   return items
 }
 
 export function serviceCatalogueForm(value, ops) {
+  const defaultService = value ? ops.services.find(item => item.value === value.service) : ops.services.find(item => item.routeAlias !== 'product')
+  const selectedPriceMethod = value?.priceMethod ?? defaultService.allowedPriceMethods[0]
   return {
-    service:value?.service ?? ops.services[0].value,
-    priceMethod:value?.priceMethod ?? ops.priceMethods[0].value,
+    service:value?.service ?? defaultService.value,
+    priceMethod:selectedPriceMethod,
     percentage:decimalInput(value?.percentage),
     minimumAmount:decimalInput(value?.minimumAmount),
     maximumAmount:decimalInput(value?.maximumAmount),
     amount:decimalInput(value?.amount),
-    currency:value?.currency ?? ops.currencies[0].value,
+    currency:selectedPriceMethod === 0 ? MERCHANDISE_CURRENCY : value?.currency ?? defaultService.allowedCurrencies[0],
+    bands:value?.bands?.length ? value.bands.map(band => ({ from:decimalInput(band.from), by:decimalInput(band.by), amount:decimalInput(band.amount) })) : [{ from:'', by:'', amount:'' }],
     availableFrom:value?.availableFrom ?? '',
     availableBy:value?.availableBy ?? ''
   }
@@ -153,15 +179,42 @@ function decimalValue(value, places) {
   return Number.isFinite(parsed) ? parsed : null
 }
 
-export function serviceCatalogueValidation(form, ops) {
+export function serviceCatalogueBandAmountError(value, ops) {
+  const amount = decimalValue(value, ops.limits.amountDecimalPlaces)
+  return amount === null || amount < 0 || amount > ops.limits.maximumAmount
+    ? 'Укажите неотрицательную сумму с двумя дробными знаками.' : null
+}
+
+export function serviceCatalogueBandEndError(bands, index, value, ops) {
+  if (index < 0 || index >= bands.length - 1) return 'Конец последнего интервала должен быть пустым.'
+  const invalidAmount = serviceCatalogueBandAmountError(value, ops)
+  if (invalidAmount) return invalidAmount
+  const boundary = decimalValue(value, ops.limits.amountDecimalPlaces)
+  const start = index === 0 ? null : decimalValue(bands[index].from, ops.limits.amountDecimalPlaces)
+  if (start !== null && boundary <= start) return 'Конец интервала должен быть больше его начала.'
+  const nextEnd = bands[index + 1].by
+  if (nextEnd !== '' && boundary >= decimalValue(nextEnd, ops.limits.amountDecimalPlaces)) {
+    return 'Конец интервала должен быть меньше конца следующего интервала.'
+  }
+  return null
+}
+
+export function serviceCatalogueValidation(form, ops, creating = false, existing = null) {
   const errors = {}
   const method = ops.priceMethods.find(item => item.value === form.priceMethod)
   if (!ops.services.some(item => item.value === form.service)) errors.service = ['Выберите услугу.']
-  if (!method) errors.priceMethod = ['Выберите способ расчёта.']
-  if (!validDate(form.availableFrom)) errors.availableFrom = ['Укажите дату начала действия.']
+  if (creating && ops.services.some(item => item.value === form.service && item.routeAlias === 'product')) errors.service = ['Для стоимости товара уже существует базовая запись.']
+  if (!creating && existing && ops.services.some(item => item.routeAlias === 'product' && (item.value === existing.service || item.value === form.service))) errors.service = ['Базовую запись стоимости товара нельзя изменить.']
+  if (!method || !ops.services.find(item => item.value === form.service)?.allowedPriceMethods.includes(form.priceMethod)) errors.priceMethod = ['Выберите допустимый способ расчёта.']
+  if (!ops.services.find(item => item.value === form.service)?.allowedCurrencies.includes(form.currency)) errors.currency = ['Выберите допустимую валюту услуги.']
+  if (method?.routeAlias === 'stepped') {
+    if (!validBands(bandPayload(form, ops), ops)) errors.bands = ['Заполните стоимость всех интервалов и укажите корректные возрастающие границы (не более двух дробных знаков).']
+  }
+  if (form.availableFrom && !validDate(form.availableFrom)) errors.availableFrom = ['Укажите корректную дату начала действия.']
   if (form.availableBy && !validDate(form.availableBy)) errors.availableBy = ['Укажите корректную дату окончания.']
-  if (validDate(form.availableFrom) && form.availableBy && validDate(form.availableBy) && form.availableBy < form.availableFrom) errors.availableBy = ['Дата окончания не может быть раньше даты начала.']
+  if (form.availableFrom && validDate(form.availableFrom) && form.availableBy && validDate(form.availableBy) && form.availableBy < form.availableFrom) errors.availableBy = ['Дата окончания не может быть раньше даты начала.']
   if (method?.routeAlias === 'percent') {
+    if (form.currency !== MERCHANDISE_CURRENCY) errors.currency = ['Процент от стоимости товара задаётся в долларах США.']
     const percentage = decimalValue(form.percentage, ops.limits.percentageDecimalPlaces)
     if (percentage === null || percentage <= 0 || percentage > ops.limits.maximumPercentage) errors.percentage = ['Укажите процент больше 0 и не больше 100.']
     for (const field of ['minimumAmount', 'maximumAmount']) {
@@ -190,28 +243,43 @@ export function serviceCataloguePayload(form, ops, version) {
     minimumAmount:null,
     maximumAmount:null,
     amount:null,
-    currency:null,
-    availableFrom:form.availableFrom,
+    currency:form.currency,
+    intervalCurrency:null,
+    bands:[],
+    availableFrom:form.availableFrom || null,
     availableBy:form.availableBy || null,
     ...(version ? { version } : {})
   }
   if (method.routeAlias === 'percent') {
+    base.currency = MERCHANDISE_CURRENCY
     base.percentage = decimalValue(form.percentage, ops.limits.percentageDecimalPlaces)
     base.minimumAmount = form.minimumAmount === '' ? null : decimalValue(form.minimumAmount, ops.limits.amountDecimalPlaces)
     base.maximumAmount = form.maximumAmount === '' ? null : decimalValue(form.maximumAmount, ops.limits.amountDecimalPlaces)
   } else if (method.routeAlias === 'fixed') {
     base.amount = decimalValue(form.amount, ops.limits.amountDecimalPlaces)
     base.currency = form.currency
-  } else base.currency = form.currency
+  } else if (method.routeAlias === 'stepped') {
+    base.intervalCurrency = MERCHANDISE_CURRENCY
+    base.bands = bandPayload(form, ops)
+  }
   return base
 }
 
+function bandPayload(form, ops) {
+  return (form.bands ?? []).map(band => ({
+    from:band.from === '' ? null : decimalValue(band.from, ops.limits.amountDecimalPlaces) ?? NaN,
+    by:band.by === '' ? null : decimalValue(band.by, ops.limits.amountDecimalPlaces) ?? NaN,
+    amount:decimalValue(band.amount, ops.limits.amountDecimalPlaces)
+  }))
+}
+
 export function serviceCatalogueOverlapErrors(form, entries, currentId) {
-  if (!validDate(form.availableFrom) || form.availableBy && !validDate(form.availableBy)) return {}
+  if (form.availableFrom && !validDate(form.availableFrom) || form.availableBy && !validDate(form.availableBy)) return {}
+  const start = form.availableFrom || null
   const end = form.availableBy || null
   const overlap = entries.some(item => item.id !== currentId && item.service === form.service
-    && (end === null || item.availableFrom <= end)
-    && (item.availableBy === null || item.availableBy >= form.availableFrom))
+    && (end === null || item.availableFrom === null || item.availableFrom <= end)
+    && (item.availableBy === null || start === null || item.availableBy >= start))
   return overlap ? {
     availableFrom:['Период пересекается с другим тарифом этой услуги.'],
     availableBy:['Период пересекается с другим тарифом этой услуги.']
@@ -220,16 +288,29 @@ export function serviceCatalogueOverlapErrors(form, entries, currentId) {
 
 const money = new Intl.NumberFormat('ru-RU', { minimumFractionDigits:2, maximumFractionDigits:2 })
 const percent = new Intl.NumberFormat('ru-RU', { minimumFractionDigits:0, maximumFractionDigits:4 })
+
 export function formatServiceCatalogueParameters(entry, ops) {
   const method = ops.priceMethods.find(item => item.value === entry.priceMethod)
+  const currency = ops.currencies.find(item => item.value === entry.currency)
+  const unit = currency.symbol
   if (method.routeAlias === 'percent') {
-    const parts = [`${percent.format(entry.percentage)} %`]
-    if (entry.minimumAmount !== null) parts.push(`мин. ${money.format(entry.minimumAmount)} USD`)
-    if (entry.maximumAmount !== null) parts.push(`макс. ${money.format(entry.maximumAmount)} USD`)
+    const parts = [`${percent.format(entry.percentage)}%`]
+    if (entry.minimumAmount !== null) parts.push(`мин. ${money.format(entry.minimumAmount)}${unit}`)
+    if (entry.maximumAmount !== null) parts.push(`макс. ${money.format(entry.maximumAmount)}${unit}`)
     return parts.join(', ')
   }
-  const currency = ops.currencies.find(item => item.value === entry.currency)
-  return method.routeAlias === 'fixed' ? `${money.format(entry.amount)} ${currency.routeAlias.toUpperCase()}` : currency.name
+  if (method.routeAlias === 'stepped') {
+    const intervalUnit = ops.currencies.find(item => item.value === MERCHANDISE_CURRENCY).symbol
+    const formatted = entry.bands
+      .map(band => {
+        const lower = band.from === null ? '' : `${money.format(band.from)}${intervalUnit}`
+        const upper = band.by === null ? '' : `${lower ? ' до ' : 'до '}${money.format(band.by)}${intervalUnit}`
+        return `${lower ? `свыше ${lower}` : upper ? '' : 'любое значение'}${upper}: ${money.format(band.amount)}${unit}`
+      })
+      .join('; ')
+    return formatted.replace(/\p{L}/u, letter => letter.toLocaleUpperCase('ru-RU'))
+  }
+  return method.routeAlias === 'fixed' ? `${money.format(entry.amount)}${unit}` : unit
 }
 
 export function formatServiceCatalogueAvailability(entry) {
@@ -237,6 +318,7 @@ export function formatServiceCatalogueAvailability(entry) {
     const [year, month, day] = value.split('-')
     return `${day}.${month}.${year}`
   }
+  if (entry.availableFrom === null) return entry.availableBy === null ? 'в любое время' : `по ${display(entry.availableBy)}`
   return entry.availableBy ? `${display(entry.availableFrom)} — ${display(entry.availableBy)}` : `с ${display(entry.availableFrom)}`
 }
 
