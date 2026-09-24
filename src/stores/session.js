@@ -12,7 +12,7 @@ import { serviceCatalogueIdentity, validateServiceCatalogueOps } from '../servic
 const BASE = '/api/v1/backoffice'
 const json = (method, body) => ({ method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
 const CONSENT_REQUEST_PATH_PATTERN = new RegExp(`^/(legal-documents(?:/(?:ops|preview|audit|${UUID_PATH_PATTERN}(?:/source)?))?|consents/withdrawal-requests(?:/processed)?)$`, 'iu')
-const ORDER_REQUEST_PATH_PATTERN = /^\/orders(?:\/ops|\/\d{8}-[1-9]\d*(?:\/product)?)?$/u
+const ORDER_REQUEST_PATH_PATTERN = /^\/orders(?:\/ops|\/pricing\/ops|\/\d{8}-[1-9]\d*(?:\/product|\/pricing(?:\/confirm)?)?)?$/u
 const SERVICE_CATALOGUE_REQUEST_PATH_PATTERN = /^\/service-catalogue(?:\/ops|\/audit|\/[1-9]\d*)?$/u
 
 function isServiceUnavailable(problem) {

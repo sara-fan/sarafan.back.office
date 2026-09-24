@@ -277,6 +277,7 @@ onUnmounted(() => {
         active
         hide-details
         clearable
+        clear-icon="$brush"
         @update:model-value="onDateChange('requestedFrom', $event)"
       />
       <v-text-field
@@ -291,6 +292,7 @@ onUnmounted(() => {
         active
         hide-details
         clearable
+        clear-icon="$brush"
         @update:model-value="onDateChange('requestedTo', $event)"
       />
     </ListFilterBar>

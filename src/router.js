@@ -13,6 +13,7 @@ import LegalDocumentView from './views/LegalDocumentView.vue'
 import LegalDocumentAuditView from './views/LegalDocumentAuditView.vue'
 import PrivacyRequestsView from './views/PrivacyRequestsView.vue'
 import OrderView from './views/OrderView.vue'
+import OrderPricingView from './views/OrderPricingView.vue'
 import OrdersView from './views/OrdersView.vue'
 import StoresView from './views/StoresView.vue'
 import StoreView from './views/StoreView.vue'
@@ -43,6 +44,7 @@ export function createAppRouter(history = createWebHistory(), session = useSessi
     { path:'/service-catalogue/audit', component:ServiceCatalogueAuditView, meta:{ action:'viewServiceCatalogue' } },
     { path:'/service-catalogue/:id([1-9]\\d*)', component:ServiceCatalogueEntryView, meta:{ action:'viewServiceCatalogue' } },
     { path:'/orders/:orderNumber(\\d{8}-[1-9]\\d*)', component:OrderView, meta:{ action:'manualQuotes' } },
+    { path:'/orders/:orderNumber(\\d{8}-[1-9]\\d*)/pricing', component:OrderPricingView, meta:{ action:'manualQuotes' } },
     { path:'/profile', component:AccountView },
     { path:'/forbidden', component:StatusView, props:{ forbidden:true } },
     { path:'/:pathMatch(.*)*', component:StatusView }

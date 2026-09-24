@@ -11,6 +11,7 @@ export const sarafanAliases = {
   addUser: 'fas fa-user-plus',
   audit: 'fas fa-clock-rotate-left',
   block: 'fas fa-user-slash',
+  brush: 'fas fa-broom',
   close: 'fas fa-xmark',
   continue: 'fas fa-arrow-right',
   delete: 'fas fa-trash-can',
@@ -35,6 +36,8 @@ export const sarafanAliases = {
   saveChanges: 'fas fa-check-double',
   search: 'fas fa-magnifying-glass',
   serviceCatalogue: 'fas fa-tags',
+  orderPricing: 'fas fa-calculator',
+  confirmQuote: 'fas fa-check-double',
   staff: 'fas fa-users'
 }
 

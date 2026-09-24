@@ -7,6 +7,7 @@ import { useValidationFocus, validationFields } from '../validationFocus.js'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { onBeforeRouteLeave, onBeforeRouteUpdate, useRoute, useRouter } from 'vue-router'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
+import ActionButton from '../components/ActionButton.vue'
 import EditorHeaderActions from '../components/EditorHeaderActions.vue'
 import FormField from '../components/FormField.vue'
 import PageAlertRegion from '../components/PageAlertRegion.vue'
@@ -117,6 +118,10 @@ async function back() {
   try { await router.push('/orders') }
   catch (value) { problem.value = normalizeProblem(value) }
 }
+async function openPricing() {
+  try { await router.push(`/orders/${number.value}/pricing`) }
+  catch (value) { problem.value = normalizeProblem(value) }
+}
 onBeforeRouteLeave(() => {
   if (!dirty.value) return true
   return new Promise(resolve => ask(resolve))
@@ -166,7 +171,16 @@ const focusAfter = useValidationFocus(focusRoot, { context:() => [session.user.v
         :save-disabled="!productEditingEnabled || !!localProblem || !dirty"
         @refresh="refresh"
         @cancel="back"
-      />
+      >
+        <template #before>
+          <ActionButton
+            icon="$orderPricing"
+            tooltip-text="Расчёт стоимости"
+            :disabled="busy || !details"
+            @click="openPricing"
+          />
+        </template>
+      </EditorHeaderActions>
     </header>
     <hr class="hr">
     <PageAlertRegion :problem="pageProblem" />

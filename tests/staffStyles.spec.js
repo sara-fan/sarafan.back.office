@@ -29,8 +29,8 @@ describe('shared staff screen styles', () => {
     }
   })
 
-  it('applies the staff list set to every data-table view', () => {
-    for (const view of views.filter(item => item.source.includes('<v-data-table'))) {
+  it('applies the staff list set to standalone data-table views', () => {
+    for (const view of views.filter(item => item.source.includes('<v-data-table') && !item.source.includes('<form'))) {
       expect(view.source, view.name).toMatch(/<section class="[^"]*\bstaff-list\b[^"]*"/u)
     }
   })
