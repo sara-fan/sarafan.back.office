@@ -4,7 +4,7 @@
 import { serviceCatalogueOps, manualEntry } from './serviceCatalogue.js'
 
 export const pricingOps = { catalogue:serviceCatalogueOps, validityHours:24, canManage:true,
-  componentStates:[{ value:0, name:'Рассчитан', routeAlias:'calculated' }, { value:100, name:'Не рассчитан', routeAlias:'not-calculated' }, { value:200, name:'Не применяется', routeAlias:'not-applicable' }] }
+  componentStates:[{ value:0, name:'Рассчитана', routeAlias:'calculated' }, { value:100, name:'Не рассчитана', routeAlias:'not-calculated' }, { value:200, name:'Не применяется', routeAlias:'not-applicable' }] }
 const tariff = { ...manualEntry, service:100, id:10 }
 const calculation = {
   calculatedAt:'2026-09-24T10:00:00Z', totalRub:8998.4,

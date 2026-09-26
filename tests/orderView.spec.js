@@ -10,6 +10,7 @@ import ConfirmDialog from '../src/components/ConfirmDialog.vue'
 import { createSarafanVuetify } from '../src/plugins/vuetify.js'
 import { CORE_PROBLEM_TYPES, createInternalProblem, ProblemError } from '../src/errors/problem.js'
 import { details, ops, limit } from './fixtures/orderProduct.js'
+import { pricingDetails, pricingOps } from './fixtures/orderPricing.js'
 
 const h = vi.hoisted(() => ({ session:{}, push:vi.fn(), leave:null, update:null, route:null }))
 vi.mock('../src/stores/session.js', () => ({ useSession:() => h.session }))
@@ -24,12 +25,66 @@ beforeEach(() => {
   h.update = null
   h.session.user = ref({ id:1, roles:['operator'] })
   h.session.getOrderOps = vi.fn().mockResolvedValue(ops)
-  h.session.orderRequest = vi.fn().mockResolvedValue(globalThis.structuredClone(details))
+  h.session.orderRequest = vi.fn().mockImplementation(path => Promise.resolve(globalThis.structuredClone(
+    path === '/orders/pricing/ops' ? pricingOps : path.endsWith('/pricing') ? { ...pricingDetails, orderNumber:h.route.params.orderNumber } : details
+  )))
   h.push.mockReset().mockResolvedValue(undefined)
 })
 afterEach(() => { wrapper?.unmount(); wrapper = null; vi.restoreAllMocks() })
 
 describe('staff order card', () => {
+  it('collapses sections independently, preserves drafts and reopens product validation', async () => {
+    await render()
+    await wrapper.get('#size').setValue('XL')
+    for (const title of ['Товар', 'Услуги и стоимость', 'Покупатель']) {
+      const toggle = wrapper.get(`button[aria-label="Свернуть раздел «${title}»"]`)
+      expect(toggle.attributes('type')).toBe('button')
+      const content = wrapper.get(`[id="${toggle.attributes('aria-controls')}"]`)
+      expect(content.isVisible()).toBe(true)
+      await toggle.trigger('click')
+      expect(toggle.attributes('aria-expanded')).toBe('false')
+      expect(content.isVisible()).toBe(false)
+    }
+    expect(vm().form.size).toBe('XL')
+    expect(h.session.orderRequest).toHaveBeenCalledTimes(3)
+    const productToggle = wrapper.get('button[aria-label="Развернуть раздел «Товар»"]')
+    await productToggle.trigger('click')
+    expect(wrapper.get('#size').element.value).toBe('XL')
+    await wrapper.get('#quantity').setValue('5')
+    await productToggle.trigger('click')
+    await vm().save()
+    expect(productToggle.attributes('aria-expanded')).toBe('true')
+    expect(wrapper.get('#quantity').isVisible()).toBe(true)
+    expect(document.activeElement).toBe(wrapper.get('#quantity').element)
+    expect(wrapper.get('button[aria-label="Развернуть раздел «Покупатель»"]').attributes('aria-expanded')).toBe('false')
+  })
+  it.each(['/orders/pricing/ops', '/orders/12345678-1/pricing'])('presents pricing failure once and recovers with header refresh: %s', async path => {
+    const normal = h.session.orderRequest.getMockImplementation()
+    h.session.orderRequest.mockImplementation(value => value === path ? Promise.reject(new Error('private')) : normal(value))
+    await render()
+    expect(wrapper.findAll('[role="alert"]')).toHaveLength(1)
+    expect(wrapper.text()).not.toContain('private')
+    expect(wrapper.text()).toContain('Стоимость недоступна')
+    expect(vm().details).not.toBeNull()
+    await wrapper.get('#size').setValue('XL')
+    expect(vm().form.size).toBe('XL')
+    h.session.orderRequest.mockImplementation(normal)
+    vm().refresh(); vm().acceptConfirmation(); await flushPromises()
+    expect(wrapper.find('[role="alert"]').exists()).toBe(false)
+    expect(wrapper.get('tfoot').text()).toContain('112,48')
+  })
+  it.each(['/orders/pricing/ops', '/orders/12345678-1/pricing'])('ignores pricing replies after an identity change: %s', async path => {
+    const wait = pending()
+    const normal = h.session.orderRequest.getMockImplementation()
+    h.session.orderRequest.mockImplementation(value => value === path ? wait.promise : normal(value))
+    await render()
+    h.session.user.value = null
+    wait.resolve(path.endsWith('/ops') ? pricingOps : pricingDetails)
+    await flushPromises()
+    expect(vm().pricing).toBeNull()
+    expect(vm().pricingOps).toBeNull()
+    expect(vm().details).toBeNull()
+  })
   it('shows profile and recognition, edits store and sends only allowed fields with exact timestamp', async () => {
     await render()
     expect(wrapper.text()).toContain('Иванов')
@@ -48,8 +103,9 @@ describe('staff order card', () => {
     expect(wrapper.findAll('.buyer-field .staff-form-value').every(field => field.classes().includes('staff-form-value--readonly'))).toBe(true)
     await wrapper.get('#productName').setValue(' Новое название ')
     await wrapper.get('#storeName').setValue(' Новый магазин ')
-    expect(wrapper.get('.saved-limit').text()).toContain('14.09.2026')
-    expect(wrapper.get('.saved-limit').text()).not.toContain('15.09.2026')
+    expect(wrapper.text()).not.toContain('Дата курсов при последнем сохранении товара')
+    expect(wrapper.findAll('h2').map(item => item.text())).toEqual(['Товар', 'Услуги и стоимость', 'Покупатель'])
+    expect(wrapper.get('tfoot').text()).toContain('112,48')
     expect(wrapper.get('.total-line').text()).toContain('Стоимость, USD40,00')
     expect(wrapper.findAll('.header-actions button').map(button => button.attributes('aria-label'))).toEqual([
       'Расчёт стоимости', 'Обновить данные', 'Сохранить изменения', 'Отменить'
@@ -72,7 +128,7 @@ describe('staff order card', () => {
     expect(wrapper.text().match(/Такое количество товара/g)).toHaveLength(1)
     expect(vm().form.quantity).toBe('5')
     await vm().save()
-    expect(h.session.orderRequest).toHaveBeenCalledTimes(1)
+    expect(h.session.orderRequest).toHaveBeenCalledTimes(3)
     expect(document.activeElement).toBe(wrapper.get('#quantity').element)
     await wrapper.get('#quantity').setValue('4')
     await wrapper.get('#sellerPrice').setValue('281.26')
@@ -92,7 +148,7 @@ describe('staff order card', () => {
     expect(vm().locked).toBe(true)
     expect(wrapper.text()).toContain('Обновите карточку')
     await vm().save()
-    expect(h.session.orderRequest).toHaveBeenCalledTimes(2)
+    expect(h.session.orderRequest).toHaveBeenCalledTimes(4)
     vm().refresh()
     expect(vm().confirmation).toBe(true)
     wrapper.findComponent(ConfirmDialog).vm.$emit('cancel'); await flushPromises()
@@ -158,9 +214,9 @@ describe('staff order card', () => {
     expect(wrapper.get('.product-grid').attributes('disabled')).toBeDefined()
     expect(wrapper.get('.total-line .staff-form-value').classes()).toContain('staff-form-value--readonly')
     expect(wrapper.text()).toContain('Исправление товара временно недоступно')
-    expect(wrapper.get('.saved-limit').text()).toContain('Сохранённая проверка лимита отсутствует')
+    expect(wrapper.find('.saved-limit').exists()).toBe(false)
     await vm().save()
-    expect(h.session.orderRequest).toHaveBeenCalledTimes(1)
+    expect(h.session.orderRequest).toHaveBeenCalledTimes(3)
   })
   it.each(['administrator','shift-manager','senior-operator','operator'])('allows the role %s only with server permission', async role => {
     h.session.user.value.roles = [role]
@@ -188,7 +244,7 @@ describe('staff order card', () => {
     h.session.orderRequest.mockResolvedValueOnce({ ...details, orderNumber:next })
     h.route.params.orderNumber = next
     await flushPromises()
-    expect(h.session.orderRequest).toHaveBeenLastCalledWith(`/orders/${next}`)
+    expect(h.session.orderRequest).toHaveBeenLastCalledWith(`/orders/${next}/pricing`)
     expect(wrapper.get('.primary-heading').text()).toBe(`Заказ ${next}`)
   })
   it('denies unknown roles and ignores late load replies and failures after identity changes', async () => {

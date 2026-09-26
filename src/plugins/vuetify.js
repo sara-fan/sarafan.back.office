@@ -13,6 +13,8 @@ export const sarafanAliases = {
   block: 'fas fa-user-slash',
   brush: 'fas fa-broom',
   close: 'fas fa-xmark',
+  collapseSection: 'fas fa-chevron-up',
+  expandSection: 'fas fa-chevron-down',
   continue: 'fas fa-arrow-right',
   delete: 'fas fa-trash-can',
   download: 'fas fa-download',
@@ -36,6 +38,9 @@ export const sarafanAliases = {
   saveChanges: 'fas fa-check-double',
   search: 'fas fa-magnifying-glass',
   serviceCatalogue: 'fas fa-tags',
+  serviceMandatory: 'far fa-square-check',
+  serviceOrdered: 'far fa-square-plus',
+  serviceNotOrdered: 'far fa-square-minus',
   orderPricing: 'fas fa-calculator',
   confirmQuote: 'fas fa-check-double',
   staff: 'fas fa-users'

@@ -19,6 +19,7 @@
 }
 
 * { box-sizing: border-box; }
+
 body { margin: 0; color: var(--ink); background: var(--canvas); }
 button, input, select { font: inherit; }
 /* Allow the compact rate disclosure to extend below the app bar. */
@@ -77,10 +78,19 @@ fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
 .table-card, .form-surface { overflow: hidden; background: #fff !important; border: 1px solid var(--line) !important; border-radius: 4px !important; box-shadow: 0 2px 9px rgb(29 62 133 / 7%) !important; }
 .interlaced-table { --staff-table-row-height: 48px; font-size: 13px; }
 .staff-list .interlaced-table { --staff-table-height: max(320px, calc(100vh - 320px)); }
-.interlaced-table .v-data-table-header__content { color: #40566d; font-size: 12px; font-weight: 650; }
+.interlaced-table thead th,
+.interlaced-table .v-data-table-header__content { color: #40566d; font-size: 16px; font-weight: 650; }
 .interlaced-table .v-data-table__td { height: var(--staff-table-row-height) !important; }
 .interlaced-table tbody tr:nth-child(even) { background: #f5f9fc; }
 .interlaced-table tbody tr:hover { background: #eaf4fb !important; }
+
+.interlaced-table .table-total-row > th, .interlaced-table .table-total-row > td { 
+  font-size:14px; 
+  font-weight:700; 
+  border-top:2px solid var(--primary); 
+  border-bottom:2px solid var(--primary); 
+}
+
 .list-text { display:block; min-width:0; max-width:clamp(6rem, 18vw, 24rem); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .staff-list .interlaced-table .list-text:focus-visible { outline:2px solid var(--primary); outline-offset:2px; }
 .staff-list .interlaced-table td.list-card-cell { cursor:pointer; }
@@ -165,6 +175,23 @@ fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
 .login-submit { justify-content: center; }
 
 button:disabled { cursor: default; opacity: .4; }
+
+.staff-section-heading { 
+  display:flex; 
+  align-items:center; 
+  justify-content:space-between; 
+  gap:8px; 
+  font-size:20px; 
+  border-bottom:1px 
+  solid var(--line); 
+  padding-bottom:8px; 
+}
+
+.staff-collapsible-section > .staff-section-heading { 
+  margin:28px 0 12px; 
+  font-size:20px; 
+}
+
 
 @media (max-width: 960px) {
   .app-page-shell { padding: 22px 20px 32px; }

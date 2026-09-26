@@ -145,6 +145,12 @@ For other comment-capable formats, use the same three lines with that format's n
 
 ## Staff orders
 
+- Keep service-selection icons separate from price-calculation state: mandatory services use `square-check`; optional services use `square-plus`/`square-minus` from the calculation's `selectedServices`. Reuse `optionalServices`, never infer ordering from price availability, and provide accessible Russian labels in an untitled column. Customs and domestic delivery are mandatory regardless of amount availability, but remain excluded from the pricing total.
+
+- The order cost table has USD and RUB amount columns with Core-owned currency symbols only in their headers. Preserve Core's converted RUB amounts; convert RUB to USD using the calculation's rate and nominal. Emphasize the tariff's original currency (or the component currency when no tariff exists), including zero amounts; unavailable amounts remain unhighlighted placeholders.
+
+- Order-card sections use shared `CollapsibleSection`, initially expanded, with accessible ActionButton toggles. Keep collapsed content mounted to preserve drafts; expand the product section before save validation and focus.
+
 - `/orders` is a read-only server table available through `manualQuotes` to Administrator, Shift manager, Senior operator and Operator. Administrator still lands on `/users`; the other three roles land on `/orders`. Keep Orders in the shared drawer and safe-return allowlist, with an ActionButton and normal-text, pointer-cursor cells opening the dedicated `/orders/:orderNumber` card. The product/source cell remains reserved for the external shop page.
 - Consume exact statuses, currencies and aggregate groups only from Core's validated back-office order operations catalogue. The selector order is all statuses, `work` (`В работе`, exact values 0–380), `in_progress` (`Выполняется`, exact values 300–380), then every exact status; rows always show the exact status. A staff member's first view uses `work` and `createdAt desc`, while an API request without a status filter remains unfiltered.
 - Keep order pagination, filtered count, one allowlisted sort, trimmed 300 ms debounced search, exact/group status and inclusive Moscow creation-date filters server-owned. Use page sizes 10/25/50/100, reset filter/sort/page-size changes to page 1, ignore stale responses, validate the complete envelope and filter echoes, and correct underflow with one authoritative reload.
@@ -162,7 +168,7 @@ For other comment-capable formats, use the same three lines with that format's n
 - Keep draft/profile only in memory; invalidate late replies and clear them on staff identity change. Retain drafts on failed writes. Conflicts lock saving until explicit refresh; use ConfirmDialog before losing dirty data on refresh or navigation and beforeunload for browser closure. Order request failures retain the session except normal authentication failures.
 - Render EUR in bold text-purple-darken-2 beside USD; retain each currency nominal/source date and show a common date only when equal. The narrow-screen disclosure uses a keyboard-operable button with aria-expanded; the toolbar must not clip its contents.
 
-- Reject non-cent seller amounts and USD ceilings before formatting or comparing them. Display savedLimitSourceEffectiveDate separately from the current limitCheck; do not infer a historical result from current rates. Keep failed Orders preference writes in validated staff-session memory so card navigation preserves list state; clear that memory on logout or identity change.
+- Reject non-cent seller amounts and USD ceilings before formatting or comparing them. Retain savedLimitSourceEffectiveDate in the validated DTO without displaying it on the order card; do not infer a historical result from current rates. Show “Услуги и стоимость” above customer information using Core pricing components and its RUB total; the USD equivalent uses the price calculation's exchange rate and nominal, never the product-limit or toolbar rates. Keep domestic delivery/customs separate from the total. Keep failed Orders preference writes in validated staff-session memory so card navigation preserves list state; clear that memory on logout or identity change.
 
 ## Validation focus
 
