@@ -215,3 +215,15 @@ describe('staff session boundary', () => {
     await s.login('a@b.test','p'); await s.saveUser(1,{...identity,isActive:true},{...identity,isActive:false}); expect(s.user.value).toBeNull()
   })
 })
+
+
+it('allows only the staff history route shapes', async () => {
+  const fetch = vi.fn().mockResolvedValueOnce(auth()).mockImplementation(async () => response(200, {}))
+  vi.stubGlobal('fetch', fetch)
+  const s = createSession(); await s.login('a', 'p')
+  for (const suffix of ['history', 'history/ops', 'history/0-1', 'history/1-2', 'history/2-3', 'history/3-1']) {
+    await s.orderRequest('/orders/12345678-1/' + suffix)
+    expect(fetch.mock.calls.at(-1)[0]).toBe('/api/v1/backoffice/orders/12345678-1/' + suffix)
+  }
+  for (const suffix of ['history/4-1', 'history/0-0', 'history/0-01', 'history/0-1/edit']) expect(() => s.orderRequest('/orders/12345678-1/' + suffix)).toThrow()
+})

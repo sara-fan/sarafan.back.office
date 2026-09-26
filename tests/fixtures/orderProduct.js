@@ -3,12 +3,12 @@
 // This file is a part of the Sarafan application
 
 export const currencies = [
-  { value:643, name:'Российский рубль', routeAlias:'rub' },
-  { value:840, name:'Доллар США', routeAlias:'usd' },
-  { value:978, name:'Евро', routeAlias:'eur' }
+  { value:643, name:'Российский рубль', routeAlias:'rub', symbol:'₽' },
+  { value:840, name:'Доллар США', routeAlias:'usd', symbol:'$' },
+  { value:978, name:'Евро', routeAlias:'eur', symbol:'€' }
 ]
 export const limit = { maximumAmount:900, currency:978, available:true, sourceEffectiveDate:'2026-09-15', maximumTotalUsd:1125,
-  exceededMessage:'Максимальная стоимость заказа при экспресс-перевозке 900 евро с учётом резерва 10% на изменение курса' }
+  exceededMessage:'Максимальная стоимость заказа при экспресс-перевозке 900€ с учётом резерва 10% на изменение курса' }
 export const productLimits = { minimumQuantity:1, maximumQuantity:4, defaultQuantity:1, storeNameMaximumLength:200, productNameMaximumLength:500,
   colorMaximumLength:200, sizeMaximumLength:200, commentMaximumLength:2000, sellerPriceCurrency:840,
   maximumUnitPrice:99999999.99, priceDecimalPlaces:2, valueLimit:limit }

@@ -22,7 +22,7 @@ vi.mock('../src/stores/session.js',()=>({useSession:()=>h.session}))
 vi.mock('vue-router',async original=>({...await original(),useRouter:()=>h.router,useRoute:()=>h.route}))
 const identity={id:1,email:'admin@example.test',firstName:'Иван',lastName:'Иванов',patronymic:null,roles:['administrator'],isActive:true}
 const roles=[{code:'operator',displayName:'Operator'},{code:'senior-operator',displayName:'Senior operator'},{code:'administrator',displayName:'Administrator'},{code:'shift-manager',displayName:'Shift manager'}]
-const currencies=[{value:643,name:'Российский рубль',routeAlias:'rub'},{value:840,name:'Доллар США',routeAlias:'usd'}]
+const currencies=[{value:643,name:'Российский рубль',routeAlias:'rub',symbol:'₽'},{value:840,name:'Доллар США',routeAlias:'usd',symbol:'$'}]
 const failure=()=>createInternalProblem('networkUnavailable')
 const pending=()=>{let resolve;return {promise:new Promise(r=>{resolve=r}),resolve:(v)=>resolve(v)}}
 const stubs={
@@ -104,18 +104,18 @@ describe('staff views',()=>{
     const old=pending();const current=pending()
     h.session.getStatus.mockReturnValueOnce(old.promise).mockReturnValueOnce(current.promise)
     h.session.user.value={...identity};await nextTick()
-    expect(w.text()).toContain('USD —')
+    expect(w.text()).toContain('—')
     h.session.user.value=null;h.session.user.value={...identity,id:2};await nextTick()
     old.resolve({appVersion:'old',currencies,exchangeRates:[{provider:'CBR',baseCurrency:840,quoteCurrency:643,nominal:1,officialRate:99,sourceEffectiveDate:'2026-09-04'}]});await flushPromises()
     expect(w.text()).not.toContain('99,0000');expect(w.text()).not.toContain('Сервер old')
     current.resolve({appVersion:'0.0.7',currencies,exchangeRates:[{provider:'CBR',baseCurrency:840,quoteCurrency:643,nominal:1,officialRate:81.1234,sourceEffectiveDate:'2026-09-05'}]});await flushPromises()
-    expect(w.text()).toContain('05.09.26');expect(w.text()).toContain('USD 81,1234');expect(w.text()).toContain('Сервер 0.0.7')
+    expect(w.text()).toContain('05.09.26');expect(w.text()).toContain('$ 81,1234₽');expect(w.text()).toContain('Сервер 0.0.7')
     h.session.getStatus.mockRejectedValueOnce(failure());h.session.user.value={...identity,id:3};await flushPromises()
-    expect(w.text()).toContain('USD —');expect(w.find('.app-bar').exists()).toBe(true)
+    expect(w.text()).toContain('—');expect(w.find('.app-bar').exists()).toBe(true)
     h.session.getStatus.mockResolvedValueOnce({appVersion:3,exchangeRates:{}});h.session.user.value={...identity,id:4};await flushPromises()
-    expect(w.text()).not.toContain('Сервер');expect(w.text()).toContain('USD —')
+    expect(w.text()).not.toContain('Сервер');expect(w.text()).toContain('—')
     h.session.getStatus.mockResolvedValueOnce(null);h.session.user.value={...identity,id:5};await flushPromises()
-    expect(w.text()).toContain('USD —')
+    expect(w.text()).toContain('—')
   })
   it('renders service unavailability as a red login error',async()=>{
     h.route={path:'/login',params:{},query:{}};h.session.loginProblem.value=createInternalProblem('serviceUnavailable')

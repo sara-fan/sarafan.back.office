@@ -447,7 +447,7 @@ onUnmounted(clear)
               :key="item.value"
               :value="item.value"
             >
-              {{ item.name }} ({{ item.symbol }})
+              {{ item.symbol }}
             </option>
           </select>
           <div

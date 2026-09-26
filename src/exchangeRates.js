@@ -10,7 +10,8 @@ function currencyByAlias(currencies, alias) {
   if (!Array.isArray(currencies)) return null
   const candidates = currencies.filter(currency => currency?.routeAlias === alias
     && Number.isInteger(currency.value) && currency.value > 0
-    && typeof currency.name === 'string' && currency.name.trim())
+    && typeof currency.name === 'string' && currency.name.trim()
+    && typeof currency.symbol === 'string' && currency.symbol.trim())
   return candidates.length === 1 ? candidates[0] : null
 }
 
@@ -34,7 +35,8 @@ export function exchangeRateDisplay(rates, currencies, alias = 'usd') {
     date: dateFormat.format(date),
     isoDate: rate.sourceEffectiveDate,
     // Vcurs is the official RUB amount for Vnom units; do not silently label it as one USD.
-    label: rate.nominal === 1 ? usd.routeAlias.toUpperCase() : `${rate.nominal.toLocaleString('ru-RU')} ${usd.routeAlias.toUpperCase()}`,
+    label: rate.nominal === 1 ? usd.symbol : `${rate.nominal.toLocaleString('ru-RU')} ${usd.symbol}`,
+    quoteSymbol: rub.symbol,
     value: numberFormat.format(rate.officialRate)
   }
 }

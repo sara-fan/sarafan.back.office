@@ -11,8 +11,10 @@ const props = defineProps({
   currencies: { type: Array, default: () => [] }
 })
 const displays = computed(() => ['usd', 'eur'].map(alias => ({
-  alias, rate:exchangeRateDisplay(props.rates, props.currencies, alias)
+  alias, symbol:props.currencies.find(item => item.routeAlias === alias)?.symbol ?? '',
+  rate:exchangeRateDisplay(props.rates, props.currencies, alias)
 })))
+const rubSymbol = computed(() => props.currencies.find(item => item.routeAlias === 'rub')?.symbol ?? '')
 const commonDate = computed(() => displays.value[0].rate?.isoDate === displays.value[1].rate?.isoDate ? displays.value[0].rate : null)
 const expanded = ref(false)
 </script>
@@ -24,11 +26,11 @@ const expanded = ref(false)
     role="status"
     aria-live="polite"
     aria-atomic="true"
-    :title="displays.some(item => item.rate) ? 'Официальный курс ЦБ РФ, RUB' : RATE_UNAVAILABLE_MESSAGE"
+    :title="displays.some(item => item.rate) ? `Официальный курс ЦБ РФ, ${rubSymbol}` : RATE_UNAVAILABLE_MESSAGE"
   >
     <span class="rates-toggle"><ActionButton
       icon="$rates"
-      :tooltip-text="expanded ? 'Свернуть курсы' : 'Показать курсы USD / EUR'"
+      :tooltip-text="expanded ? 'Свернуть курсы' : `Показать курсы ${displays.map(item => item.symbol).filter(Boolean).join(' / ')}`"
       :aria-expanded="expanded"
       aria-controls="official-rates"
       @click="expanded = !expanded"
@@ -51,7 +53,7 @@ const expanded = ref(false)
           v-if="item.rate && !commonDate"
           :datetime="item.rate.isoDate"
         >{{ item.rate.date }}</time>
-        <strong :class="item.alias === 'usd' ? 'text-green-darken-3' : 'text-purple-darken-2'">{{ item.rate ? `${item.rate.label} ${item.rate.value}` : `${item.alias.toUpperCase()} —` }}<span class="sr-only">{{ item.rate ? ' RUB, официальный курс ЦБ РФ' : ` ${RATE_UNAVAILABLE_MESSAGE}` }}</span></strong>
+        <strong :class="item.alias === 'usd' ? 'text-green-darken-3' : 'text-purple-darken-2'">{{ item.rate ? `${item.rate.label} ${item.rate.value}${item.rate.quoteSymbol}` : `${item.symbol} —` }}<span class="sr-only">{{ item.rate ? ' официальный курс ЦБ РФ' : ` ${RATE_UNAVAILABLE_MESSAGE}` }}</span></strong>
       </span>
     </div>
   </div>

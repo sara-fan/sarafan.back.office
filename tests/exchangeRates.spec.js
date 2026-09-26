@@ -10,20 +10,20 @@ import componentSource from '../src/components/ExchangeRateDisplay.vue?raw'
 import { exchangeRateDisplay } from '../src/exchangeRates.js'
 import ExchangeRateDisplay from '../src/components/ExchangeRateDisplay.vue'
 
-const currencies = [{ value:643,name:'Российский рубль',routeAlias:'rub' },{ value:840,name:'Доллар США',routeAlias:'usd' }]
+const currencies = [{ value:643,name:'Российский рубль',routeAlias:'rub',symbol:'₽' },{ value:840,name:'Доллар США',routeAlias:'usd',symbol:'$' }]
 const rate = { provider:'CBR', baseCurrency:840, quoteCurrency:643, nominal:1, officialRate:81.1234, sourceEffectiveDate:'2026-09-05', retrievedAt:'2026-09-06T21:10:00Z' }
 describe('official exchange-rate display', () => {
   it('shows common dates once, different dates separately and keeps valid partial rates', async () => {
-    const catalogue = [...currencies, { value:978, name:'Евро', routeAlias:'eur' }]
+    const catalogue = [...currencies, { value:978, name:'Евро', routeAlias:'eur', symbol:'€' }]
     const eur = { ...rate, baseCurrency:978, officialRate:92.5, nominal:10 }
     const wrapper = mount(ExchangeRateDisplay, { props:{ rates:[rate, eur], currencies:catalogue } })
     expect(wrapper.findAll('time')).toHaveLength(1)
-    expect(wrapper.get('.text-purple-darken-2').text()).toContain('10 EUR 92,5000')
+    expect(wrapper.get('.text-purple-darken-2').text()).toContain('10 € 92,5000₽')
     await wrapper.setProps({ rates:[rate, { ...eur, sourceEffectiveDate:'2026-09-07' }] })
     expect(wrapper.findAll('time')).toHaveLength(2)
     await wrapper.setProps({ rates:[eur] })
-    expect(wrapper.text()).toContain('USD —')
-    expect(wrapper.text()).toContain('EUR 92,5000')
+    expect(wrapper.text()).toContain('$ —')
+    expect(wrapper.text()).toContain('€ 92,5000₽')
     await wrapper.get('button').trigger('click')
     expect(wrapper.get('button').attributes('aria-expanded')).toBe('true')
     expect(wrapper.get('#official-rates').classes()).toContain('expanded')
@@ -35,12 +35,12 @@ describe('official exchange-rate display', () => {
     const wrapper = mount(ExchangeRateDisplay, { props:{ rates:[rate], currencies } })
     expect(wrapper.get('time').text()).toBe('05.09.26')
     expect(wrapper.get('time').attributes('datetime')).toBe('2026-09-05')
-    expect(wrapper.get('strong').text()).toContain('USD 81,1234')
+    expect(wrapper.get('strong').text()).toContain('$ 81,1234₽')
     expect(wrapper.get('strong').classes()).toContain('text-green-darken-3')
     expect(wrapper.get('[role="status"]').attributes('aria-live')).toBe('polite')
-    expect(wrapper.text()).toContain('RUB, официальный курс ЦБ РФ')
+    expect(wrapper.text()).toContain('официальный курс ЦБ РФ')
     expect(exchangeRateDisplay([{ ...rate, sourceEffectiveDate:'2020-01-01', officialRate:81 }], currencies).value).toBe('81,0000')
-    expect(exchangeRateDisplay([{ ...rate, nominal:100, officialRate:8112.34 }], currencies)).toMatchObject({ label:'100 USD', value:'8 112,3400' })
+    expect(exchangeRateDisplay([{ ...rate, nominal:100, officialRate:8112.34 }], currencies)).toMatchObject({ label:'100 $', value:'8 112,3400', quoteSymbol:'₽' })
     expect(exchangeRateDisplay([rate, { ...rate,quoteCurrency:978 }, { ...rate,provider:'other' }], currencies)).toEqual(exchangeRateDisplay([rate], currencies))
     expect(wrapper.attributes('tabindex')).toBe('0')
     wrapper.unmount()
@@ -64,7 +64,7 @@ describe('official exchange-rate display', () => {
   })
   it('renders an accessible unavailable placeholder and updates reactively', async () => {
     const wrapper = mount(ExchangeRateDisplay)
-    expect(wrapper.get('strong').text()).toContain('USD —')
+    expect(wrapper.get('strong').text()).toContain('—')
     expect(wrapper.text()).toContain('не удалось получить курс')
     expect(wrapper.attributes('title')).toBe('не удалось получить курс')
     expect(wrapper.find('time').exists()).toBe(false)

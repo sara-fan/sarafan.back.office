@@ -5,18 +5,21 @@
 import ActionButton from './ActionButton.vue'
 defineProps({
   open:Boolean,
+  busy:Boolean,
+  actionVariant:{ type:String, default:'orange' },
+  secondaryAction:{ type:String, default:'' },
   title:{ type:String, default:'Подтвердите действие' },
   message:{ type:String, required:true },
   action:{ type:String, default:'Подтвердить' },
   actionIcon:{ type:String, default:'$save' }
 })
-defineEmits(['confirm','cancel'])
+defineEmits(['confirm','cancel','secondary'])
 </script>
 <template>
   <v-dialog
     :model-value="open"
     max-width="480"
-    @update:model-value="!$event && $emit('cancel')"
+    @update:model-value="!$event && !busy && $emit('cancel')"
   >
     <section
       class="confirm-card"
@@ -32,13 +35,24 @@ defineEmits(['confirm','cancel'])
       </p>
       <div class="form-actions">
         <ActionButton
+          :disabled="busy"
           icon="$close"
           label="Отмена"
           tooltip-text="Отмена"
           @click="$emit('cancel')"
         />
         <ActionButton
+          v-if="secondaryAction"
+          icon="$continue"
+          :label="secondaryAction"
+          :tooltip-text="secondaryAction"
+          :disabled="busy"
           variant="orange"
+          @click="$emit('secondary')"
+        />
+        <ActionButton
+          :disabled="busy"
+          :variant="actionVariant"
           :icon="actionIcon"
           :label="action"
           :tooltip-text="action"

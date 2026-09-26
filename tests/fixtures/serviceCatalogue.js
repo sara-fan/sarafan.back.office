@@ -11,8 +11,9 @@ export const serviceCatalogueOps = {
     { value:400, name:'Комиссия/маржа «Сарафана»', routeAlias:'service-commission' },
     { value:500, name:'Фото товара на складе в США', routeAlias:'warehouse-photo' },
     { value:600, name:'Проверка товара', routeAlias:'product-inspection' },
-    { value:700, name:'Страхование отправления', routeAlias:'shipment-insurance' }
-  ].map(service => ({ ...service, allowedCurrencies:[643, 840], allowedPriceMethods:[0, 100, 200, 300, 400] })),
+    { value:700, name:'Страхование отправления', routeAlias:'shipment-insurance' },
+    { value:800, name:'Таможенные платежи', routeAlias:'customs-payments' }
+  ].map(service => ({ ...service, includedInTotal:![300, 800].includes(service.value), allowedCurrencies:[643, 840], allowedPriceMethods:[0, 100, 200, 300, 400] })),
   priceMethods:[
     { value:0, name:'Процент от цены товара', routeAlias:'percent' },
     { value:100, name:'Фиксированная стоимость', routeAlias:'fixed' },

@@ -38,6 +38,9 @@ const API_ROUTE_TEMPLATES = new Set([
   '/api/v1/backoffice/orders/{number}',
   '/api/v1/backoffice/orders/{number}/product',
   '/api/v1/backoffice/orders/pricing/ops',
+  '/api/v1/backoffice/orders/{number}/history',
+  '/api/v1/backoffice/orders/{number}/history/ops',
+  '/api/v1/backoffice/orders/{number}/history/{eventKey}',
   '/api/v1/backoffice/orders/{number}/pricing',
   '/api/v1/backoffice/orders/{number}/pricing/confirm',
   '/api/v1/backoffice/auth/login', '/api/v1/backoffice/auth/refresh', '/api/v1/backoffice/auth/logout', '/api/v1/backoffice/auth/me',
@@ -46,7 +49,7 @@ const API_ROUTE_TEMPLATES = new Set([
 
 function routeTemplate(path) {
   try {
-    const pathname = new globalThis.URL(path, ROUTE_VALIDATION_ORIGIN).pathname.replace(/(\/backoffice\/stores\/)[1-9]\d*(?=\/logo$|$)/u, '$1{id}').replace(/(\/backoffice\/service-catalogue\/)[1-9]\d*$/u, '$1{id}').replace(/(\/backoffice\/orders\/)\d{8}-[1-9]\d*(?=\/(?:product|pricing(?:\/confirm)?)$|$)/u, '$1{number}').replace(LEGAL_DOCUMENT_ROUTE_PATTERN, '$1{id}').replace(/(\/backoffice\/users\/)\d+$/u, '$1{id}')
+    const pathname = new globalThis.URL(path, ROUTE_VALIDATION_ORIGIN).pathname.replace(/(\/backoffice\/stores\/)[1-9]\d*(?=\/logo$|$)/u, '$1{id}').replace(/(\/backoffice\/service-catalogue\/)[1-9]\d*$/u, '$1{id}').replace(/(\/backoffice\/orders\/)\d{8}-[1-9]\d*(?=\/(?:product|history(?:\/(?:ops|[0-3]-[1-9]\d*))?|pricing(?:\/confirm)?)$|$)/u, '$1{number}').replace(/(\/history\/)[0-3]-[1-9]\d*$/u, '$1{eventKey}').replace(LEGAL_DOCUMENT_ROUTE_PATTERN, '$1{id}').replace(/(\/backoffice\/users\/)\d+$/u, '$1{id}')
     return API_ROUTE_TEMPLATES.has(pathname) ? pathname : undefined
   } catch {
     return undefined

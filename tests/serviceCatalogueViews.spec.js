@@ -60,7 +60,7 @@ describe('service catalogue list', () => {
     expect(wrapper.get('#currency').element.value).toBe('840')
     await wrapper.get('#currency').setValue('643')
     await wrapper.get('#currency').setValue('840')
-    expect(wrapper.findAll('#currency option').map(option => option.text())).toEqual(['Российский рубль (₽)', 'Доллар США ($)'])
+    expect(wrapper.findAll('#currency option').map(option => option.text())).toEqual(['₽', '$'])
     expect(wrapper.findAll('#service option').map(option => Number(option.element.value))).not.toContain(0)
     for (const service of [100, 200, 300, 400, 500, 600, 700]) {
       await wrapper.get('#service').setValue(String(service))
