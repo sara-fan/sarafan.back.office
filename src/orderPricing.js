@@ -26,18 +26,17 @@ export function validatePricingOps(value) {
 function validateInputs(value, ops) {
   if (!value || !value.manualAmounts || typeof value.manualAmounts !== 'object' || Array.isArray(value.manualAmounts)
     || !Array.isArray(value.selectedServices) || new Set(value.selectedServices).size !== value.selectedServices.length
-    || !value.selectedServices.every(service => optionalServices(ops).some(item => item.value === service))
-    || !optionalAmount(value.domesticDeliveryRub) || !optionalAmount(value.customsRub)) fail()
+    || !value.selectedServices.every(service => optionalServices(ops).some(item => item.value === service))) fail()
   for (const [key, price] of Object.entries(value.manualAmounts)) {
     if (!ops.catalogue.services.some(item => String(item.value) === key) || !amount(price)) fail()
   }
 }
 
-function validateCalculation(value, ops) {
+export function validateCalculation(value, ops) {
   if (!value || !timestamp(value.calculatedAt) || !Array.isArray(value.components)
     || value.components.length !== ops.catalogue.services.length
     || new Set(value.components.map(item => item.service)).size !== value.components.length
-    || value.totalRub !== null && !amount(value.totalRub, 8 * ops.catalogue.limits.maximumAmount)) fail()
+    || value.totalRub !== null && !amount(value.totalRub, ops.catalogue.services.filter(item => item.includedInTotal).length * ops.catalogue.limits.maximumAmount)) fail()
   validateInputs(value.inputs, ops)
   if (value.exchangeRate !== null) {
     const rate = value.exchangeRate
@@ -58,8 +57,7 @@ function validateCalculation(value, ops) {
       if (component.tariff.service !== component.service) fail()
     }
   }
-  const domestic = ops.catalogue.services.find(item => item.routeAlias === 'domestic-delivery').value
-  const included = value.components.filter(item => item.service !== domestic && item.state !== 200)
+  const included = value.components.filter(item => ops.catalogue.services.find(service => service.value === item.service).includedInTotal && item.state !== 200)
   if (included.some(item => item.state !== 0)) { if (value.totalRub !== null) fail() }
   else if (value.totalRub === null || Math.round(value.totalRub * 100) !== included.reduce((sum, item) => sum + Math.round(item.amountRub * 100), 0)) fail()
   return value
@@ -71,32 +69,24 @@ export function validateOrderPricing(value, ops, orderNumber) {
     || value.validUntil !== null && !timestamp(value.validUntil)
     || value.confirmed !== (value.validUntil !== null) || value.expired && !value.confirmed
     || value.confirmed && (value.canEdit || value.canConfirm)
-    || !Array.isArray(value.history) || value.history.length > 100 || !Array.isArray(value.activeTariffs)) fail()
+    || !Array.isArray(value.activeTariffs)) fail()
   validateCalculation(value.calculation, ops)
   if (value.canConfirm && (!value.canEdit || value.calculation.totalRub === null)) fail()
   value.activeTariffs.forEach(item => validateServiceCatalogueEntry(item, ops.catalogue))
   if (new Set(value.activeTariffs.map(item => item.service)).size !== value.activeTariffs.length) fail()
-  let previousId = Infinity
-  for (const item of value.history) {
-    if (!Number.isSafeInteger(item.id) || item.id <= 0 || item.id >= previousId || !timestamp(item.at)
-      || item.validUntil !== null && (!timestamp(item.validUntil) || Date.parse(item.validUntil) <= Date.parse(item.at))
-      || (item.actorId === null ? item.actorName !== null : !Number.isSafeInteger(item.actorId) || item.actorId <= 0 || typeof item.actorName !== 'string' || !item.actorName.trim())) fail()
-    previousId = item.id
-    validateCalculation(item.calculation, ops)
-  }
   return value
 }
 
 export function manualPricingTariffs(value, ops) {
   const method = ops.catalogue.priceMethods.find(item => item.routeAlias === 'manual').value
-  const excluded = ops.catalogue.services.filter(item => ['product', 'domestic-delivery'].includes(item.routeAlias)).map(item => item.value)
+  const excluded = ops.catalogue.services.filter(item => item.routeAlias === 'product').map(item => item.value)
   return value.activeTariffs.filter(item => item.priceMethod === method && !excluded.includes(item.service))
 }
 
 export function pricingForm(value, ops) {
   const inputs = value.calculation.inputs
   const text = number => number === null || number === undefined ? '' : number.toFixed(2).replace('.', ',')
-  return { selectedServices:[...inputs.selectedServices], domesticDeliveryRub:text(inputs.domesticDeliveryRub), customsRub:text(inputs.customsRub),
+  return { selectedServices:[...inputs.selectedServices],
     manualAmounts:Object.fromEntries(manualPricingTariffs(value, ops).map(item => [item.service, text(inputs.manualAmounts[item.service])])) }
 }
 
@@ -109,8 +99,7 @@ export function pricingPayload(form, updatedAt, ops) {
     if (!/^\d+(?:\.\d{1,2})?$/u.test(normalized) || !amount(value, ops.catalogue.limits.maximumAmount)) errors[field] = ['Укажите неотрицательную сумму с двумя дробными знаками.']
     return value
   }
-  const inputs = { manualAmounts:{}, selectedServices:[...form.selectedServices],
-    domesticDeliveryRub:read(form.domesticDeliveryRub, 'domesticDeliveryRub'), customsRub:read(form.customsRub, 'customsRub') }
+  const inputs = { manualAmounts:{}, selectedServices:[...form.selectedServices] }
   for (const [key, text] of Object.entries(form.manualAmounts)) {
     const value = read(text, 'manualAmounts')
     if (value !== null) inputs.manualAmounts[key] = value

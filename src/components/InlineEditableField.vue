@@ -40,14 +40,21 @@ function finishEdit() {
   emit('editing-change', false)
   nextTick(() => root.value?.querySelector('button')?.focus())
 }
+function validateEdit() {
+  if (!editing.value) return true
+  if (props.disabled) return false
+  editError.value = props.validate?.(draft.value.trim()) ?? ''
+  if (editError.value) { root.value?.querySelector('input')?.focus(); return false }
+  return true
+}
 function acceptEdit() {
-  if (!editing.value || props.disabled) return
+  if (!validateEdit()) return false
+  if (!editing.value) return true
   const value = draft.value.trim()
-  editError.value = props.validate?.(value) ?? ''
-  if (editError.value) return
   model.value = value
   emit('accepted', value)
   finishEdit()
+  return true
 }
 function cancelEdit() {
   if (editing.value) {
@@ -59,7 +66,7 @@ function cancelEdit() {
 onUnmounted(() => {
   if (editing.value) emit('editing-change', false)
 })
-defineExpose({ startEdit })
+defineExpose({ startEdit, validateEdit, applyEdit:acceptEdit, cancelEdit })
 </script>
 
 <template>

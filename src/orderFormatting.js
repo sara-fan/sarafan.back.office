@@ -59,7 +59,8 @@ function validateCatalogItems(items, { upper = false } = {}) {
 export function validateOrderOps(value) {
   const statuses = validateCatalogItems(value?.statuses, { upper:true })
   const currencies = validateCatalogItems(value?.currencies)
-  if (!statuses || !currencies || !Array.isArray(value?.statusGroups) || value.statusGroups.length !== 2) {
+  if (!statuses || !currencies || currencies.result.some(item => typeof item.symbol !== 'string' || !item.symbol.trim())
+    || !Array.isArray(value?.statusGroups) || value.statusGroups.length !== 2) {
     throw createInternalProblem('protocolError')
   }
   const groupAliases = new Set()
@@ -135,7 +136,7 @@ export function orderStatusName(value, ops) {
 
 export function formatOrderMoney(price, ops) {
   if (!price) return '—'
-  const alias = ops.currencies.find(currency => currency.value === price.currency)?.routeAlias
-  if (!alias) return '—'
-  return `${formatMoneyAmount(price.amount)} ${alias.toUpperCase()}`
+  const symbol = ops.currencies.find(currency => currency.value === price.currency)?.symbol
+  if (!symbol) return '—'
+  return `${formatMoneyAmount(price.amount)}${symbol}`
 }

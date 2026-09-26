@@ -41,7 +41,7 @@ export function validateProductLimits(value, currencies) {
   return value
 }
 
-function productIsValid(product, currencies, limits) {
+export function productIsValid(product, currencies, limits) {
   return product && text(product.productName, limits.productNameMaximumLength)
     && text(product.storeName, limits.storeNameMaximumLength)
     && text(product.color, limits.colorMaximumLength) && text(product.size, limits.sizeMaximumLength)
@@ -97,7 +97,7 @@ export function productValidation(form, limits, limit) {
   if (!Number.isSafeInteger(quantity) || quantity < limits.minimumQuantity) errors.quantity = ['Укажите положительное целое количество.']
   else if (quantity > limits.maximumQuantity) errors.quantity = ['Такое количество товара может быть признано коммерческой партией и запрещено к ввозу']
   const cents = priceCents(form.sellerPrice)
-  if (cents === null || cents <= 0n || cents > priceCents(limits.maximumUnitPrice)) errors.sellerPrice = ['Укажите положительную цену в USD, не более двух знаков после запятой.']
+  if (cents === null || cents <= 0n || cents > priceCents(limits.maximumUnitPrice)) errors.sellerPrice = ['Укажите положительную цену, не более двух знаков после запятой.']
   // Core supplies a conservative USD-cent ceiling. Core owns the exact cross-rate validation and message.
   else if (!errors.quantity && limit.available && cents * BigInt(quantity) > priceCents(limit.maximumTotalUsd)) {
     errors.sellerPrice = [limit.exceededMessage]

@@ -25,8 +25,8 @@ export const SERVICE_CATALOGUE_ERROR_OPTIONS = { types:Object.fromEntries(Object
   'service-catalogue-period-overlap':['service', 'availableFrom', 'availableBy']
 }).map(([suffix, fields]) => [`${PROBLEM_TYPE_ROOT}${suffix}`, Array.isArray(fields) ? fields : [fields]])) }
 
-const SERVICE_VALUES = [0, 100, 200, 300, 400, 500, 600, 700]
-const SERVICE_ALIASES = ['product', 'us-warehouse-delivery', 'international-delivery', 'domestic-delivery', 'service-commission', 'warehouse-photo', 'product-inspection', 'shipment-insurance']
+const SERVICE_VALUES = [0, 100, 200, 300, 400, 500, 600, 700, 800]
+const SERVICE_ALIASES = ['product', 'us-warehouse-delivery', 'international-delivery', 'domestic-delivery', 'service-commission', 'warehouse-photo', 'product-inspection', 'shipment-insurance', 'customs-payments']
 const METHOD_VALUES = [0, 100, 200, 300, 400]
 const METHOD_ALIASES = ['percent', 'fixed', 'manual', 'auto', 'stepped']
 const CURRENCY_VALUES = [643, 840]
@@ -77,7 +77,7 @@ export function validateServiceCatalogueOps(value) {
     || value.limits.auditPageSizeMaximum !== 100 || value.limits.maximumBands !== 100) protocol()
   validateEnum(value.services, SERVICE_VALUES, SERVICE_ALIASES)
   validateEnum(value.priceMethods, METHOD_VALUES, METHOD_ALIASES)
-  if (value.services.some(item => !Array.isArray(item.allowedPriceMethods) || item.allowedPriceMethods.length !== value.priceMethods.length
+  if (value.services.some(item => typeof item.includedInTotal !== 'boolean' || !Array.isArray(item.allowedPriceMethods) || item.allowedPriceMethods.length !== value.priceMethods.length
     || new Set(item.allowedPriceMethods).size !== item.allowedPriceMethods.length
     || item.allowedPriceMethods.some(method => !value.priceMethods.some(option => option.value === method)))) protocol()
   validateEnum(value.currencies, CURRENCY_VALUES, CURRENCY_ALIASES)
@@ -214,7 +214,7 @@ export function serviceCatalogueValidation(form, ops, creating = false, existing
   if (form.availableBy && !validDate(form.availableBy)) errors.availableBy = ['Укажите корректную дату окончания.']
   if (form.availableFrom && validDate(form.availableFrom) && form.availableBy && validDate(form.availableBy) && form.availableBy < form.availableFrom) errors.availableBy = ['Дата окончания не может быть раньше даты начала.']
   if (method?.routeAlias === 'percent') {
-    if (form.currency !== MERCHANDISE_CURRENCY) errors.currency = ['Процент от стоимости товара задаётся в долларах США.']
+    if (form.currency !== MERCHANDISE_CURRENCY) errors.currency = [`Процент от стоимости товара задаётся в ${ops.currencies.find(item => item.value === MERCHANDISE_CURRENCY).symbol}.`]
     const percentage = decimalValue(form.percentage, ops.limits.percentageDecimalPlaces)
     if (percentage === null || percentage <= 0 || percentage > ops.limits.maximumPercentage) errors.percentage = ['Укажите процент больше 0 и не больше 100.']
     for (const field of ['minimumAmount', 'maximumAmount']) {

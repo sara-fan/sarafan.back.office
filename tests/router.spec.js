@@ -16,6 +16,11 @@ describe('route authorization',()=>{
       s.user.value = { roles:[role] }
       await r.push('/orders/12345678-1')
       expect(r.currentRoute.value.matched[0].meta.action).toBe('manualQuotes')
+      await r.push('/orders/12345678-1/pricing')
+      expect(r.currentRoute.value.path).toBe('/orders/12345678-1')
+      await r.push('/orders/12345678-1/history')
+      expect(r.currentRoute.value.matched[0].meta.action).toBe('manualQuotes')
+      expect(safeReturn('/orders/12345678-1/history', s.user.value)).toBe('/orders/12345678-1/history')
       expect(safeReturn('/orders/12345678-1', s.user.value)).toBe('/orders/12345678-1')
     }
     for (const value of ['/orders/12345678-01','/orders/1','//evil','/orders/12345678-1?secret=1']) expect(safeReturn(value, s.user.value)).toBe('/orders')

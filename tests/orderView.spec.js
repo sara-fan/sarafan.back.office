@@ -10,6 +10,7 @@ import ConfirmDialog from '../src/components/ConfirmDialog.vue'
 import { createSarafanVuetify } from '../src/plugins/vuetify.js'
 import { CORE_PROBLEM_TYPES, createInternalProblem, ProblemError } from '../src/errors/problem.js'
 import { details, ops, limit } from './fixtures/orderProduct.js'
+import { pricingDetails, pricingOps } from './fixtures/orderPricing.js'
 
 const h = vi.hoisted(() => ({ session:{}, push:vi.fn(), leave:null, update:null, route:null }))
 vi.mock('../src/stores/session.js', () => ({ useSession:() => h.session }))
@@ -24,14 +25,71 @@ beforeEach(() => {
   h.update = null
   h.session.user = ref({ id:1, roles:['operator'] })
   h.session.getOrderOps = vi.fn().mockResolvedValue(ops)
-  h.session.orderRequest = vi.fn().mockResolvedValue(globalThis.structuredClone(details))
+  h.session.orderRequest = vi.fn().mockImplementation(path => Promise.resolve(globalThis.structuredClone(
+    path === '/orders/pricing/ops' ? pricingOps : path.endsWith('/pricing') ? { ...pricingDetails, orderNumber:h.route.params.orderNumber } : details
+  )))
   h.push.mockReset().mockResolvedValue(undefined)
 })
 afterEach(() => { wrapper?.unmount(); wrapper = null; vi.restoreAllMocks() })
 
 describe('staff order card', () => {
+  it('collapses sections independently, preserves drafts and reopens product validation', async () => {
+    await render()
+    await wrapper.get('#size').setValue('XL')
+    for (const title of ['Товар', 'Услуги и стоимость', 'Покупатель']) {
+      const toggle = wrapper.get(`button[aria-label="Свернуть раздел «${title}»"]`)
+      expect(toggle.attributes('type')).toBe('button')
+      const content = wrapper.get(`[id="${toggle.attributes('aria-controls')}"]`)
+      expect(content.isVisible()).toBe(true)
+      await toggle.trigger('click')
+      expect(toggle.attributes('aria-expanded')).toBe('false')
+      expect(content.isVisible()).toBe(false)
+    }
+    expect(vm().form.size).toBe('XL')
+    expect(h.session.orderRequest).toHaveBeenCalledTimes(3)
+    const productToggle = wrapper.get('button[aria-label="Развернуть раздел «Товар»"]')
+    await productToggle.trigger('click')
+    expect(wrapper.get('#size').element.value).toBe('XL')
+    await wrapper.get('#quantity').setValue('5')
+    await productToggle.trigger('click')
+    await vm().save()
+    expect(productToggle.attributes('aria-expanded')).toBe('true')
+    expect(wrapper.get('#quantity').isVisible()).toBe(true)
+    expect(document.activeElement).toBe(wrapper.get('#quantity').element)
+    expect(wrapper.get('button[aria-label="Развернуть раздел «Покупатель»"]').attributes('aria-expanded')).toBe('false')
+  })
+  it.each(['/orders/pricing/ops', '/orders/12345678-1/pricing'])('presents pricing failure once and recovers with header refresh: %s', async path => {
+    const normal = h.session.orderRequest.getMockImplementation()
+    h.session.orderRequest.mockImplementation(value => value === path ? Promise.reject(new Error('private')) : normal(value))
+    await render()
+    expect(wrapper.findAll('[role="alert"]')).toHaveLength(1)
+    expect(wrapper.text()).not.toContain('private')
+    expect(wrapper.text()).toContain('Стоимость недоступна')
+    expect(vm().details).not.toBeNull()
+    await wrapper.get('#size').setValue('XL')
+    expect(vm().form.size).toBe('XL')
+    h.session.orderRequest.mockImplementation(normal)
+    vm().refresh(); vm().acceptConfirmation(); await flushPromises()
+    expect(wrapper.find('[role="alert"]').exists()).toBe(false)
+    expect(wrapper.get('tfoot').text()).toContain('112,48')
+  })
+  it.each(['/orders/pricing/ops', '/orders/12345678-1/pricing'])('ignores pricing replies after an identity change: %s', async path => {
+    const wait = pending()
+    const normal = h.session.orderRequest.getMockImplementation()
+    h.session.orderRequest.mockImplementation(value => value === path ? wait.promise : normal(value))
+    await render()
+    h.session.user.value = null
+    wait.resolve(path.endsWith('/ops') ? pricingOps : pricingDetails)
+    await flushPromises()
+    expect(vm().pricing).toBeNull()
+    expect(vm().pricingOps).toBeNull()
+    expect(vm().details).toBeNull()
+  })
   it('shows profile and recognition, edits store and sends only allowed fields with exact timestamp', async () => {
     await render()
+    expect(wrapper.get('.order-state .order-status-pill').text()).toBe('На проверке')
+    expect(wrapper.find('.order-state .order-validity').exists()).toBe(false)
+    expect(wrapper.get('.order-dates').text()).toContain('Заказ создан:')
     expect(wrapper.text()).toContain('Иванов')
     expect(wrapper.text()).toContain('Не указано')
     expect(wrapper.text()).toContain('Габариты: 1 × 2 × 3 см')
@@ -40,7 +98,7 @@ describe('staff order card', () => {
     expect(wrapper.get('.product-page-link').text()).toBe('Страница товара')
     expect(wrapper.get('.product-page-link').attributes('rel')).toBe('noopener noreferrer')
     expect(wrapper.findAll('.product-grid label').map(label => label.text())).toEqual([
-      'Название товара', 'Магазин', 'Цена за единицу, USD', 'Количество', 'Цвет', 'Размер', 'Комментарий'
+      'Название товара', 'Магазин', 'Цена за единицу, $', 'Количество', 'Цвет', 'Размер', 'Комментарий'
     ])
     expect(wrapper.text()).not.toContain('как на сайте')
     expect(wrapper.findAll('.buyer-field')).toHaveLength(Object.keys(details.customer).length)
@@ -48,11 +106,12 @@ describe('staff order card', () => {
     expect(wrapper.findAll('.buyer-field .staff-form-value').every(field => field.classes().includes('staff-form-value--readonly'))).toBe(true)
     await wrapper.get('#productName').setValue(' Новое название ')
     await wrapper.get('#storeName').setValue(' Новый магазин ')
-    expect(wrapper.get('.saved-limit').text()).toContain('14.09.2026')
-    expect(wrapper.get('.saved-limit').text()).not.toContain('15.09.2026')
-    expect(wrapper.get('.total-line').text()).toContain('Стоимость, USD40,00')
-    expect(wrapper.findAll('.header-actions button').map(button => button.attributes('aria-label'))).toEqual([
-      'Расчёт стоимости', 'Обновить данные', 'Сохранить изменения', 'Отменить'
+    expect(wrapper.text()).not.toContain('Дата курсов при последнем сохранении товара')
+    expect(wrapper.findAll('h2').map(item => item.text())).toEqual(['Товар', 'Услуги и стоимость', 'Покупатель'])
+    expect(wrapper.get('tfoot').text()).toContain('112,48')
+    expect(wrapper.get('.total-line').text()).toContain('Стоимость, $40,00')
+    expect(wrapper.findAll('header .header-actions button').map(button => button.attributes('aria-label'))).toEqual([
+      'История заказа', 'Обновить данные', 'Сохранить изменения', 'Отменить'
     ])
     expect(wrapper.find('.merchandise-summary').exists()).toBe(false)
     const result = { ...details, product:{ ...details.product, productName:'Новое название', storeName:'Новый магазин' }, updatedAt:'2026-09-15T12:00:00.123456Z' }
@@ -72,7 +131,7 @@ describe('staff order card', () => {
     expect(wrapper.text().match(/Такое количество товара/g)).toHaveLength(1)
     expect(vm().form.quantity).toBe('5')
     await vm().save()
-    expect(h.session.orderRequest).toHaveBeenCalledTimes(1)
+    expect(h.session.orderRequest).toHaveBeenCalledTimes(3)
     expect(document.activeElement).toBe(wrapper.get('#quantity').element)
     await wrapper.get('#quantity').setValue('4')
     await wrapper.get('#sellerPrice').setValue('281.26')
@@ -92,17 +151,17 @@ describe('staff order card', () => {
     expect(vm().locked).toBe(true)
     expect(wrapper.text()).toContain('Обновите карточку')
     await vm().save()
-    expect(h.session.orderRequest).toHaveBeenCalledTimes(2)
+    expect(h.session.orderRequest).toHaveBeenCalledTimes(4)
     vm().refresh()
     expect(vm().confirmation).toBe(true)
     wrapper.findComponent(ConfirmDialog).vm.$emit('cancel'); await flushPromises()
     expect(vm().form.productName).toBe('Черновик')
     vm().refresh()
     h.session.orderRequest.mockResolvedValueOnce({ ...details, status:300, canEditProduct:false })
-    wrapper.findComponent(ConfirmDialog).vm.$emit('confirm'); await flushPromises()
+    wrapper.findComponent(ConfirmDialog).vm.$emit('secondary'); await flushPromises()
     expect(vm().dirty).toBe(false)
     expect(vm().editable).toBe(false)
-    expect(wrapper.text()).toContain('только для просмотра')
+    expect(wrapper.text()).not.toContain('только для просмотра')
   })
   it('retains failed form and presents field errors once', async () => {
     await render()
@@ -128,6 +187,7 @@ describe('staff order card', () => {
     vm().cancelConfirmation(); expect(await leave).toBe(false)
     const proceed = h.leave()
     vm().acceptConfirmation(); expect(await proceed).toBe(true)
+    await wrapper.get('#size').setValue('XXL')
     const event = new globalThis.Event('beforeunload', { cancelable:true })
     globalThis.dispatchEvent(event)
     expect(event.defaultPrevented).toBe(true)
@@ -158,9 +218,9 @@ describe('staff order card', () => {
     expect(wrapper.get('.product-grid').attributes('disabled')).toBeDefined()
     expect(wrapper.get('.total-line .staff-form-value').classes()).toContain('staff-form-value--readonly')
     expect(wrapper.text()).toContain('Исправление товара временно недоступно')
-    expect(wrapper.get('.saved-limit').text()).toContain('Сохранённая проверка лимита отсутствует')
+    expect(wrapper.find('.saved-limit').exists()).toBe(false)
     await vm().save()
-    expect(h.session.orderRequest).toHaveBeenCalledTimes(1)
+    expect(h.session.orderRequest).toHaveBeenCalledTimes(3)
   })
   it.each(['administrator','shift-manager','senior-operator','operator'])('allows the role %s only with server permission', async role => {
     h.session.user.value.roles = [role]
@@ -169,7 +229,7 @@ describe('staff order card', () => {
     expect(vm().editable).toBe(false)
     await flushPromises()
     expect(wrapper.find('button[aria-label="Сохранить изменения"]').exists()).toBe(false)
-    expect(wrapper.findAll('.header-actions button').map(button => button.attributes('aria-label'))).toEqual(['Расчёт стоимости', 'Обновить данные', 'Отменить'])
+    expect(wrapper.findAll('header .header-actions button').map(button => button.attributes('aria-label'))).toEqual(['История заказа', 'Обновить данные', 'Отменить'])
   })
   it('reloads a changed order number only after the dirty draft is confirmed', async () => {
     await render()
@@ -183,12 +243,12 @@ describe('staff order card', () => {
 
     const accepted = h.update({ params:{ orderNumber:next } }, { params:{ orderNumber:details.orderNumber } })
     await flushPromises()
-    wrapper.findComponent(ConfirmDialog).vm.$emit('confirm')
+    wrapper.findComponent(ConfirmDialog).vm.$emit('secondary')
     expect(await accepted).toBe(true)
     h.session.orderRequest.mockResolvedValueOnce({ ...details, orderNumber:next })
     h.route.params.orderNumber = next
     await flushPromises()
-    expect(h.session.orderRequest).toHaveBeenLastCalledWith(`/orders/${next}`)
+    expect(h.session.orderRequest).toHaveBeenLastCalledWith(`/orders/${next}/pricing`)
     expect(wrapper.get('.primary-heading').text()).toBe(`Заказ ${next}`)
   })
   it('denies unknown roles and ignores late load replies and failures after identity changes', async () => {
@@ -224,4 +284,234 @@ describe('staff order card', () => {
     wait.resolve(details); await flushPromises()
     expect(state.details).toBeNull()
   })
+})
+
+
+describe('pricing on the order card', () => {
+  const action = name => wrapper.get(`button[aria-label="${name}"]`)
+  const calculate = () => action('Рассчитать и сохранить стоимость')
+  async function edit(value = '230.5', service = 300) {
+    await wrapper.get(`button#manualAmount${service}`).trigger('click')
+    await wrapper.get(`input#manualAmount${service}`).setValue(value)
+  }
+  beforeEach(() => { h.session.user.value.roles = ['shift-manager'] })
+  it('uses the existing inline editor, validates and normalizes manual amounts, and preserves customer choices', async () => {
+    await render()
+    expect(wrapper.find('input[type="checkbox"]').exists()).toBe(false)
+    await edit('-1')
+    expect(calculate().attributes('disabled')).toBeDefined()
+    await action('Применить').trigger('click')
+    expect(wrapper.text()).toContain('Укажите неотрицательную сумму')
+    await wrapper.get('input#manualAmount300').setValue('230.5')
+    await action('Применить').trigger('click')
+    expect(vm().pricingDraft.manualAmounts[300]).toBe('230,50')
+    expect(vm().pricingDirty).toBe(true)
+    expect(action('Подтвердить сохранённый расчёт').attributes('disabled')).toBeDefined()
+    expect(wrapper.get('.product-grid').attributes('disabled')).toBeDefined()
+    await calculate().trigger('click'); await flushPromises()
+    const [, request] = h.session.orderRequest.mock.calls.find(([, options]) => options?.method === 'PUT')
+    expect(JSON.parse(request.body)).toEqual({ expectedUpdatedAt:pricingDetails.updatedAt, inputs:{ selectedServices:[], manualAmounts:{ 100:0, 300:230.5 } } })
+    expect(vm().dirty).toBe(false)
+    expect(h.push).not.toHaveBeenCalled()
+  })
+  it('cancels inline drafts and protects accepted or uncommitted drafts on navigation and refresh', async () => {
+    await render(); await edit()
+    const leaving = h.leave(); await flushPromises(); vm().cancelConfirmation()
+    expect(await leaving).toBe(false)
+    await wrapper.get('input#manualAmount300').trigger('keydown', { key:'Escape' })
+    expect(vm().dirty).toBe(false)
+    await edit(); await action('Применить').trigger('click')
+    const event = new globalThis.Event('beforeunload', { cancelable:true }); globalThis.dispatchEvent(event)
+    expect(event.defaultPrevented).toBe(true)
+    vm().refresh(); vm().cancelConfirmation(); expect(vm().pricingDirty).toBe(true)
+    vm().refresh(); vm().acceptConfirmation(); await flushPromises()
+    expect(vm().dirty).toBe(false)
+  })
+  it('requires explicit confirmation and reloads order capabilities and version after freezing', async () => {
+    await render()
+    await action('Подтвердить сохранённый расчёт').trigger('click')
+    const dialog = wrapper.findAllComponents(ConfirmDialog).find(item => item.props('title') === 'Подтвердить расчёт?')
+    expect(dialog.props('open')).toBe(true)
+    dialog.vm.$emit('cancel'); await flushPromises()
+    expect(h.session.orderRequest).toHaveBeenCalledTimes(3)
+    await action('Подтвердить сохранённый расчёт').trigger('click')
+    const frozen = { ...pricingDetails, updatedAt:'2026-09-24T11:00:00Z', confirmed:true, validUntil:'2026-09-25T11:00:00Z', canEdit:false, canConfirm:false }
+    h.session.orderRequest.mockResolvedValueOnce(frozen).mockResolvedValueOnce({ ...details, updatedAt:frozen.updatedAt, canEditProduct:false })
+    dialog.vm.$emit('confirm'); await flushPromises()
+    expect(h.session.orderRequest.mock.calls[3][0]).toBe('/orders/12345678-1/pricing/confirm')
+    expect(JSON.parse(h.session.orderRequest.mock.calls[3][1].body)).toEqual({ expectedUpdatedAt:pricingDetails.updatedAt })
+    expect(vm().details.updatedAt).toBe(frozen.updatedAt)
+    expect(wrapper.get('.order-state .order-validity').text()).toContain('действует до')
+    expect(wrapper.get('.order-dates').text()).toContain('обновлён:')
+    expect(wrapper.text()).not.toContain('Финансовые значения сохранены')
+    expect(wrapper.find('button#manualAmount300').exists()).toBe(false)
+    expect(vm().productEditingEnabled).toBe(false)
+  })
+  it.each([CORE_PROBLEM_TYPES.orderUpdateConflict, CORE_PROBLEM_TYPES.orderNotEditable, null])('retains failed pricing drafts and locks conflicts: %s', async type => {
+    await render(); await edit(); await action('Применить').trigger('click')
+    h.session.orderRequest.mockRejectedValueOnce(type ? remote(type) : createInternalProblem('protocolError'))
+    await calculate().trigger('click'); await flushPromises()
+    expect(vm().pricingDraft.manualAmounts[300]).toBe('230,50')
+    expect(vm().locked).toBe(!!type)
+    expect(wrapper.findAll('[role="alert"]')).toHaveLength(1)
+    vm().refresh(); vm().acceptConfirmation(); await flushPromises()
+    expect(vm().locked).toBe(false)
+  })
+  it.each(['operator', 'senior-operator'])('keeps pricing read-only for %s', async role => {
+    h.session.user.value.roles = [role]; await render()
+    expect(wrapper.find('button#manualAmount300').exists()).toBe(false)
+    expect(wrapper.find('button[aria-label="Рассчитать и сохранить стоимость"]').exists()).toBe(false)
+    await vm().mutatePricing(); expect(h.session.orderRequest).toHaveBeenCalledTimes(3)
+  })
+  it('blocks pricing writes while the product draft is dirty or an inline amount is uncommitted', async () => {
+    await render(); await wrapper.get('#size').setValue('L')
+    await vm().mutatePricing(); expect(h.session.orderRequest).toHaveBeenCalledTimes(3)
+    expect(calculate().attributes('disabled')).toBeDefined()
+    vm().refresh(); vm().acceptConfirmation(); await flushPromises()
+    await edit(); await vm().mutatePricing(); await vm().saveAction()
+    expect(h.session.orderRequest).toHaveBeenCalledTimes(6)
+    expect(action('Сохранить изменения').attributes('disabled')).toBeDefined()
+  })
+  it.each([true, false])('ignores a stale pricing mutation after identity changes (success=%s)', async success => {
+    await render()
+    const wait = pending(); h.session.orderRequest.mockReturnValueOnce(wait.promise)
+    const saving = vm().mutatePricing()
+    h.session.user.value = null
+    if (success) wait.resolve(pricingDetails); else wait.reject(new Error('private'))
+    await saving
+    expect(vm().pricing).toBeNull(); expect(vm().problem).toBeNull()
+  })
+})
+
+
+describe('pricing recovery and field errors', () => {
+  beforeEach(() => { h.session.user.value.roles = ['administrator'] })
+  it('edits USD manual amounts and clears them with the shared inline editor', async () => {
+    await render()
+    for (const value of ['12.25', '']) {
+      await wrapper.get('button#manualAmount100').trigger('click')
+      await wrapper.get('input#manualAmount100').setValue(value)
+      await wrapper.get('input#manualAmount100').trigger('keydown', { key:'Enter' })
+      expect(vm().pricingDraft.manualAmounts[100]).toBe(value ? '12,25' : '')
+    }
+    await vm().calculatePrice()
+    const payload = JSON.parse(h.session.orderRequest.mock.calls.find(([, options]) => options?.method === 'PUT')[1].body)
+    expect(payload.inputs.manualAmounts).toEqual({})
+  })
+  it('shows server amount errors beside the price controls and focuses the existing inline editor', async () => {
+    await render()
+    h.session.orderRequest.mockRejectedValueOnce(createInternalProblem('invalidInput', { errors:{ manualAmounts:['Тариф изменился.'] } }))
+    await vm().calculatePrice()
+    expect(wrapper.get('#manual-amounts-error').text()).toBe('Тариф изменился.')
+    expect(wrapper.findAll('[role="alert"]')).toHaveLength(0)
+    expect(document.activeElement).toBe(wrapper.get('button#manualAmount100').element)
+  })
+  it('locks stale product data after a successful pricing write whose order reload fails, then recovers', async () => {
+    await render()
+    h.session.orderRequest.mockResolvedValueOnce(pricingDetails).mockRejectedValueOnce(createInternalProblem('protocolError'))
+    await vm().calculatePrice()
+    expect(vm().pricing).not.toBeNull()
+    expect(vm().details).not.toBeNull()
+    expect(vm().locked).toBe(true)
+    await vm().mutatePricing(); expect(h.session.orderRequest).toHaveBeenCalledTimes(5)
+    vm().refresh(); await flushPromises()
+    expect(vm().locked).toBe(false)
+    expect(vm().problem).toBeNull()
+  })
+  it('ignores an order reload after pricing saved when the identity changes', async () => {
+    await render()
+    const wait = pending()
+    h.session.orderRequest.mockResolvedValueOnce(pricingDetails).mockReturnValueOnce(wait.promise)
+    const saving = vm().calculatePrice(); await flushPromises()
+    h.session.user.value = null; wait.resolve(details); await saving
+    expect(vm().details).toBeNull()
+  })
+  it('blocks confirmation for unsaved manual amounts and enforces Core management capabilities', async () => {
+    await render(); vm().pricingDraft.manualAmounts[300] = '4'
+    await vm().mutatePricing(true); expect(h.session.orderRequest).toHaveBeenCalledTimes(3)
+    vm().pricingOps.canManage = false; await flushPromises()
+    expect(wrapper.find('button#manualAmount300').exists()).toBe(false)
+  })
+})
+
+
+describe('save before order navigation', () => {
+  it('saves a product and resolves the pending departure without redirecting to the list', async () => {
+    await render(); await wrapper.get('#size').setValue('XL')
+    const leaving = h.leave()
+    expect(wrapper.findComponent(ConfirmDialog).props('secondaryAction')).toBe('Не сохранять и продолжить')
+    await vm().saveAndContinue()
+    expect(await leaving).toBe(true)
+    expect(h.push).not.toHaveBeenCalled()
+    expect(JSON.parse(h.session.orderRequest.mock.calls[3][1].body).size).toBe('XL')
+    expect(vm().dirty).toBe(false)
+  })
+  it('saves an unfinished inline amount and continues without confirming the quote', async () => {
+    h.session.user.value.roles = ['administrator']; await render()
+    await wrapper.get('button#manualAmount300').trigger('click')
+    await wrapper.get('input#manualAmount300').setValue('240,5')
+    const leaving = h.leave(); await vm().saveAndContinue()
+    expect(await leaving).toBe(true)
+    expect(JSON.parse(h.session.orderRequest.mock.calls[3][1].body).inputs.manualAmounts[300]).toBe(240.5)
+    expect(h.session.orderRequest.mock.calls.some(([path]) => path.endsWith('/confirm'))).toBe(false)
+  })
+  it('discards both an accepted amount and an unfinished inline draft', async () => {
+    h.session.user.value.roles = ['administrator']; await render()
+    vm().pricingDraft.manualAmounts[300] = '2'
+    await wrapper.get('button#manualAmount300').trigger('click')
+    await wrapper.get('input#manualAmount300').setValue('400')
+    const leaving = h.leave(); vm().acceptConfirmation()
+    expect(await leaving).toBe(true)
+    expect(vm().pricingDirty).toBe(false); expect(vm().pricingEditing).toBe(false)
+    expect(h.session.orderRequest).toHaveBeenCalledTimes(3)
+  })
+  it('retains an invalid inline draft, focuses it and cancels departure', async () => {
+    h.session.user.value.roles = ['administrator']; await render()
+    await wrapper.get('button#manualAmount300').trigger('click')
+    await wrapper.get('input#manualAmount300').setValue('-2')
+    const leaving = h.leave(); await vm().saveAndContinue()
+    expect(await leaving).toBe(false)
+    expect(wrapper.get('input#manualAmount300').element.value).toBe('-2')
+    expect(document.activeElement).toBe(wrapper.get('input#manualAmount300').element)
+  })
+  it.each([true, false])('blocks departure after product save failure (validation=%s)', async validation => {
+    await render(); await wrapper.get('#size').setValue('XL')
+    if (validation) await wrapper.get('#quantity').setValue('99')
+    else h.session.orderRequest.mockRejectedValueOnce(createInternalProblem('protocolError'))
+    const leaving = h.leave(); await vm().saveAndContinue()
+    expect(await leaving).toBe(false); expect(vm().form.size).toBe('XL')
+    expect(h.push).not.toHaveBeenCalled()
+  })
+  it('saves before refreshing and ignores repeated requests while saving', async () => {
+    await render(); await wrapper.get('#size').setValue('XL')
+    const wait = pending(); h.session.orderRequest.mockReturnValueOnce(wait.promise)
+    vm().refresh(); const saving = vm().saveAndContinue(); await flushPromises()
+    await vm().saveAndContinue(); vm().acceptConfirmation(); vm().refresh()
+    expect(h.session.orderRequest).toHaveBeenCalledTimes(4)
+    wait.resolve(details); await saving; await flushPromises()
+    expect(h.session.orderRequest).toHaveBeenCalledTimes(7)
+    expect(vm().dirty).toBe(false)
+  })
+  it('cancels a pending continuation on identity reset and handles history navigation errors', async () => {
+    await render(); await vm().openHistory()
+    expect(h.push).toHaveBeenCalledWith('/orders/12345678-1/history')
+    h.push.mockRejectedValueOnce(new Error('private')); await vm().openHistory(); expect(vm().problem).not.toBeNull()
+    await wrapper.get('#size').setValue('XL')
+    const wait = pending(); h.session.orderRequest.mockReturnValueOnce(wait.promise)
+    const leaving = h.leave(), saving = vm().saveAndContinue(); await flushPromises()
+    h.session.user.value = null; wait.resolve(details); await saving
+    expect(await leaving).toBe(false); expect(vm().details).toBeNull()
+  })
+})
+
+
+it('offers real save and discard continuation buttons with cancel preserving the draft', async () => {
+  await render(); await wrapper.get('#size').setValue('XL')
+  const leaving = h.leave(); await flushPromises()
+  document.querySelector('button[aria-label="Не сохранять и продолжить"]').click(); await flushPromises()
+  expect(await leaving).toBe(true); expect(vm().dirty).toBe(false)
+  await wrapper.get('#size').setValue('L')
+  const saveLeaving = h.leave(); await flushPromises()
+  document.querySelector('button[aria-label="Сохранить и продолжить"]').click(); await flushPromises()
+  expect(await saveLeaving).toBe(true)
 })
