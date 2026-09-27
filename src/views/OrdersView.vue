@@ -7,6 +7,7 @@ import { useListSearchDebounce } from '../listSearch.js'
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import ListText from '../components/ListText.vue'
+import OrderStatusBadge from '../components/OrderStatusBadge.vue'
 import ActionButton from '../components/ActionButton.vue'
 import ListFilterBar from '../components/ListFilterBar.vue'
 import PageAlertRegion from '../components/PageAlertRegion.vue'
@@ -20,7 +21,6 @@ import {
   normalizeOrderFilters,
   orderRowIsValid,
   orderStatusItems,
-  orderStatusName,
   safeOrderSource,
   selectionIsKnown
 } from '../orderFormatting.js'
@@ -372,7 +372,11 @@ onUnmounted(() => {
           </div>
         </template>
         <template #[`item.status`]="{ item }">
-          <span class="status-pill"><ListText :text="orderStatusName(item.status, ops)" /></span>
+          <OrderStatusBadge
+            :status="item.status"
+            :ops="ops"
+            compact
+          />
         </template>
         <template #[`item.productName`]="{ item }">
           <div class="order-product">
