@@ -200,6 +200,8 @@ For other comment-capable formats, use the same three lines with that format's n
 
 ## Order history and continuation
 
+- Customer cancellation appears as history kind 500 with version-2 status evidence and an optional staff-only reason. Keep version-1 evidence readable and render reasons as plain text; do not include them in logs or list searches.
+
 - Order history lives at `/orders/:orderNumber/history`, with `v-data-table-server`, shared `staff-list`, `ListFilterBar`, `ListText`, ActionButtons, server filtering/sorting/paging and lazy expanded evidence. Persist validated staff preferences under `order-history`; retain the order number only as preference context, exclude it from filter queries, and reset page on order changes. Keep historical pricing read-only and outside the order card.
 - Order-card departure and application refresh offer save-and-continue, discard-and-continue, and cancel. Validate all open `InlineEditableField` drafts before applying them. Save using the current editor permissions/version, continue only after success, and never confirm a quote implicitly. Discard clears accepted and inline drafts. Keep the native browser unload warning and leave other editors on their existing workflow.
 
