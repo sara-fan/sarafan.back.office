@@ -175,6 +175,26 @@ describe('history control events', () => {
 
 
 describe('history evidence boundaries', () => {
+  it('requires a cancellable-to-cancelled transition in version-2 evidence', () => {
+    const orderOpsWithCancelled = { ...orderOps, statuses:[...orderOps.statuses,
+      { value:100, name:'Расчёт готов', routeAlias:'quote_ready' },
+      { value:200, name:'Расчёт истёк', routeAlias:'quote_expired' },
+      { value:500, name:'Отменён', routeAlias:'cancelled', upperStatusValue:500, upperStatusName:'Отменён', upperStatusRouteAlias:'cancelled' }] }
+    const cancelledRow = { ...row, kind:500, areas:8, actorType:0, actorName:'Покупатель' }
+    const cancelled = { ...detail, event:cancelledRow, version:2, statusBefore:0, statusAfter:500,
+      cancellationReason:null }
+    for (const statusBefore of [0, 100, 200]) {
+      expect(validateHistoryDetail({ ...cancelled, statusBefore }, cancelledRow, ops, orderOpsWithCancelled, pricingOps))
+        .toMatchObject({ statusBefore, statusAfter:500 })
+    }
+    for (const change of [{ statusBefore:null }, { statusBefore:300 }, { statusBefore:500 },
+      { statusAfter:null }, { statusAfter:0 }, { statusAfter:300 }]) {
+      expect(() => validateHistoryDetail({ ...cancelled, ...change }, cancelledRow, ops, orderOpsWithCancelled, pricingOps))
+        .toThrow()
+    }
+    expect(validateHistoryDetail({ ...detail, statusBefore:null, statusAfter:null }, row, ops, orderOps, pricingOps))
+      .toMatchObject({ version:1, statusBefore:null, statusAfter:null })
+  })
   it('validates and displays the customer cancellation reason as plain text', () => {
     const orderOpsWithCancelled = { ...orderOps, statuses:[...orderOps.statuses,
       { value:500, name:'Отменён', routeAlias:'cancelled', upperStatusValue:500, upperStatusName:'Отменён', upperStatusRouteAlias:'cancelled' }] }

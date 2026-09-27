@@ -18,7 +18,7 @@ defineEmits(['confirm','cancel','secondary'])
 <template>
   <v-dialog
     :model-value="open"
-    max-width="480"
+    :max-width="secondaryAction ? 760 : 480"
     @update:model-value="!$event && !busy && $emit('cancel')"
   >
     <section

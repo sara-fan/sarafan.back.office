@@ -109,33 +109,37 @@ onMounted(load)
       <h1 class="primary-heading">
         Правовые документы <span class="count">{{ rows.length }}</span>
       </h1>
-      <div class="header-actions">
-        <span
-          v-if="busy"
-          class="header-spinner"
-          role="status"
-          aria-label="Загрузка"
-        />
-        <ActionButton
-          icon="$refresh"
-          tooltip-text="Обновить список"
-          :disabled="busy"
-          @click="load"
-        />
-        <ActionButton
-          icon="$audit"
-          tooltip-text="Открыть журнал действий"
-          :disabled="busy"
-          @click="router.push('/legal-documents/audit')"
-        />
-        <ActionButton
-          icon="$add"
-          icon-size="28"
-          tooltip-text="Создать новый документ"
-          variant="blue"
-          :disabled="busy"
-          @click="router.push('/legal-documents/new')"
-        />
+      <div class="header-action-groups">
+        <div class="header-actions">
+          <ActionButton
+            icon="$audit"
+            tooltip-text="Открыть журнал действий"
+            :disabled="busy"
+            @click="router.push('/legal-documents/audit')"
+          />
+        </div>
+        <div class="header-actions">
+          <span
+            v-if="busy"
+            class="header-spinner"
+            role="status"
+            aria-label="Загрузка"
+          />
+          <ActionButton
+            icon="$refresh"
+            tooltip-text="Обновить список"
+            :disabled="busy"
+            @click="load"
+          />
+          <ActionButton
+            icon="$add"
+            icon-size="28"
+            tooltip-text="Создать новый документ"
+            variant="blue"
+            :disabled="busy"
+            @click="router.push('/legal-documents/new')"
+          />
+        </div>
       </div>
     </header>
     <hr class="hr">

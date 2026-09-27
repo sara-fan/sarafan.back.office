@@ -40,6 +40,7 @@ export function validateHistoryDetail(value, row, ops, orderOps, pricingOps) {
     || !(value.sourceUrl === null || typeof value.sourceUrl === 'string')
     || ![value.validUntilBefore, value.validUntilAfter].every(time => time === null || timestampIsValid(time))
     || value.version === 2 && value.event.kind !== 500
+    || value.version === 2 && (![0, 100, 200].includes(value.statusBefore) || value.statusAfter !== 500)
     || value.version === 1 && value.cancellationReason != null
     || value.version === 2 && !(value.cancellationReason === null
       || typeof value.cancellationReason === 'string' && value.cancellationReason.length > 0

@@ -19,7 +19,7 @@ import { version } from '../package.json'
 
 const h=vi.hoisted(()=>({session:null,route:null,router:null}))
 vi.mock('../src/stores/session.js',()=>({useSession:()=>h.session}))
-vi.mock('vue-router',async original=>({...await original(),useRouter:()=>h.router,useRoute:()=>h.route}))
+vi.mock('vue-router',async original=>({...await original(),useRouter:()=>h.router,useRoute:()=>h.route,onBeforeRouteLeave:fn=>{h.leave=fn},onBeforeRouteUpdate:fn=>{h.update=fn}}))
 const identity={id:1,email:'admin@example.test',firstName:'Иван',lastName:'Иванов',patronymic:null,roles:['administrator'],isActive:true}
 const roles=[{code:'operator',displayName:'Operator'},{code:'senior-operator',displayName:'Senior operator'},{code:'administrator',displayName:'Administrator'},{code:'shift-manager',displayName:'Shift manager'}]
 const currencies=[{value:643,name:'Российский рубль',routeAlias:'rub',symbol:'₽'},{value:840,name:'Доллар США',routeAlias:'usd',symbol:'$'}]
@@ -183,13 +183,13 @@ describe('staff views',()=>{
     await button(w,'Отменить').trigger('click');expect(h.router.push).toHaveBeenCalledWith('/users');h.router.push.mockClear()
     h.session.saveUser.mockClear();const wait=pending();h.session.saveUser.mockReturnValueOnce(wait.promise);await w.get('form').trigger('submit');await w.get('form').trigger('submit');wait.resolve(identity);await flushPromises();expect(h.session.saveUser).toHaveBeenCalledTimes(1);expect(h.router.push).toHaveBeenCalledWith('/users')
   })
-  it('retries failed account loads and confirms security edits before saving',async()=>{
+  it('retries failed account loads and saves security edits directly',async()=>{
     h.route={path:'/users/1',params:{id:'1'},query:{}};h.session.getRoles.mockRejectedValueOnce(failure());const w=render(AccountView);await flushPromises();expect(w.find('form').exists()).toBe(false);expect(w.find('button[aria-label="Повторить загрузку"]').exists()).toBe(false);await button(w,'Обновить данные').trigger('click');await flushPromises()
     expect(w.get('.primary-heading').text()).toBe('Изменить информацию о пользователе');expect(button(w,'Сохранить изменения').get('i').attributes('data-icon')).toBe('$saveChanges')
     const reveal=w.findAll('button[aria-label="Показать пароль"]');expect(reveal).toHaveLength(2);expect(w.get('[name=password]').attributes('type')).toBe('password');expect(w.get('[name=confirmation]').attributes('type')).toBe('password');await reveal[0].trigger('click');expect(w.get('[name=password]').attributes('type')).toBe('text');expect(w.get('[name=confirmation]').attributes('type')).toBe('password');expect(w.get('button[aria-label="Скрыть пароль"] i').attributes('data-icon')).toBe('$eyeOff')
     await fill(w,'firstName','Пётр');await w.get('form').trigger('submit');await flushPromises();expect(h.session.saveUser).toHaveBeenCalledTimes(1)
-    await fill(w,'email','new@example.test');await w.get('form').trigger('submit');expect(w.find('[role=alertdialog]').exists()).toBe(true);openConfirm(w).vm.$emit('cancel');await nextTick();expect(h.session.saveUser).toHaveBeenCalledTimes(1)
-    await w.get('form').trigger('submit');h.session.saveUser.mockImplementationOnce(()=>{h.session.user.value=null;return Promise.resolve(identity)});openConfirm(w).vm.$emit('confirm');await flushPromises();expect(h.router.replace).toHaveBeenCalledWith('/login')
+    await fill(w,'email','new@example.test');await w.get('form').trigger('submit');await flushPromises();expect(openConfirm(w)).toBeUndefined();expect(h.session.saveUser).toHaveBeenCalledTimes(2)
+    h.session.saveUser.mockImplementationOnce(()=>{h.session.user.value=null;return Promise.resolve(identity)});await w.get('form').trigger('submit');await flushPromises();expect(h.router.replace).toHaveBeenCalledWith('/login')
   })
   it('refreshes pristine accounts directly and confirms before discarding dirty fields',async()=>{
     h.route={path:'/users/1',params:{id:'1'},query:{}};const w=render(AccountView);await flushPromises()
@@ -199,8 +199,8 @@ describe('staff views',()=>{
     await fill(w,'firstName','Несохранённое имя');await fill(w,'password','unsaved-password')
     const callsBeforeDirtyRefresh=h.session.getUser.mock.calls.length
     await button(w,'Обновить данные').trigger('click');await nextTick()
-    expect(openConfirm(w).props()).toMatchObject({action:'Сбросить и обновить',actionIcon:'$refresh'})
-    expect(button(w,'Сбросить и обновить').text()).toBe('Сбросить и обновить')
+    expect(openConfirm(w).props()).toMatchObject({action:'Не сохранять и продолжить',actionIcon:'$continue'})
+    expect(button(w,'Не сохранять и продолжить').text()).toBe('Не сохранять и продолжить')
     openConfirm(w).vm.$emit('cancel');await nextTick()
     expect(w.get('[name=firstName]').element.value).toBe('Несохранённое имя');expect(w.get('[name=password]').element.value).toBe('unsaved-password');expect(h.session.getUser).toHaveBeenCalledTimes(callsBeforeDirtyRefresh)
     await button(w,'Обновить данные').trigger('click');openConfirm(w).vm.$emit('confirm');await flushPromises()
@@ -220,10 +220,10 @@ describe('staff views',()=>{
     expect(editable.get('input[value=administrator]').attributes('disabled')).toBeUndefined()
     expect(editable.get('input[name=isActive]').attributes('disabled')).toBeUndefined()
   })
-  it('shows self roles read-only, saves names, and confirms password changes',async()=>{
+  it('shows self roles read-only and directly saves names and password changes',async()=>{
     h.route={path:'/profile',params:{},query:{}};const w=render(AccountView);await flushPromises();expect(w.get('.primary-heading').text()).toBe('Профиль');expect(h.session.getRoles).not.toHaveBeenCalled();expect(w.get('[name=email]').attributes('readonly')).toBeDefined();expect(w.find('input[name=roles]').exists()).toBe(false)
     await fill(w,'firstName','Пётр');await w.get('form').trigger('submit');await flushPromises();expect(w.get('[role=status]').text()).toBe('Данные сохранены');await button(w,'Обновить данные').trigger('click');await flushPromises();expect(openConfirm(w)).toBeUndefined();expect(w.get('[name=firstName]').element.value).toBe('Иван');await button(w,'Отменить').trigger('click');expect(h.router.push).toHaveBeenCalledWith('/users')
-    await fill(w,'password','test-password');await fill(w,'confirmation','test-password');await w.get('form').trigger('submit');openConfirm(w).vm.$emit('confirm');await flushPromises();expect(h.session.saveProfile).toHaveBeenLastCalledWith(expect.objectContaining({password:'test-password'}))
+    await fill(w,'password','test-password');await fill(w,'confirmation','test-password');await w.get('form').trigger('submit');await flushPromises();expect(openConfirm(w)).toBeUndefined();expect(h.session.saveProfile).toHaveBeenLastCalledWith(expect.objectContaining({password:'test-password'}))
   })
   it('discards operator profile edits when cancel returns to the same work screen',async()=>{
     h.session.user.value={...identity,roles:['operator']};h.route={path:'/profile',params:{},query:{}};const w=render(AccountView);await flushPromises();await fill(w,'firstName','Изменено');await fill(w,'password','test-password');await button(w,'Отменить').trigger('click');expect(h.router.push).toHaveBeenCalledWith('/orders')
@@ -289,4 +289,71 @@ it('focuses account fields, grouped roles and remote errors after save', async (
   expect(w.get('[name="email"]').attributes('aria-describedby')).toContain('email-error')
   expect(w.get('#email-error').text()).toBe('Этот адрес уже используется')
   expect(w.find('.page-alert').exists()).toBe(false)
+})
+
+
+describe('account editor continuation rules', () => {
+  it('guards Cancel and route updates, and clears successful saves before navigation', async () => {
+    h.route = { path:'/users/1', params:{ id:'1' }, query:{} }
+    const w = render(AccountView); await flushPromises()
+    h.router.push.mockImplementation(async () => h.leave())
+    await fill(w, 'firstName', 'Черновик')
+    await button(w, 'Отменить').trigger('click'); await nextTick()
+    expect(openConfirm(w).props('secondaryAction')).toBe('')
+    openConfirm(w).vm.$emit('cancel'); await flushPromises()
+    expect(w.get('[name=firstName]').element.value).toBe('Черновик')
+    const updating = h.update(); await nextTick()
+    openConfirm(w).vm.$emit('confirm'); expect(await updating).toBe(true)
+    expect(h.session.saveUser).not.toHaveBeenCalled()
+    await w.get('form').trigger('submit'); await flushPromises()
+    expect(h.session.saveUser).toHaveBeenCalledTimes(1)
+    expect(openConfirm(w)).toBeUndefined()
+    expect(await h.leave()).toBe(true)
+  })
+  it('guards a same-screen profile reset and cancels pending refresh on identity change', async () => {
+    h.route = { path:'/profile', params:{}, query:{} }
+    const w = render(AccountView); await flushPromises()
+    // Exercise reset without route navigation when the current screen is the return target.
+    h.route.path = '/users'
+    await fill(w, 'firstName', 'Черновик')
+    await button(w, 'Отменить').trigger('click'); await nextTick()
+    openConfirm(w).vm.$emit('cancel'); await flushPromises()
+    expect(w.get('[name=firstName]').element.value).toBe('Черновик')
+    await button(w, 'Отменить').trigger('click'); await nextTick()
+    openConfirm(w).vm.$emit('confirm'); await flushPromises()
+    expect(w.get('[name=firstName]').element.value).toBe('Иван')
+    expect(h.router.push).not.toHaveBeenCalled()
+    await fill(w, 'firstName', 'Ещё один черновик')
+    await button(w, 'Обновить данные').trigger('click'); await nextTick()
+    h.session.user.value = null; await flushPromises()
+    expect(openConfirm(w)).toBeUndefined()
+    expect(w.find('form').exists()).toBe(false)
+    expect(await h.leave()).toBe(true)
+  })
+  it.each(['password', 'email', 'roles', 'isActive'])('saves access change %s without confirmation', async field => {
+    h.route = { path:'/users/2', params:{ id:'2' }, query:{} }
+    h.session.getUser.mockResolvedValue({ ...identity, id:2 })
+    const w = render(AccountView); await flushPromises()
+    if (field === 'password') {
+      await fill(w, 'password', 'test-password'); await fill(w, 'confirmation', 'test-password')
+    } else if (field === 'email') await fill(w, 'email', 'changed@example.test')
+    else if (field === 'roles') await w.get('input[value=operator]').setValue(true)
+    else await w.get('input[name=isActive]').setValue(false)
+    await w.get('form').trigger('submit'); await flushPromises()
+    expect(h.session.saveUser).toHaveBeenCalledTimes(1)
+    expect(openConfirm(w)).toBeUndefined()
+  })
+})
+
+
+it('presents account cancellation navigation errors and ignores Cancel while saving', async () => {
+  h.route = { path:'/users/1', params:{ id:'1' }, query:{} }
+  const w = render(AccountView); await flushPromises()
+  const state = w.vm.$.setupState
+  state.busy = true; await state.cancel()
+  expect(h.router.push).not.toHaveBeenCalled()
+  state.busy = false
+  h.router.push.mockRejectedValueOnce(failure())
+  await state.cancel(); await flushPromises()
+  expect(w.find('[role=alert]').exists()).toBe(true)
 })
