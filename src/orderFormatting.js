@@ -130,10 +130,6 @@ export function orderRowIsValid(row, ops) {
     && updated >= created
 }
 
-export function orderStatusName(value, ops) {
-  return ops.statuses.find(status => status.value === value)?.name ?? '—'
-}
-
 export function formatOrderMoney(price, ops) {
   if (!price) return '—'
   const symbol = ops.currencies.find(currency => currency.value === price.currency)?.symbol

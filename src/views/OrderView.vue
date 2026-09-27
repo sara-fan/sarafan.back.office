@@ -12,12 +12,13 @@ import EditorHeaderActions from '../components/EditorHeaderActions.vue'
 import FormField from '../components/FormField.vue'
 import PageAlertRegion from '../components/PageAlertRegion.vue'
 import OrderCostSummary from '../components/OrderCostSummary.vue'
+import OrderStatusBadge from '../components/OrderStatusBadge.vue'
 import CollapsibleSection from '../components/CollapsibleSection.vue'
 import { moscowTime } from '../consentFormatting.js'
 import { manualPricingTariffs, optionalServices, pricingForm, pricingPayload, validateOrderPricing, validatePricingOps } from '../orderPricing.js'
 import { CORE_PROBLEM_TYPES, formPageProblem, normalizeProblem, problemFieldErrors } from '../errors/problem.js'
 import { formatMoneyAmount } from '../moneyFormatting.js'
-import { orderStatusName, safeOrderSource } from '../orderFormatting.js'
+import { safeOrderSource } from '../orderFormatting.js'
 import { CUSTOMER_FIELDS, PRODUCT_FIELDS, priceCents, productForm, productPayload, productValidation, validateOrderDetails } from '../orderProduct.js'
 import { can } from '../roles.js'
 import { useSession } from '../stores/session.js'
@@ -300,13 +301,16 @@ const focusAfter = useValidationFocus(focusRoot, { context:() => [session.user.v
     </p>
     <template v-if="details && form">
       <div class="order-meta">
-        <div class="order-state">
-          <span class="status-pill order-status-pill">{{ orderStatusName(details.status, ops) }}</span>
+        <OrderStatusBadge
+          class="order-state"
+          :status="details.status"
+          :ops="ops"
+        >
           <span
             v-if="pricing?.confirmed && !pricing.expired"
             class="order-validity"
           >действует до {{ moscowTime(pricing.validUntil) }}</span>
-        </div>
+        </OrderStatusBadge>
         <span class="order-dates">Заказ создан: {{ moscowTime(details.createdAt) }}, обновлён: {{ moscowTime(details.updatedAt) }}</span>
         <a
           v-if="safeOrderSource(details.sourceUrl)"
@@ -507,9 +511,7 @@ const focusAfter = useValidationFocus(focusRoot, { context:() => [session.user.v
 
 <style scoped>
 .order-meta { display:flex; flex-wrap:wrap; align-items:center; gap:12px 24px; margin-bottom:20px; color:#526a80; }
-.order-state { display:flex; flex-wrap:wrap; align-items:center; gap:8px 12px; }
-.order-status-pill { padding:6px 10px; font-size:14px; font-weight:600; }
-.order-validity { color:#207662; font-size:14px; font-weight:500; }
+.order-validity { color:inherit; font-size:14px; font-weight:500; }
 .order-dates { color:#68798b; font-size:13px; }
 .product-page-link { margin-left:auto; color:#1976d2; font-size:13px; font-weight:500; }
 .product-grid { grid-template-columns:repeat(2, minmax(0, 1fr)); grid-template-areas:"name name" "store price" "quantity total" "color size" "comment comment"; column-gap:24px; }
