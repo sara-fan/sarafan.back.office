@@ -5,6 +5,7 @@
 import ListText from '../components/ListText.vue'
 import ActionButton from '../components/ActionButton.vue'
 import ListFilterBar from '../components/ListFilterBar.vue'
+import { matchesListSearch } from '../listSearch.js'
 import { useRouter } from 'vue-router'
 import { computed, onMounted, ref, watch } from 'vue'
 import PageAlertRegion from '../components/PageAlertRegion.vue'
@@ -45,8 +46,8 @@ const filtered = computed(() => users.value.map(user => ({
   ...user,
   displayName:fullName(user)
 })).filter(user => {
-  const text = `${fullName(user)} ${user.email} ${user.roles.map(roleLabel).join(' ')}`.toLocaleLowerCase('ru')
-  return text.includes(search.value.trim().toLocaleLowerCase('ru')) && (!role.value || user.roles.includes(role.value)) && (!state.value || String(user.isActive) === state.value)
+  const values = [fullName(user) + (user.id === session.user.value?.id ? ' (вы)' : ''), user.email, ...user.roles.map(roleLabel), user.isActive ? 'Активен' : 'Отключён']
+  return matchesListSearch(search.value, values) && (!role.value || user.roles.includes(role.value)) && (!state.value || String(user.isActive) === state.value)
 }))
 const activeAdministratorCount = computed(() => users.value.filter(user =>
   user.isActive && Array.isArray(user.roles) && user.roles.includes('administrator')

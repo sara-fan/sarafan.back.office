@@ -3,6 +3,7 @@
 // All rights reserved.
 // This file is a part of the Sarafan application
 
+import { useListSearchDebounce } from '../listSearch.js'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import ActionButton from '../components/ActionButton.vue'
@@ -26,9 +27,14 @@ restored.state.filters.orderNumber = number.value
 const state = ref(restored.state), rows = ref([]), total = ref(0), busy = ref(false), problem = ref(null)
 const preferenceProblem = ref(restored.unavailable ? createInternalProblem('viewPreferencesUnavailable') : null)
 const ops = ref(null), orderOps = ref(null), pricingOps = ref(null), expanded = ref([]), details = ref({}), detailProblems = ref({}), detailBusy = ref({})
-let generation = 0, searchTimer = null
-const headers = [{ title:'', key:'data-table-expand', sortable:false, width:'56px' }, { title:'Дата и время', key:'timestamp', width:'180px' },
-  { title:'Событие', key:'event', width:'220px' }, { title:'Исполнитель', key:'actor', width:'220px' }, { title:'Изменения', key:'summary', sortable:false }]
+let generation = 0
+const searchDebounce = useListSearchDebounce(invalidate, load)
+const headers = [
+  { title:'', key:'data-table-expand', sortable:false, width:'56px' }, 
+  { title:'Дата и время', key:'timestamp', width:'180px' },
+  { title:'Событие', key:'event', width:'220px' }, 
+  { title:'Исполнитель', key:'actor' }, 
+  { title:'Изменения', key:'summary', sortable:false }]
 const choices = (key, all) => [{ title:all, value:null }, ...(ops.value?.[key] ?? []).map(item => ({ title:item.name, value:item.value }))]
 const kind = value => ops.value.kinds.find(item => item.value === value).name
 function persist() {
@@ -36,8 +42,7 @@ function persist() {
 }
 function invalidate() {
   generation++
-  if (searchTimer) globalThis.clearTimeout(searchTimer)
-  searchTimer = null
+  searchDebounce.cancel()
   expanded.value = []; details.value = {}; detailProblems.value = {}; detailBusy.value = {}
 }
 async function load() {
@@ -75,7 +80,7 @@ function filter(key, value) {
   state.value.filters[key] = key === 'search' ? String(value ?? '').slice(0, 200) : value
   state.value.page = 1
   persist()
-  if (key === 'search') searchTimer = globalThis.setTimeout(load, 300)
+  if (key === 'search') searchDebounce.schedule()
   else load()
 }
 function page(value) { if (Number.isInteger(value) && value > 0 && value !== state.value.page) { state.value.page = value; persist(); load() } }
@@ -186,9 +191,6 @@ onUnmounted(invalidate)
         @update:model-value="filter('to', $event ?? '')"
       />
     </ListFilterBar>
-    <p class="field-hint">
-      Поиск по имени исполнителя. Даты и время — московские.
-    </p>
     <v-card class="table-card">
       <v-data-table-server
         :headers="headers"
@@ -228,7 +230,7 @@ onUnmounted(invalidate)
           <ListText :text="kind(item.kind)" />
         </template>
         <template #[`item.actor`]="{ item }">
-          <ListText :text="item.actorName + (item.actorNameHistorical ? '' : ' (текущее имя)')" />
+          <ListText :text="item.actorName" />
         </template>
         <template #[`item.summary`]="{ item }">
           <ListText :text="historyAreas(item.areas, ops)" />

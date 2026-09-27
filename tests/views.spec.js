@@ -139,6 +139,10 @@ describe('staff views',()=>{
     const w=render(UsersView);await nextTick();await flushPromises();expect(w.findAll('tbody tr')).toHaveLength(10);
     const filterBar=w.get('.filter-bar');expect(filterBar.findComponent({name:'VTextField'}).props()).toMatchObject({label:'Поиск',density:'compact',variant:'solo',active:true});expect(filterBar.findAllComponents({name:'VSelect'}).every(select=>select.props('density')==='compact'&&select.props('variant')==='solo'&&select.props('active')===true)).toBe(true)
     const table=w.findComponent({name:'VDataTable'});table.vm.$emit('update:page',2);await nextTick();expect(w.findAll('tbody tr')).toHaveLength(2);table.vm.$emit('update:page',1);await nextTick()
+    for (const [query, count] of [['Отключён',1], ['user0@example.test',1], ['(вы)',1], ['Оператор',1], ['Имя 11',1]]) {
+      await w.get('.filter-search input').setValue(query); expect(w.findAll('tbody tr')).toHaveLength(count)
+      expect(w.vm.$.setupState.filtered).toHaveLength(count)
+    }
     await w.get('.filter-search input').setValue('Анна');expect(w.findAll('tbody tr')).toHaveLength(1)
     await w.get('.filter-search input').setValue('');const selects=w.findAllComponents({name:'VSelect'});selects[0].vm.$emit('update:modelValue','operator');await nextTick();expect(w.findAll('tbody tr')).toHaveLength(1)
     selects[0].vm.$emit('update:modelValue','');selects[1].vm.$emit('update:modelValue','false');await nextTick();expect(w.findAll('tbody tr')).toHaveLength(1)

@@ -74,6 +74,15 @@ describe('service catalogue list', () => {
     expect(wrapper.find('#currency').exists()).toBe(false)
     expect(vm().form.currency).toBe(840)
   })
+  it('searches every displayed tariff field with display formatting and no hidden metadata', async () => {
+    await render(ServiceCatalogueView)
+    for (const [query, ids] of [['Товар', [1]], ['Фиксированная стоимость', [2]], ['1 500,50$', [2]], ['10,125%', [1]], ['мин. 1,25$', [1]], ['01.01.2026 — 31.01.2026', [1]], ['2026-01-01', []], ['1500.5', []], ['11111111-1111', []]]) {
+      vm().page = 2
+      await wrapper.get('.filter-search input').setValue(query)
+      expect(vm().filtered.map(item => item.id)).toEqual(ids)
+      expect(vm().page).toBe(1)
+    }
+  })
   it('loads, filters, opens, confirms deletion and exposes audit/create actions', async () => {
     await render(ServiceCatalogueView)
     expect(wrapper.text()).toContain('Тарифы')

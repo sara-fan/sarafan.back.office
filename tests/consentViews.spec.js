@@ -117,6 +117,10 @@ it('shows and combines legal document status filters with search and kind', asyn
   ])
   render(LegalDocumentsView); await flushPromises()
   expect(vm().filtered.map(item => item.statusTitle)).toEqual(['Не актуальный', 'Актуальный', 'Будущий'])
+  for (const [query, count] of [['Будущий',1], ['08.09.2027',3], ['2',3], ['обработку персональных данных',3], ['2027-09-07',0]]) {
+    vm().search = query; await nextTick(); expect(vm().filtered).toHaveLength(count)
+  }
+  vm().search = ''; await nextTick()
   for (const value of ['outdated', 'current', 'future']) {
     vm().page = 2
     wrapper.findAllComponents({ name:'VSelect' }).find(select => select.props('label') === 'Статус').vm.$emit('update:modelValue', value)
@@ -561,7 +565,7 @@ it('validates and persists every audit and queue server-table event', async () =
   vm().onSearchInput('customer 1234567890123')
   await new Promise(resolve => globalThis.setTimeout(resolve, 310)); await flushPromises()
   expect(JSON.parse(globalThis.localStorage.getItem('sarafan.backoffice.view-state.v1.1.privacy-requests')))
-    .toMatchObject({ page:1, pageSize:25, sortBy:[{ key:'customerId', order:'desc' }], filters:{ search:'1234567890', processed:'' } })
+    .toMatchObject({ page:1, pageSize:25, sortBy:[{ key:'customerId', order:'desc' }], filters:{ search:'customer 1234567890123', processed:'' } })
 })
 it('corrects queue underflow and patches a processed row before authoritative refresh', async () => {
   globalThis.localStorage.setItem('sarafan.backoffice.view-state.v1.1.privacy-requests', JSON.stringify({
@@ -579,6 +583,16 @@ it('corrects queue underflow and patches a processed row before authoritative re
   await vm().process({ ...withdrawalRequest })
   expect(vm().rows.find(item => item.customerId === withdrawalRequest.customerId)?.processed).toBe(true)
   expect(h.session.consentRequest.mock.calls.filter(([path]) => path.startsWith('/consents/withdrawal-requests?')).length).toBeGreaterThanOrEqual(3)
+})
+it('removes a processed request that no longer matches text search even when refresh fails', async () => {
+  h.session.consentRequest.mockResolvedValueOnce(pageResult([withdrawalRequest], '/consents/withdrawal-requests?', { defaultPageSize:10, defaultSortBy:'processed', defaultSortOrder:'asc' }))
+  render(PrivacyRequestsView); await flushPromises()
+  vm().search = 'Ожидает ручной обработки'
+  h.session.consentRequest.mockResolvedValueOnce({ ...withdrawalRequest, processed:true }).mockRejectedValueOnce(failure())
+  await vm().process(withdrawalRequest)
+  expect(vm().rows).toEqual([])
+  expect(vm().total).toBe(0)
+  expect(vm().problem).not.toBeNull()
 })
 it('rejects a malformed audit envelope and cancels pending search loads on unmount', async () => {
   h.session.consentRequest.mockResolvedValueOnce({ items:[], sorting:{ sortBy:'at', sortOrder:'desc' } })

@@ -27,7 +27,7 @@ export function historyItemIsValid(value, ops) {
     && timestampIsValid(value.at) && ops.kinds.some(item => item.value === value.kind)
     && Number.isInteger(value.areas) && value.areas > 0 && value.areas <= 15
     && ops.actorTypes.some(item => item.value === value.actorType)
-    && typeof value.actorName === 'string' && !!value.actorName.trim() && typeof value.actorNameHistorical === 'boolean'
+    && typeof value.actorName === 'string' && !!value.actorName.trim()
 }
 export function validateHistoryDetail(value, row, ops, orderOps, pricingOps) {
   if (!value || value.version !== 1 || typeof value.missingCreationDetails !== 'boolean'

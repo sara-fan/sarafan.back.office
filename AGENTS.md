@@ -205,3 +205,7 @@ For other comment-capable formats, use the same three lines with that format's n
 
 - Expanded price history uses a compact Vuetify before/after comparison with only changed components, the saved total, separate extras and evidence-based reasons. Never mount full order pricing or tariff panels there. Derive reasons from immutable snapshots, distinguish initial calculation from missing legacy evidence, retain confirmation validity, and scope outer-table CSS so nested comparisons stay compact.
 - Show the total-row heading and its saved-rate line in both the order cost table and historical cost comparison using one shared presentation component. Style the rate and «Не входит в итог» with the same `price-note` rule. Read history values from its immutable calculation and confirmation evidence.
+
+- List free-text search matches all displayed data fields using their displayed string values, including formatted numbers, dates, and localized labels. Expandable lists search only collapsed-row fields. Reuse shared search and presentation helpers. Search works without explanatory UI notes; retain only the concise search label and accessibility semantics.
+
+- Order history exposes and displays the actor name without name-provenance flags, suffixes or explanatory notices. Search matches the displayed actor name.
