@@ -15,7 +15,7 @@ import { createInternalProblem, ProblemError } from '../src/errors/problem.js'
 import { LEGAL_DOCUMENT_KIND, documentNodes, moscowDate, moscowDateInput, moscowTime, isDocumentId } from '../src/consentFormatting.js'
 const h = vi.hoisted(() => ({ session:{}, router:{}, route:{} }))
 vi.mock('../src/stores/session.js', () => ({ useSession:() => h.session }))
-vi.mock('vue-router', () => ({ useRouter:() => h.router, useRoute:() => h.route }))
+vi.mock('vue-router', () => ({ useRouter:() => h.router, useRoute:() => h.route, onBeforeRouteLeave:fn => { h.leave = fn }, onBeforeRouteUpdate:fn => { h.update = fn } }))
 const id = '11111111-1111-1111-1111-111111111111'
 const ops = { kinds:[
   { value:1, name:'Согласие на обработку персональных данных', routeAlias:'personal-data-consent' },
@@ -215,8 +215,8 @@ it('refreshes pristine legal editors and confirms before clearing dirty source a
   expect(vm().preview).not.toBeNull()
   const callsBeforeDirtyRefresh = h.session.getLegalDocumentOps.mock.calls.length
   await click('Обновить данные')
-  expect(openConfirm().props()).toMatchObject({ action:'Сбросить и обновить', actionIcon:'$refresh' })
-  expect(wrapper.get('button[aria-label="Сбросить и обновить"]').text()).toBe('Сбросить и обновить')
+  expect(openConfirm().props()).toMatchObject({ action:'Не сохранять и продолжить', actionIcon:'$continue' })
+  expect(wrapper.get('button[aria-label="Не сохранять и продолжить"]').text()).toBe('Не сохранять и продолжить')
   openConfirm().vm.$emit('cancel'); await nextTick()
   expect(vm().form.title).toBe('Несохранённый документ')
   expect(vm().file).toMatchObject({ name:source.name, size:source.size })
@@ -821,4 +821,47 @@ it('shows legal validation only at its field and retains unrelated errors in the
   vm().problem = createInternalProblem('invalidInput', { detail:'Ошибка загрузки', errors:{ Title:['Ошибка названия'] } })
   await nextTick()
   expect(wrapper.get('.page-alert').text()).toBe('Ошибка загрузки')
+})
+
+
+it('guards legal-document Cancel and clears successful saves before navigation', async () => {
+  render(LegalDocumentView, { path:'/legal-documents/new', params:{}, query:{} }); await flushPromises()
+  h.router.push.mockImplementation(async () => h.leave())
+  h.router.replace.mockImplementation(async () => h.leave())
+  vm().form.title = 'Черновик'
+  vm().file = upload()
+  await vm().previewDocument()
+  await click('Вернуться к списку')
+  expect(openConfirm().props('secondaryAction')).toBe('')
+  openConfirm().vm.$emit('cancel'); await flushPromises()
+  expect(vm().form.title).toBe('Черновик')
+  expect(vm().file).not.toBeNull()
+  const updating = h.update(); await nextTick()
+  openConfirm().vm.$emit('confirm'); expect(await updating).toBe(true)
+  await vm().save(); await flushPromises()
+  expect(h.router.replace).toHaveBeenCalledWith('/legal-documents')
+  expect(openConfirm()).toBeUndefined()
+  expect(await h.leave()).toBe(true)
+})
+
+it.each(['identity', 'unmount'])('cancels a pending legal-document refresh on %s', async action => {
+  render(LegalDocumentView, { path:'/legal-documents/new', params:{}, query:{} }); await flushPromises()
+  vm().form.title = 'Черновик'
+  const refresh = vm().requestRefresh()
+  const calls = h.session.getLegalDocumentOps.mock.calls.length
+  if (action === 'identity') h.session.user.value = null
+  else { wrapper.unmount(); wrapper = null }
+  await refresh
+  expect(h.session.getLegalDocumentOps).toHaveBeenCalledTimes(calls)
+})
+
+
+it('presents legal-document cancellation navigation errors and ignores Cancel while busy', async () => {
+  render(LegalDocumentView, { path:'/legal-documents/new', params:{}, query:{} }); await flushPromises()
+  vm().busy = true; await vm().cancel()
+  expect(h.router.push).not.toHaveBeenCalled()
+  vm().busy = false
+  h.router.push.mockRejectedValueOnce(failure())
+  await vm().cancel(); await flushPromises()
+  expect(wrapper.find('[role=alert]').exists()).toBe(true)
 })

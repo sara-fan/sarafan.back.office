@@ -109,7 +109,7 @@ describe('staff order card', () => {
     expect(wrapper.text()).not.toContain('Дата курсов при последнем сохранении товара')
     expect(wrapper.findAll('h2').map(item => item.text())).toEqual(['Товар', 'Услуги и стоимость', 'Покупатель'])
     expect(wrapper.get('tfoot').text()).toContain('112,48')
-    expect(wrapper.get('.total-line').text()).toContain('Стоимость, $40,00')
+    expect(wrapper.get('.total-line').text()).toContain('Общая цена, $40,00')
     expect(wrapper.findAll('header .header-actions button').map(button => button.attributes('aria-label'))).toEqual([
       'История заказа', 'Обновить данные', 'Сохранить изменения', 'Отменить'
     ])
@@ -158,7 +158,7 @@ describe('staff order card', () => {
     expect(vm().form.productName).toBe('Черновик')
     vm().refresh()
     h.session.orderRequest.mockResolvedValueOnce({ ...details, status:300, canEditProduct:false })
-    wrapper.findComponent(ConfirmDialog).vm.$emit('secondary'); await flushPromises()
+    wrapper.findComponent(ConfirmDialog).vm.$emit('confirm'); await flushPromises()
     expect(vm().dirty).toBe(false)
     expect(vm().editable).toBe(false)
     expect(wrapper.text()).not.toContain('только для просмотра')
@@ -243,7 +243,7 @@ describe('staff order card', () => {
 
     const accepted = h.update({ params:{ orderNumber:next } }, { params:{ orderNumber:details.orderNumber } })
     await flushPromises()
-    wrapper.findComponent(ConfirmDialog).vm.$emit('secondary')
+    wrapper.findComponent(ConfirmDialog).vm.$emit('confirm')
     expect(await accepted).toBe(true)
     h.session.orderRequest.mockResolvedValueOnce({ ...details, orderNumber:next })
     h.route.params.orderNumber = next
@@ -438,7 +438,8 @@ describe('pricing recovery and field errors', () => {
 describe('save before order navigation', () => {
   it('saves a product and resolves the pending departure without redirecting to the list', async () => {
     await render(); await wrapper.get('#size').setValue('XL')
-    const leaving = h.leave()
+    const leaving = h.leave({ path:'/orders/12345678-1/history' })
+    await flushPromises()
     expect(wrapper.findComponent(ConfirmDialog).props('secondaryAction')).toBe('Не сохранять и продолжить')
     await vm().saveAndContinue()
     expect(await leaving).toBe(true)
@@ -450,7 +451,7 @@ describe('save before order navigation', () => {
     h.session.user.value.roles = ['administrator']; await render()
     await wrapper.get('button#manualAmount300').trigger('click')
     await wrapper.get('input#manualAmount300').setValue('240,5')
-    const leaving = h.leave(); await vm().saveAndContinue()
+    const leaving = h.leave({ path:'/orders/12345678-1/history' }); await vm().saveAndContinue()
     expect(await leaving).toBe(true)
     expect(JSON.parse(h.session.orderRequest.mock.calls[3][1].body).inputs.manualAmounts[300]).toBe(240.5)
     expect(h.session.orderRequest.mock.calls.some(([path]) => path.endsWith('/confirm'))).toBe(false)
@@ -460,7 +461,7 @@ describe('save before order navigation', () => {
     vm().pricingDraft.manualAmounts[300] = '2'
     await wrapper.get('button#manualAmount300').trigger('click')
     await wrapper.get('input#manualAmount300').setValue('400')
-    const leaving = h.leave(); vm().acceptConfirmation()
+    const leaving = h.leave({ path:'/orders/12345678-1/history' }); vm().acceptConfirmation()
     expect(await leaving).toBe(true)
     expect(vm().pricingDirty).toBe(false); expect(vm().pricingEditing).toBe(false)
     expect(h.session.orderRequest).toHaveBeenCalledTimes(3)
@@ -469,7 +470,7 @@ describe('save before order navigation', () => {
     h.session.user.value.roles = ['administrator']; await render()
     await wrapper.get('button#manualAmount300').trigger('click')
     await wrapper.get('input#manualAmount300').setValue('-2')
-    const leaving = h.leave(); await vm().saveAndContinue()
+    const leaving = h.leave({ path:'/orders/12345678-1/history' }); await vm().saveAndContinue()
     expect(await leaving).toBe(false)
     expect(wrapper.get('input#manualAmount300').element.value).toBe('-2')
     expect(document.activeElement).toBe(wrapper.get('input#manualAmount300').element)
@@ -478,18 +479,19 @@ describe('save before order navigation', () => {
     await render(); await wrapper.get('#size').setValue('XL')
     if (validation) await wrapper.get('#quantity').setValue('99')
     else h.session.orderRequest.mockRejectedValueOnce(createInternalProblem('protocolError'))
-    const leaving = h.leave(); await vm().saveAndContinue()
+    const leaving = h.leave({ path:'/orders/12345678-1/history' }); await vm().saveAndContinue()
     expect(await leaving).toBe(false); expect(vm().form.size).toBe('XL')
     expect(h.push).not.toHaveBeenCalled()
   })
-  it('saves before refreshing and ignores repeated requests while saving', async () => {
+  it('saves before history navigation and ignores repeated requests while saving', async () => {
     await render(); await wrapper.get('#size').setValue('XL')
     const wait = pending(); h.session.orderRequest.mockReturnValueOnce(wait.promise)
-    vm().refresh(); const saving = vm().saveAndContinue(); await flushPromises()
+    const leaving = h.leave({ path:'/orders/12345678-1/history' }); const saving = vm().saveAndContinue(); await flushPromises()
     await vm().saveAndContinue(); vm().acceptConfirmation(); vm().refresh()
     expect(h.session.orderRequest).toHaveBeenCalledTimes(4)
     wait.resolve(details); await saving; await flushPromises()
-    expect(h.session.orderRequest).toHaveBeenCalledTimes(7)
+    expect(await leaving).toBe(true)
+    expect(h.session.orderRequest).toHaveBeenCalledTimes(4)
     expect(vm().dirty).toBe(false)
   })
   it('cancels a pending continuation on identity reset and handles history navigation errors', async () => {
@@ -498,7 +500,7 @@ describe('save before order navigation', () => {
     h.push.mockRejectedValueOnce(new Error('private')); await vm().openHistory(); expect(vm().problem).not.toBeNull()
     await wrapper.get('#size').setValue('XL')
     const wait = pending(); h.session.orderRequest.mockReturnValueOnce(wait.promise)
-    const leaving = h.leave(), saving = vm().saveAndContinue(); await flushPromises()
+    const leaving = h.leave({ path:'/orders/12345678-1/history' }), saving = vm().saveAndContinue(); await flushPromises()
     h.session.user.value = null; wait.resolve(details); await saving
     expect(await leaving).toBe(false); expect(vm().details).toBeNull()
   })
@@ -507,11 +509,62 @@ describe('save before order navigation', () => {
 
 it('offers real save and discard continuation buttons with cancel preserving the draft', async () => {
   await render(); await wrapper.get('#size').setValue('XL')
-  const leaving = h.leave(); await flushPromises()
+  const leaving = h.leave({ path:'/orders/12345678-1/history' }); await flushPromises()
   document.querySelector('button[aria-label="Не сохранять и продолжить"]').click(); await flushPromises()
   expect(await leaving).toBe(true); expect(vm().dirty).toBe(false)
   await wrapper.get('#size').setValue('L')
-  const saveLeaving = h.leave(); await flushPromises()
+  const saveLeaving = h.leave({ path:'/orders/12345678-1/history' }); await flushPromises()
   document.querySelector('button[aria-label="Сохранить и продолжить"]').click(); await flushPromises()
   expect(await saveLeaving).toBe(true)
+})
+
+
+describe('order confirmation action selection', () => {
+  it.each(['refresh', 'cancel', 'navigation', 'other history'])('offers only discard for dirty %s', async action => {
+    await render(); await wrapper.get('#size').setValue('XL')
+    h.push.mockImplementation(async path => h.leave({ path }))
+    let result
+    const start = () => {
+      if (action === 'refresh') return vm().refresh()
+      if (action === 'cancel') return vm().back()
+      return h.leave({ path:action === 'other history' ? '/orders/12345678-2/history' : '/users' })
+    }
+    result = start(); await flushPromises()
+    const dialog = wrapper.findComponent(ConfirmDialog)
+    expect(dialog.props()).toMatchObject({ open:true, secondaryAction:'', action:'Не сохранять и продолжить' })
+    expect(document.querySelector('button[aria-label="Сохранить и продолжить"]')).toBeNull()
+    await vm().saveAndContinue()
+    expect(h.session.orderRequest).toHaveBeenCalledTimes(3)
+    dialog.vm.$emit('cancel'); await result; await flushPromises()
+    expect(vm().form.size).toBe('XL')
+    result = start(); await flushPromises()
+    dialog.vm.$emit('confirm'); await result; await flushPromises()
+    expect(vm().dirty).toBe(false)
+    expect(h.session.orderRequest.mock.calls.every(([, options]) => !options?.method)).toBe(true)
+  })
+  it('uses three choices for the history button and cancels without saving', async () => {
+    await render(); await wrapper.get('#size').setValue('XL')
+    h.push.mockImplementation(async path => h.leave({ path }))
+    const opening = vm().openHistory(); await flushPromises()
+    const dialog = wrapper.findComponent(ConfirmDialog)
+    expect(dialog.props('secondaryAction')).toBe('Не сохранять и продолжить')
+    expect(document.querySelectorAll('[role=alertdialog] button')).toHaveLength(3)
+    dialog.vm.$emit('cancel'); await opening
+    expect(vm().form.size).toBe('XL')
+    expect(h.session.orderRequest).toHaveBeenCalledTimes(3)
+  })
+  it('saves directly and leaves without a second confirmation', async () => {
+    await render(); await wrapper.get('#size').setValue('XL')
+    h.push.mockImplementation(async path => h.leave({ path }))
+    await vm().save(); await flushPromises()
+    expect(vm().confirmation).toBe(false)
+    expect(h.push).toHaveBeenCalledWith('/orders')
+    expect(h.session.orderRequest).toHaveBeenCalledTimes(4)
+  })
+  it('cancels a pending history continuation on unmount', async () => {
+    await render(); await wrapper.get('#size').setValue('XL')
+    const leaving = h.leave({ path:'/orders/12345678-1/history' })
+    wrapper.unmount(); wrapper = null
+    expect(await leaving).toBe(false)
+  })
 })

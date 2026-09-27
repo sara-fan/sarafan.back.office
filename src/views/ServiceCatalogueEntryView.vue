@@ -593,7 +593,7 @@ onUnmounted(clear)
       :open="confirmation"
       title="Отменить изменения?"
       message="Несохранённые изменения будут потеряны."
-      action="Продолжить без сохранения"
+      action="Не сохранять и продолжить"
       action-icon="$continue"
       @cancel="finish(false)"
       @confirm="finish(true)"

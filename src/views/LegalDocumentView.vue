@@ -11,6 +11,7 @@ import EditorHeaderActions from '../components/EditorHeaderActions.vue'
 import FormField from '../components/FormField.vue'
 import StaffFileInput from '../components/StaffFileInput.vue'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
+import { useDiscardChanges } from '../useDiscardChanges.js'
 import LegalDocumentReader from '../components/LegalDocumentReader.vue'
 import PageAlertRegion from '../components/PageAlertRegion.vue'
 import { LEGAL_DOCUMENT_KIND, documentNodes, downloadBytes, moscowDate, moscowDateInput } from '../consentFormatting.js'
@@ -62,7 +63,6 @@ const busy = ref(false)
 const problem = ref(null)
 const pageProblem = computed(() => formPageProblem(problem.value, form.value ? ['kind', 'title', 'displayVersion', 'effectiveDate', 'file'] : [], legalFocusOptions))
 const baseline = ref(null)
-const refreshConfirmation = ref(false)
 let inputVersion = 0
 let previewTimer = null
 let disposed = false
@@ -122,6 +122,8 @@ function captureBaseline() {
 const dirty = computed(() => creating && loaded.value && baseline.value !== null
   && JSON.stringify(formState()) !== JSON.stringify(baseline.value))
 
+const { confirmation, confirmDiscard, finish } = useDiscardChanges(dirty)
+
 function clearCreationState() {
   form.value = null
   file.value = null
@@ -157,7 +159,7 @@ watch(() => form.value && [
   form.value.effectiveDate
 ], schedulePreview, { flush:'sync' })
 watch(file, schedulePreview, { deep:true, flush:'sync' })
-watch(() => session.user.value?.id, () => { clearCreationState(); invalidatePreview() }, { flush:'sync' })
+watch(() => session.user.value?.id, () => { finish(false); clearCreationState(); invalidatePreview() }, { flush:'sync' })
 onUnmounted(() => { disposed = true; invalidatePreview() })
 
 async function perform(action) {
@@ -253,6 +255,7 @@ async function saveAction() {
   await perform(async () => {
     const payload = { ...previewPayload.value }
     await session.consentRequest('/legal-documents', json('POST', payload))
+    captureBaseline()
     await router.replace('/legal-documents')
   })
 }
@@ -270,26 +273,22 @@ function printDocument() {
   reader.value?.printDocument()
 }
 
-function cancel() {
-  router.push('/legal-documents')
-}
-
-function requestRefresh() {
+async function cancel() {
   if (busy.value) return
-  if (dirty.value) refreshConfirmation.value = true
-  else load()
+  try { await router.push('/legal-documents') }
+  catch (value) { problem.value = normalizeProblem(value) }
 }
 
-async function confirmRefresh() {
-  refreshConfirmation.value = false
-  await load()
+async function requestRefresh() {
+  if (busy.value) return
+  if (await confirmDiscard()) await load()
 }
 
 onMounted(load)
 
 function save(...args) { return focusAfter(() => saveAction(...args), () => validationFields(problem.value, legalFocusOptions)) }
 
-const focusAfter = useValidationFocus(focusRoot, { context:() => [session.user.value?.id, route.fullPath], ready:() => !busy.value })
+const focusAfter = useValidationFocus(focusRoot, { context:() => [session.user.value?.id, route.fullPath], active:() => !confirmation.value, ready:() => !busy.value })
 </script>
 
 <template>
@@ -458,13 +457,13 @@ const focusAfter = useValidationFocus(focusRoot, { context:() => [session.user.v
       </div>
     </section>
     <ConfirmDialog
-      :open="refreshConfirmation"
-      title="Обновить данные?"
+      :open="confirmation"
+      title="Отменить изменения?"
       message="Несохранённые изменения будут потеряны."
-      action="Сбросить и обновить"
-      action-icon="$refresh"
-      @cancel="refreshConfirmation = false"
-      @confirm="confirmRefresh"
+      action="Не сохранять и продолжить"
+      action-icon="$continue"
+      @cancel="finish(false)"
+      @confirm="finish(true)"
     />
   </section>
 </template>

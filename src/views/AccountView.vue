@@ -4,7 +4,8 @@
 // This file is a part of the Sarafan application
 import EditorHeaderActions from '../components/EditorHeaderActions.vue'
 import { useValidationFocus, validationFields } from '../validationFocus.js'
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { useDiscardChanges } from '../useDiscardChanges.js'
 import { useRoute, useRouter } from 'vue-router'
 import FormField from '../components/FormField.vue'
 import PageAlertRegion from '../components/PageAlertRegion.vue'
@@ -30,9 +31,7 @@ const busy = ref(false)
 const loaded = ref(false)
 const problem = ref(null)
 const message = ref('')
-const pending = ref(null)
 const baseline = ref(null)
-const refreshConfirmation = ref(false)
 const lastAdministrator = ref(false)
 const roleErrors = computed(() => problemFieldErrors(problem.value, 'roles'))
 const presentedErrorFields = ['firstName', 'lastName', 'patronymic', 'email', 'password', 'confirmation', ...(!profile ? ['roles'] : [])]
@@ -66,6 +65,13 @@ function captureBaseline() {
 }
 const dirty = computed(() => loaded.value && baseline.value !== null
   && JSON.stringify(formState()) !== JSON.stringify(baseline.value))
+const { confirmation, confirmDiscard, finish } = useDiscardChanges(dirty)
+watch(() => JSON.stringify([session.user.value?.id, session.user.value?.roles]), () => {
+  finish(false)
+  resetForm(null)
+  baseline.value = null
+  loaded.value = false
+}, { flush:'sync' })
 async function load() {
   loaded.value = false
   busy.value = true
@@ -92,12 +98,12 @@ async function load() {
   finally { busy.value = false }
 }
 async function saveAction(payload) {
-  pending.value = null
   busy.value = true
   try {
     if (profile) await session.saveProfile(payload)
     else await session.saveUser(id, payload, original.value)
     form.password = ''; form.confirmation = ''
+    captureBaseline()
     if (!session.user.value) await router.replace('/login')
     else if (!profile) await router.push('/users')
     else {
@@ -119,36 +125,33 @@ async function submitAction() {
   message.value = ''
   try {
     const payload = accountPayload(form, { profile, creating })
-    const securityChanged = !creating && (Boolean(payload.password) || (!profile && (
-      payload.isActive !== original.value.isActive || payload.email.toLowerCase() !== original.value.email.toLowerCase()
-      || [...payload.roles].sort().join() !== [...original.value.roles].sort().join())))
-    if (securityChanged) pending.value = payload
-    else await save(payload)
+    await save(payload)
   } catch (value) { problem.value = normalizeProblem(value) }
 }
-function requestRefresh() {
+async function requestRefresh() {
   if (busy.value) return
-  if (dirty.value) refreshConfirmation.value = true
-  else load()
+  if (await confirmDiscard()) await load()
 }
-async function confirmRefresh() {
-  refreshConfirmation.value = false
-  await load()
-}
-function cancel() {
+async function cancel() {
+  if (busy.value) return
   if (returnPath.value === route.path) {
+    if (!await confirmDiscard()) return
     problem.value = null
     message.value = ''
     resetForm(original.value)
     captureBaseline()
-  } else router.push(returnPath.value)
+  } else {
+    try { await router.push(returnPath.value) }
+    catch (value) { problem.value = normalizeProblem(value) }
+  }
 }
+
 onMounted(load)
 function submit(...args) { return focusAfter(() => submitAction(...args), () => validationFields(problem.value, { types:accountProblemFields })) }
 
 function save(...args) { return focusAfter(() => saveAction(...args), () => validationFields(problem.value, { types:accountProblemFields })) }
 
-const focusAfter = useValidationFocus(focusRoot, { context:() => [session.user.value?.id, route.fullPath], active:() => !pending.value, ready:() => !busy.value })
+const focusAfter = useValidationFocus(focusRoot, { context:() => [session.user.value?.id, route.fullPath], active:() => !confirmation.value, ready:() => !busy.value })
 </script>
 <template>
   <section class="settings form-medium">
@@ -311,21 +314,13 @@ const focusAfter = useValidationFocus(focusRoot, { context:() => [session.user.v
       </fieldset>
     </form>
     <ConfirmDialog
-      :open="refreshConfirmation"
-      title="Обновить данные?"
+      :open="confirmation"
+      title="Отменить изменения?"
       message="Несохранённые изменения будут потеряны."
-      action="Сбросить и обновить"
-      action-icon="$refresh"
-      @cancel="refreshConfirmation = false"
-      @confirm="confirmRefresh"
-    />
-    <ConfirmDialog
-      :open="Boolean(pending)"
-      title="Изменить данные доступа?"
-      message="Все сеансы пользователя будут завершены. Для продолжения работы потребуется войти повторно."
-      action="Сохранить изменения"
-      @cancel="pending = null"
-      @confirm="save(pending)"
+      action="Не сохранять и продолжить"
+      action-icon="$continue"
+      @cancel="finish(false)"
+      @confirm="finish(true)"
     />
   </section>
 </template>

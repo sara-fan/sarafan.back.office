@@ -49,6 +49,7 @@ const baseline = ref('')
 const busy = ref(false)
 const problem = ref(null)
 const confirmation = ref(false)
+const historyContinuation = ref(false)
 const locked = ref(false)
 let version = 0
 let confirmAction = null
@@ -161,8 +162,9 @@ async function saveAction() {
   } finally { if (current === version) busy.value = false }
 }
 
-function ask(action) {
+function ask(action, history = false) {
   cancelConfirmation()
+  historyContinuation.value = history
   if (!dirty.value) return action()
   confirmation.value = true
   confirmAction = action
@@ -188,7 +190,7 @@ function acceptConfirmation() {
   action?.(true)
 }
 async function saveAndContinue() {
-  if (!confirmAction || continuing.value || busy.value) return
+  if (!historyContinuation.value || !confirmAction || continuing.value || busy.value) return
   const action = confirmAction
   confirmation.value = false
   continuing.value = true
@@ -220,10 +222,10 @@ async function back() {
   try { await router.push('/orders') }
   catch (value) { problem.value = normalizeProblem(value) }
 }
-onBeforeRouteLeave(() => {
+onBeforeRouteLeave(to => {
   if (busy.value || continuing.value) return false
   if (!dirty.value) return true
-  return new Promise(resolve => ask(resolve))
+  return new Promise(resolve => ask(resolve, to?.path === `/orders/${number.value}/history`))
 })
 onBeforeRouteUpdate((to, from) => {
   if (busy.value || continuing.value) return false
@@ -387,7 +389,7 @@ const focusAfter = useValidationFocus(focusRoot, { context:() => [session.user.v
               />
             </div>
             <div class="staff-form-row total-line">
-              <span class="staff-form-label">Стоимость, {{ dollarSymbol }}</span>
+              <span class="staff-form-label">Общая цена, {{ dollarSymbol }}</span>
               <span class="staff-form-value staff-form-value--readonly">{{ total }}</span>
             </div>
             <div class="color-cell">
@@ -486,15 +488,15 @@ const focusAfter = useValidationFocus(focusRoot, { context:() => [session.user.v
     </template>
     <ConfirmDialog
       :open="confirmation"
-      title="Сохранить изменения?"
-      message="Сохраните изменения перед продолжением?"
-      action="Сохранить и продолжить"
-      action-variant="blue"
-      secondary-action="Не сохранять и продолжить"
-      action-icon="$saveChanges"
+      :title="historyContinuation ? 'Сохранить изменения?' : 'Отменить изменения?'"
+      :message="historyContinuation ? 'Сохраните изменения перед продолжением?' : 'Несохранённые изменения будут потеряны.'"
+      :action="historyContinuation ? 'Сохранить и продолжить' : 'Не сохранять и продолжить'"
+      :action-variant="historyContinuation ? 'blue' : 'orange'"
+      :secondary-action="historyContinuation ? 'Не сохранять и продолжить' : ''"
+      :action-icon="historyContinuation ? '$saveChanges' : '$continue'"
       :busy="busy || continuing"
       @cancel="cancelConfirmation"
-      @confirm="saveAndContinue"
+      @confirm="historyContinuation ? saveAndContinue() : acceptConfirmation()"
       @secondary="acceptConfirmation"
     />
     <ConfirmDialog
