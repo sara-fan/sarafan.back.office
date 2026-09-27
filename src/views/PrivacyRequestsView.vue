@@ -3,6 +3,7 @@
 // All rights reserved.
 // This file is a part of the Sarafan application
 
+import { matchesListSearch, useListSearchDebounce } from '../listSearch.js'
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { validDate } from '../orderFormatting.js'
 import ListText from '../components/ListText.vue'
@@ -22,7 +23,7 @@ const defaults = {
   sortBy:[{ key:'processed', order:'asc' }],
   filters:{ search:'', processed:'', requestedFrom:'', requestedTo:'' }
 }
-const normalizeFilters = value => typeof value?.search === 'string' && /^\d{0,10}$/u.test(value.search)
+const normalizeFilters = value => typeof value?.search === 'string' && value.search.length <= 200
   && ['', 'false', 'true'].includes(value?.processed)
   && [value.requestedFrom ?? '', value.requestedTo ?? ''].every(validDate)
   && !(value.requestedFrom && value.requestedTo && value.requestedFrom > value.requestedTo)
@@ -52,7 +53,7 @@ const problem = ref(null)
 const preferenceProblem = ref(restored.unavailable ? createInternalProblem('viewPreferencesUnavailable') : null)
 const visibleProblem = computed(() => problem.value ?? preferenceProblem.value)
 let loadVersion = 0
-let searchTimer = null
+const searchDebounce = useListSearchDebounce(() => { loadVersion += 1 }, () => { persistState(); load() })
 
 const statusItems = [
   { title:'Все статусы', value:'' },
@@ -67,6 +68,8 @@ const headers = [
   { title:'Дата и время запроса', key:'requestedAt' }
 ]
 const rowKey = request => `${request.customerId}:${request.requestedAt}`
+const requestStatus = request => request.processed ? 'Обработан' : 'Ожидает ручной обработки'
+const searchValues = request => [`№ ${request.customerId}`, requestStatus(request), moscowTime(request.requestedAt)]
 const requestIsValid = request => Number.isInteger(request?.customerId) && request.customerId > 0
   && typeof request.requestedAt === 'string' && typeof request.processed === 'boolean'
 const activeSort = () => {
@@ -91,6 +94,7 @@ function persistState() {
 }
 
 async function load(options) {
+  searchDebounce.cancel()
   const retainRows = options?.retainRows === true
   const version = ++loadVersion
   busy.value = true
@@ -102,7 +106,7 @@ async function load(options) {
     sortBy:sorting.key,
     sortOrder:sorting.order
   })
-  if (search.value) query.set('search', search.value)
+  if (search.value.trim()) query.set('search', search.value.trim())
   if (processed.value) query.set('processed', processed.value)
   if (requestedFrom.value) query.set('requestedFrom', requestedFrom.value)
   if (requestedTo.value) query.set('requestedTo', requestedTo.value)
@@ -113,7 +117,7 @@ async function load(options) {
       || result.pagination.currentPage !== page.value
       || result.pagination.pageSize !== itemsPerPage.value
       || result.sorting.sortBy !== sorting.key || result.sorting.sortOrder !== sorting.order
-      || (result.search ?? '') !== search.value
+      || (result.search ?? '') !== search.value.trim()
       || (result.requestedFrom ?? '') !== requestedFrom.value
       || (result.requestedTo ?? '') !== requestedTo.value) {
       throw createInternalProblem('protocolError')
@@ -139,15 +143,9 @@ async function load(options) {
 }
 
 function onSearchInput(value) {
-  loadVersion++
-  search.value = String(value ?? '').replace(/\D/gu, '').slice(0, 10)
+  search.value = String(value ?? '').slice(0, 200)
   page.value = 1
-  if (searchTimer) globalThis.clearTimeout(searchTimer)
-  searchTimer = globalThis.setTimeout(() => {
-    searchTimer = null
-    persistState()
-    load()
-  }, 300)
+  searchDebounce.schedule()
 }
 
 function onProcessedChange(value) {
@@ -162,8 +160,7 @@ function onDateChange(field, value) {
   if (!normalizeFilters({ search:search.value, processed:processed.value, ...dates })) return
   requestedFrom.value = dates.requestedFrom
   requestedTo.value = dates.requestedTo
-  if (searchTimer) globalThis.clearTimeout(searchTimer)
-  searchTimer = null
+  searchDebounce.cancel()
   page.value = 1
   persistState()
   load()
@@ -203,10 +200,11 @@ async function process(request) {
       headers:{ 'Content-Type':'application/json' },
       body:JSON.stringify({ customerId:request.customerId, requestedAt:request.requestedAt })
     })
-    rows.value = processed.value === 'false'
+    const excluded = processed.value === 'false' || !matchesListSearch(search.value, searchValues(result))
+    rows.value = excluded
       ? rows.value.filter(item => rowKey(item) !== rowKey(request))
       : rows.value.map(item => rowKey(item) === rowKey(request) ? result : item)
-    if (processed.value === 'false') total.value = Math.max(0, total.value - 1)
+    if (excluded) total.value = Math.max(0, total.value - 1)
     await load({ retainRows:true })
   } catch (value) {
     problem.value = normalizeProblem(value)
@@ -218,7 +216,7 @@ async function process(request) {
 onMounted(load)
 onUnmounted(() => {
   loadVersion += 1
-  if (searchTimer) globalThis.clearTimeout(searchTimer)
+  searchDebounce.cancel()
 })
 </script>
 
@@ -248,7 +246,6 @@ onUnmounted(() => {
     <ListFilterBar
       :search="search"
       search-id="privacy-request-search"
-      inputmode="numeric"
       :aria-busy="busy"
       :disabled="Boolean(processingKey)"
       @update:search="onSearchInput"
@@ -342,7 +339,7 @@ onUnmounted(() => {
           <ListText :text="moscowTime(item.requestedAt)" />
         </template>
         <template #[`item.processed`]="{ item }">
-          <span :class="['status-pill', { inactive:item.processed }]"><ListText :text="item.processed ? 'Обработан' : 'Ожидает ручной обработки'" /></span>
+          <span :class="['status-pill', { inactive:item.processed }]"><ListText :text="requestStatus(item)" /></span>
         </template>
       </v-data-table-server>
     </v-card>

@@ -3,6 +3,7 @@
 // All rights reserved.
 // This file is a part of the Sarafan application
 
+import { useListSearchDebounce } from '../listSearch.js'
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import ActionButton from '../components/ActionButton.vue'
@@ -46,7 +47,7 @@ const problem = ref(null)
 const preferenceProblem = ref(restored.unavailable ? createInternalProblem('viewPreferencesUnavailable') : null)
 const visibleProblem = computed(() => problem.value ?? preferenceProblem.value)
 let loadVersion = 0
-let searchTimer = null
+const searchDebounce = useListSearchDebounce(() => { loadVersion += 1 }, () => { persistState(); load() })
 
 const serviceItems = computed(() => [{ title:'Все услуги', value:null }, ...(metadata.value?.services ?? []).map(item => ({ title:item.name, value:item.value }))])
 const actionItems = computed(() => [{ title:'Все действия', value:null }, ...(metadata.value?.auditActions ?? []).map(item => ({ title:item.name, value:item.value }))])
@@ -78,6 +79,7 @@ function persistState() {
 }
 
 async function load() {
+  searchDebounce.cancel()
   const version = ++loadVersion
   busy.value = true
   problem.value = null
@@ -117,11 +119,9 @@ async function load() {
 }
 
 function onSearchInput(value) {
-  loadVersion += 1
   search.value = String(value ?? '').slice(0, 200)
   page.value = 1
-  if (searchTimer) globalThis.clearTimeout(searchTimer)
-  searchTimer = globalThis.setTimeout(() => { searchTimer = null; persistState(); load() }, 300)
+  searchDebounce.schedule()
 }
 function onServiceChange(value) { service.value = ops?.services.some(item => item.value === value) ? value : null; page.value = 1; persistState(); load() }
 function onActionChange(value) { action.value = ops?.auditActions.some(item => item.value === value) ? value : null; page.value = 1; persistState(); load() }
@@ -134,7 +134,7 @@ function onSortChange(value) {
   }
 }
 onMounted(load)
-onUnmounted(() => { loadVersion += 1; if (searchTimer) globalThis.clearTimeout(searchTimer) })
+onUnmounted(() => { loadVersion += 1; searchDebounce.cancel() })
 </script>
 
 <template>

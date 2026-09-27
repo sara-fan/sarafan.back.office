@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Maxim [maxirmx] Samsonov (www.sw.consulting)
 // All rights reserved.
 // This file is a part of the Sarafan application
+import { matchesListSearch } from '../listSearch.js'
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import ListText from '../components/ListText.vue'
@@ -48,8 +49,8 @@ const filtered = computed(() => rows.value.map(document => ({
   statusTitle:statusName(document.status),
   kindTitle:kindName(document.kind)
 })).filter(document => {
-  const text = `${document.title} ${document.kindTitle} ${document.displayVersion}`.toLocaleLowerCase('ru')
-  return text.includes(search.value.trim().toLocaleLowerCase('ru')) &&
+  const values = [document.title, document.kindTitle, document.displayVersion, document.statusTitle, moscowDate(document.effectiveAt)]
+  return matchesListSearch(search.value, values) &&
     (kind.value === null || document.kind === kind.value) &&
     (status.value === null || document.status === status.value)
 }))

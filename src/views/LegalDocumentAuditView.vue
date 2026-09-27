@@ -3,6 +3,7 @@
 // All rights reserved.
 // This file is a part of the Sarafan application
 
+import { useListSearchDebounce } from '../listSearch.js'
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import ListText from '../components/ListText.vue'
@@ -52,7 +53,7 @@ const problem = ref(null)
 const preferenceProblem = ref(restored.unavailable ? createInternalProblem('viewPreferencesUnavailable') : null)
 const visibleProblem = computed(() => problem.value ?? preferenceProblem.value)
 let loadVersion = 0
-let searchTimer = null
+const searchDebounce = useListSearchDebounce(() => { loadVersion += 1 }, () => { persistState(); load() })
 
 const kindItems = computed(() => [{ title:'Все типы', value:null }, ...(ops.value?.kinds || []).map(item => ({ value:item.value, title:item.name }))])
 const kindName = value => ops.value?.kinds.find(item => item.value === value)?.name
@@ -96,6 +97,7 @@ function persistState() {
 }
 
 async function load() {
+  searchDebounce.cancel()
   const version = ++loadVersion
   busy.value = true
   problem.value = null
@@ -143,15 +145,9 @@ async function load() {
 }
 
 function onSearchInput(value) {
-  loadVersion++
   search.value = String(value ?? '').slice(0, 200)
   page.value = 1
-  if (searchTimer) globalThis.clearTimeout(searchTimer)
-  searchTimer = globalThis.setTimeout(() => {
-    searchTimer = null
-    persistState()
-    load()
-  }, 300)
+  searchDebounce.schedule()
 }
 
 function onKindChange(value) {
@@ -195,7 +191,7 @@ function onSortChange(value) {
 onMounted(load)
 onUnmounted(() => {
   loadVersion += 1
-  if (searchTimer) globalThis.clearTimeout(searchTimer)
+  searchDebounce.cancel()
 })
 </script>
 

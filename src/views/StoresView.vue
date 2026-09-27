@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Maxim [maxirmx] Samsonov (www.sw.consulting)
 // All rights reserved.
 // This file is a part of the Sarafan application
+import { matchesListSearch } from '../listSearch.js'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import ListText from '../components/ListText.vue'
@@ -30,10 +31,8 @@ const deleteLocked = ref(false)
 let generation = 0
 const statusName = value => ops.value.statuses.find(status => status.value === value).name
 const filtered = computed(() => {
-  const query = search.value.trim().toLocaleLowerCase('ru')
   return items.value.filter(item => (status.value === '' || item.status === status.value)
-    && [item.name, statusName(item.status), String(item.displayOrder)]
-      .some(value => value.toLocaleLowerCase('ru').includes(query)))
+    && matchesListSearch(search.value, [item.name, statusName(item.status), item.displayOrder]))
 })
 const statusItems = computed(() => [{ title:'Все статусы', value:'' }, ...(ops.value?.statuses ?? []).map(item => ({ title:item.name, value:item.value }))])
 const headers = [

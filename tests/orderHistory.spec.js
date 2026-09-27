@@ -17,7 +17,7 @@ vi.mock('vue-router', () => ({ useRoute:() => h.route, useRouter:() => ({ push:h
 const ops = { kinds:[0, 100, 200, 300, 400].map((value, i) => ({ value, name:['Создание', 'Изменение товара', 'Распознавание', 'Расчёт', 'Подтверждение'][i], routeAlias:'kind-' + value })),
   areas:[1, 2, 4, 8].map((value, i) => ({ value, name:['Создание', 'Товар', 'Стоимость', 'Статус'][i], routeAlias:'area-' + value })),
   actorTypes:[0, 100, 200].map((value, i) => ({ value, name:['Покупатель', 'Сотрудник', 'Система'][i], routeAlias:'actor-' + value })) }
-const row = { eventKey:'0-1', at:'2026-09-24T10:00:00Z', kind:100, areas:6, actorType:100, actorName:'Иванов Иван', actorNameHistorical:true }
+const row = { eventKey:'0-1', at:'2026-09-24T10:00:00Z', kind:100, areas:6, actorType:100, actorName:'Иванов Иван' }
 const detail = { event:row, version:1, missingCreationDetails:false, productBefore:null, productAfter:product,
   statusBefore:null, statusAfter:0, sourceUrl:'https://shop.example/item', pricingBefore:null, pricingAfter:pricingDetails.calculation, validUntilBefore:null, validUntilAfter:null }
 function resultFor(path, items = [row], total = 1) {
@@ -47,7 +47,7 @@ describe('history protocol', () => {
   })
   it.each([null, {}, { ...ops, kinds:[] }, { ...ops, areas:[ops.areas[0], ops.areas[0], ops.areas[2], ops.areas[3]] },
     { ...ops, actorTypes:ops.actorTypes.map(item => ({ ...item, name:'' })) }, { ...ops, kinds:ops.kinds.map(item => ({ ...item, routeAlias:'' })) }])('rejects invalid metadata %#', value => expect(() => validateHistoryOps(value)).toThrow())
-  it.each([{ eventKey:'0-0' }, { at:'bad' }, { kind:1 }, { areas:0 }, { areas:16 }, { actorType:1 }, { actorName:'' }, { actorNameHistorical:null }])('rejects invalid list item %#', change => expect(historyItemIsValid({ ...row, ...change }, ops)).toBeFalsy())
+  it.each([{ eventKey:'0-0' }, { at:'bad' }, { kind:1 }, { areas:0 }, { areas:16 }, { actorType:1 }, { actorName:'' }])('rejects invalid list item %#', change => expect(historyItemIsValid({ ...row, ...change }, ops)).toBeFalsy())
   it.each([null, {}, { ...historyDefaults.filters, search:'x'.repeat(201) }, { ...historyDefaults.filters, area:3 }, { ...historyDefaults.filters, actorType:1 }, { ...historyDefaults.filters, from:'bad' }])('rejects invalid preferences %#', value => expect(normalizeHistoryFilters(value)).toBeNull())
   it.each([{ version:2 }, { event:{ ...row, eventKey:'0-2' } }, { missingCreationDetails:null }, { productAfter:{} }, { statusAfter:123 }, { sourceUrl:3 }, { validUntilAfter:'bad' }, { pricingAfter:{} }])('rejects invalid details %#', change => expect(() => validateHistoryDetail({ ...detail, ...change }, row, ops, orderOps, pricingOps)).toThrow())
 })
@@ -57,6 +57,9 @@ describe('Vuetify order history', () => {
     await render()
     expect(wrapper.findComponent({ name:'VDataTableServer' }).exists()).toBe(true)
     expect(wrapper.text()).toContain('Иванов Иван')
+    expect(wrapper.text()).not.toContain('Поиск по имени исполнителя')
+    expect(wrapper.find('.field-hint').exists()).toBe(false)
+    expect(wrapper.getComponent({ name:'ListFilterBar' }).getComponent({ name:'VTextField' }).props('label')).toBe('Поиск')
     expect(h.session.orderRequest).toHaveBeenCalledTimes(3)
     await wrapper.get('button[aria-label="Подробнее о событии"]').trigger('click'); await flushPromises()
     expect(wrapper.text()).toContain('Изменение стоимости')
@@ -131,10 +134,9 @@ describe('Vuetify order history', () => {
 })
 
 describe('historical detail rendering', () => {
-  it('shows before/after and legacy attribution without editing controls', () => {
-    wrapper = mount(OrderHistoryDetails, { props:{ detail:{ ...detail, event:{ ...row, actorNameHistorical:false }, missingCreationDetails:true,
+  it('shows before/after and missing creation details without editing controls', () => {
+    wrapper = mount(OrderHistoryDetails, { props:{ detail:{ ...detail, missingCreationDetails:true,
       productBefore:{ ...product, quantity:2, size:'L' }, statusBefore:300, pricingBefore:pricingDetails.calculation, validUntilBefore:'2026-09-25T10:00:00Z' }, orderOps, pricingOps }, global:{ plugins:[createSarafanVuetify()] } })
-    expect(wrapper.text()).toContain('историческое имя не сохранено')
     expect(wrapper.text()).toContain('Известна только дата создания')
     expect(wrapper.text()).toContain('Оплачен'); expect(wrapper.text()).toContain('Стоимость без изменений')
     expect(wrapper.find('input').exists()).toBe(false)

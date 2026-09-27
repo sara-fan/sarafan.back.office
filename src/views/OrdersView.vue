@@ -3,6 +3,7 @@
 // All rights reserved.
 // This file is a part of the Sarafan application
 
+import { useListSearchDebounce } from '../listSearch.js'
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import ListText from '../components/ListText.vue'
@@ -60,7 +61,7 @@ const visibleProblem = computed(() => problem.value ?? preferenceProblem.value)
 const statusItems = computed(() => ops.value ? orderStatusItems(ops.value) : [{ title:'Все статусы', value:'' }])
 const pageSizeItems = PAGE_SIZE_OPTIONS.map(value => ({ value, title:String(value) }))
 let loadVersion = 0
-let searchTimer = null
+const searchDebounce = useListSearchDebounce(() => { loadVersion += 1 }, () => { persistState(); load() })
 
 const headers = [
   { title:'', key:'actions', sortable:false, width:'56px' },
@@ -100,12 +101,7 @@ function persistState() {
   if (!saved && !preferenceProblem.value) preferenceProblem.value = createInternalProblem('viewPreferencesUnavailable')
 }
 
-function clearSearchTimer() {
-  if (searchTimer) {
-    globalThis.clearTimeout(searchTimer)
-    searchTimer = null
-  }
-}
+function clearSearchTimer() { searchDebounce.cancel() }
 
 function statusQuery(query) {
   if (!selectedStatus.value) return
@@ -125,6 +121,7 @@ function echoesFilters(result) {
 }
 
 async function load(options) {
+  searchDebounce.cancel()
   const retainRows = options?.retainRows === true
   const version = ++loadVersion
   busy.value = true
@@ -185,15 +182,10 @@ function reloadFromFirstPage() {
 }
 
 function onSearchInput(value) {
-  loadVersion++
   search.value = String(value ?? '').slice(0, ORDER_SEARCH_LIMIT)
   page.value = 1
   persistState()
-  if (searchTimer) globalThis.clearTimeout(searchTimer)
-  searchTimer = globalThis.setTimeout(() => {
-    searchTimer = null
-    load()
-  }, 300)
+  searchDebounce.schedule()
 }
 
 function refreshList() {
@@ -263,7 +255,7 @@ function onSortChange(value) {
 onMounted(load)
 onUnmounted(() => {
   loadVersion += 1
-  if (searchTimer) globalThis.clearTimeout(searchTimer)
+  searchDebounce.cancel()
 })
 </script>
 

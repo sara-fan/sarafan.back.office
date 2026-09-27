@@ -3,6 +3,7 @@
 // All rights reserved.
 // This file is a part of the Sarafan application
 
+import { matchesListSearch } from '../listSearch.js'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import ActionButton from '../components/ActionButton.vue'
@@ -42,11 +43,9 @@ const serviceItems = computed(() => [{ title:'Все услуги', value:'' }, 
 const methodItems = computed(() => [{ title:'Все способы', value:'' }, ...(ops.value?.priceMethods ?? []).map(item => ({ title:item.name, value:item.value }))])
 const nameOrder = new Intl.Collator('ru-RU', { sensitivity:'base' })
 const filtered = computed(() => {
-  const query = search.value.trim().toLocaleLowerCase('ru')
   return items.value.filter(item => (service.value === '' || item.service === service.value)
     && (priceMethod.value === '' || item.priceMethod === priceMethod.value)
-    && [serviceName(item.service), methodName(item.priceMethod), formatServiceCatalogueParameters(item, ops.value), formatServiceCatalogueAvailability(item)]
-      .some(value => value.toLocaleLowerCase('ru').includes(query)))
+    && matchesListSearch(search.value, [serviceName(item.service), methodName(item.priceMethod), formatServiceCatalogueParameters(item, ops.value), formatServiceCatalogueAvailability(item)]))
 })
 const headers = [
   { title:'', key:'actions', sortable:false, width:'100px' },

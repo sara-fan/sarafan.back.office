@@ -27,9 +27,6 @@ const priceRows = computed(() => priceHistoryRows(props.detail, props.pricingOps
     <p v-if="detail.missingCreationDetails">
       Исходные данные заказа не были записаны. Известна только дата создания.
     </p>
-    <p v-if="!detail.event.actorNameHistorical">
-      Имя сотрудника показано по текущим данным; историческое имя не сохранено.
-    </p>
     <v-table
       v-if="changes.length"
       density="compact"
