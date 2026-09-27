@@ -27,6 +27,12 @@ const priceRows = computed(() => priceHistoryRows(props.detail, props.pricingOps
     <p v-if="detail.missingCreationDetails">
       Исходные данные заказа не были записаны. Известна только дата создания.
     </p>
+    <p
+      v-if="detail.cancellationReason"
+      class="history-cancellation-reason"
+    >
+      <strong>Причина отмены:</strong> {{ detail.cancellationReason }}
+    </p>
     <v-table
       v-if="changes.length"
       density="compact"

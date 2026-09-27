@@ -14,7 +14,7 @@ import { pricingOps, pricingDetails } from './fixtures/orderPricing.js'
 const h = vi.hoisted(() => ({ session:{}, push:vi.fn(), route:null }))
 vi.mock('../src/stores/session.js', () => ({ useSession:() => h.session }))
 vi.mock('vue-router', () => ({ useRoute:() => h.route, useRouter:() => ({ push:h.push }) }))
-const ops = { kinds:[0, 100, 200, 300, 400].map((value, i) => ({ value, name:['Создание', 'Изменение товара', 'Распознавание', 'Расчёт', 'Подтверждение'][i], routeAlias:'kind-' + value })),
+const ops = { kinds:[0, 100, 200, 300, 400, 500].map((value, i) => ({ value, name:['Создание', 'Изменение товара', 'Распознавание', 'Расчёт', 'Подтверждение', 'Отмена покупателем'][i], routeAlias:'kind-' + value })),
   areas:[1, 2, 4, 8].map((value, i) => ({ value, name:['Создание', 'Товар', 'Стоимость', 'Статус'][i], routeAlias:'area-' + value })),
   actorTypes:[0, 100, 200].map((value, i) => ({ value, name:['Покупатель', 'Сотрудник', 'Система'][i], routeAlias:'actor-' + value })) }
 const row = { eventKey:'0-1', at:'2026-09-24T10:00:00Z', kind:100, areas:6, actorType:100, actorName:'Иванов Иван' }
@@ -41,6 +41,8 @@ afterEach(() => { wrapper?.unmount(); wrapper = null; vi.useRealTimers(); vi.res
 describe('history protocol', () => {
   it('validates metadata, items, filters and typed details', () => {
     expect(validateHistoryOps(ops)).toBe(ops)
+    const previousOps = { ...ops, kinds:ops.kinds.slice(0, -1) }
+    expect(validateHistoryOps(previousOps)).toBe(previousOps)
     expect(historyItemIsValid(row, ops)).toBe(true)
     expect(normalizeHistoryFilters(historyDefaults.filters)).toEqual(historyDefaults.filters)
     expect(validateHistoryDetail(detail, row, ops, orderOps, pricingOps)).toBe(detail)
@@ -173,6 +175,20 @@ describe('history control events', () => {
 
 
 describe('history evidence boundaries', () => {
+  it('validates and displays the customer cancellation reason as plain text', () => {
+    const orderOpsWithCancelled = { ...orderOps, statuses:[...orderOps.statuses,
+      { value:500, name:'Отменён', routeAlias:'cancelled', upperStatusValue:500, upperStatusName:'Отменён', upperStatusRouteAlias:'cancelled' }] }
+    const cancelledRow = { ...row, kind:500, areas:8, actorType:0, actorName:'Покупатель' }
+    const cancelled = { ...detail, event:cancelledRow, version:2, productAfter:null,
+      statusBefore:0, statusAfter:500, sourceUrl:null, pricingAfter:null,
+      cancellationReason:'Передумал <script>alert(1)</script>' }
+    expect(validateHistoryDetail(cancelled, cancelledRow, ops, orderOpsWithCancelled, pricingOps).cancellationReason)
+      .toBe(cancelled.cancellationReason)
+    wrapper = mount(OrderHistoryDetails, { props:{ detail:cancelled, orderOps:orderOpsWithCancelled, pricingOps },
+      global:{ plugins:[createSarafanVuetify()] } })
+    expect(wrapper.text()).toContain(cancelled.cancellationReason)
+    expect(wrapper.find('script').exists()).toBe(false)
+  })
   it('renders a timestamp-only legacy creation without inventing field or price values', () => {
     wrapper = mount(OrderHistoryDetails, { props:{ detail:{ ...detail, missingCreationDetails:true,
       productBefore:null, productAfter:null, statusBefore:null, statusAfter:null, sourceUrl:null, pricingAfter:null }, orderOps, pricingOps }, global:{ plugins:[createSarafanVuetify()] } })
