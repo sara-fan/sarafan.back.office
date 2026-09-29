@@ -33,6 +33,7 @@ export function createSession() {
   const ready = ref(false)
   const restoring = ref(false)
   const restoreProblem = ref(null)
+  const refreshCooldownSeconds = ref(0)
   const notice = ref('')
   const loginProblem = ref(null)
   const legalDocumentOps = ref(null)
@@ -41,6 +42,10 @@ export function createSession() {
   let token = ''
   let epoch = 0
   let refreshing = null
+  let refreshCooldownUntil = 0
+  let refreshCooldownTimer = null
+  let refreshCooldownProblem = null
+  let refreshCooldownRequiresRenewal = false
   let initialization = null
   let legalDocumentOpsRequest = null
   let orderOpsRequest = null
@@ -48,6 +53,27 @@ export function createSession() {
   let serviceCatalogueOpsIdentity = ''
   let serviceCatalogueOpsRequestIdentity = ''
   const client = createApiClient({ getAccessToken: () => token, refreshSession })
+
+  function clearRefreshCooldown() {
+    if (refreshCooldownTimer) globalThis.clearInterval(refreshCooldownTimer)
+    refreshCooldownTimer = null
+    refreshCooldownUntil = 0
+    refreshCooldownProblem = null
+    refreshCooldownRequiresRenewal = false
+    refreshCooldownSeconds.value = 0
+  }
+  function setRefreshCooldown(problem, requiresRenewal) {
+    clearRefreshCooldown()
+    refreshCooldownProblem = problem
+    refreshCooldownRequiresRenewal = requiresRenewal
+    refreshCooldownUntil = Date.now() + Math.min(3600, Math.max(1, problem.retryAfterSeconds ?? 1)) * 1000
+    const update = () => {
+      refreshCooldownSeconds.value = Math.max(0, Math.ceil((refreshCooldownUntil - Date.now()) / 1000))
+      if (!refreshCooldownSeconds.value) clearRefreshCooldown()
+    }
+    update()
+    refreshCooldownTimer = globalThis.setInterval(update, 250)
+  }
 
   function clearServiceCatalogueOps() {
     serviceCatalogueOps.value = null
@@ -58,6 +84,7 @@ export function createSession() {
 
   function clearSession(message = '', problem = null) {
     epoch += 1
+    clearRefreshCooldown()
     token = ''
     viewStateMemory.clear()
     user.value = null
@@ -83,12 +110,14 @@ export function createSession() {
     if (user.value?.id !== session.user.id) viewStateMemory.clear()
     if (serviceCatalogueIdentity(user.value) !== serviceCatalogueIdentity(session.user)) clearServiceCatalogueOps()
     token = session.accessToken
+    clearRefreshCooldown()
     user.value = session.user
     notice.value = ''
     loginProblem.value = null
     return user.value
   }
   async function refreshSession(operationTrace) {
+    if (Date.now() < refreshCooldownUntil) throw refreshCooldownProblem
     if (!refreshing) {
       const generation = epoch
       const pending = client.request(`${BASE}/auth/refresh`, { method:'POST' }, { operationTrace })
@@ -96,6 +125,9 @@ export function createSession() {
           if (generation === epoch) {
             if (problem.type === CORE_PROBLEM_TYPES.invalidRefreshToken) {
               clearSession(user.value ? 'Сеанс завершён. Войдите повторно.' : '')
+            } else if (problem.type === CORE_PROBLEM_TYPES.rateLimited
+              || problem.type === CORE_PROBLEM_TYPES.anonymousApiTimeout) {
+              setRefreshCooldown(problem, Boolean(operationTrace))
             } else if (isServiceUnavailable(problem)) {
               throw forceLogoff(problem)
             }
@@ -144,12 +176,14 @@ export function createSession() {
   async function request(path, options = {}, { supplementary = false, responseType = 'json' } = {}) {
     const generation = epoch
     try {
+      if (refreshCooldownRequiresRenewal && Date.now() < refreshCooldownUntil) throw refreshCooldownProblem
       const result = await client.request(`${BASE}${path}`, options, { authorize:true, responseType })
       if (generation !== epoch) throw createInternalProblem('sessionRestoreUnavailable')
       return result
     } catch (problem) {
       if (generation === epoch) {
-        if (!supplementary && isServiceUnavailable(problem)) {
+        const retryableRefreshFailure = problem === refreshCooldownProblem
+        if (!supplementary && !retryableRefreshFailure && isServiceUnavailable(problem)) {
           throw forceLogoff(problem)
         }
         if ([CORE_PROBLEM_TYPES.invalidAccessToken, CORE_PROBLEM_TYPES.invalidRefreshToken].includes(problem.type)) {
@@ -235,7 +269,7 @@ export function createSession() {
     return serviceCatalogueOpsRequest
   }
   return {
-    user:readonly(user), ready:readonly(ready), restoring:readonly(restoring), restoreProblem:readonly(restoreProblem), notice:readonly(notice), loginProblem:readonly(loginProblem), legalDocumentOps:readonly(legalDocumentOps), orderOps:readonly(orderOps), serviceCatalogueOps:readonly(serviceCatalogueOps),
+    user:readonly(user), ready:readonly(ready), restoring:readonly(restoring), restoreProblem:readonly(restoreProblem), refreshCooldownSeconds:readonly(refreshCooldownSeconds), notice:readonly(notice), loginProblem:readonly(loginProblem), legalDocumentOps:readonly(legalDocumentOps), orderOps:readonly(orderOps), serviceCatalogueOps:readonly(serviceCatalogueOps),
     viewStateMemory, ensureReady, restoreSession, login, logout, saveUser, saveProfile, getLegalDocumentOps, getOrderOps, getServiceCatalogueOps,
     storeRequest: (path, options = {}, responseType = 'json') => {
       const pathname = typeof path === 'string' ? path.split('?')[0] : ''

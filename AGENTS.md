@@ -1,5 +1,9 @@
 # Repository instructions
 
+## Anonymous API throttling
+
+- Treat `rate_limited` and `anonymous_api_timeout` during staff session refresh as temporary retry conditions. Retain the current user and cookie; only invalid-refresh-token expires the session.
+
 ## Specification and repository guidance
 
 - Follow the current specification identified in the [specification README](https://github.com/sara-fan/sarafan.spec#source-of-truth). If an implementation issue conflicts with it, flag the discrepancy before implementing the affected behavior.
