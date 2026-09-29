@@ -49,7 +49,7 @@ const fill=async(w,name,value)=>w.get(`[name="${name}"]`).setValue(value)
 beforeEach(()=>{
   h.route={path:'/users',params:{},query:{}}
   h.router={push:vi.fn().mockResolvedValue(),replace:vi.fn().mockResolvedValue(),currentRoute:ref({fullPath:'/users'})}
-  h.session={user:ref({...identity}),ready:ref(true),restoring:ref(false),restoreProblem:ref(null),notice:ref(''),loginProblem:ref(null),
+  h.session={user:ref({...identity}),ready:ref(true),restoring:ref(false),restoreProblem:ref(null),refreshCooldownSeconds:ref(0),notice:ref(''),loginProblem:ref(null),
     login:vi.fn().mockResolvedValue(identity),logout:vi.fn().mockResolvedValue(),restoreSession:vi.fn().mockResolvedValue(),
     listUsers:vi.fn().mockResolvedValue([{...identity},{...identity,id:2,firstName:'Анна',email:'anna@example.test',roles:['operator'],isActive:false}]),
     getUser:vi.fn().mockResolvedValue({...identity}),getRoles:vi.fn().mockResolvedValue(roles),getStatus:vi.fn().mockResolvedValue({appVersion:'0.0.6'}),saveUser:vi.fn().mockResolvedValue(identity),saveProfile:vi.fn().mockResolvedValue(identity)}
@@ -231,6 +231,9 @@ describe('staff views',()=>{
   it('renders loading/recovery, login and staff shell with independent versions and logout',async()=>{
     h.session.ready.value=false;const w=render(App);await flushPromises();expect(w.text()).toContain('Восстановление сеанса')
     h.session.ready.value=true;h.session.restoreProblem.value=failure();await nextTick();expect(w.get('[role=alert]').exists()).toBe(true)
+    h.session.refreshCooldownSeconds.value=3;await nextTick();expect(button(w,'Повторить через 3 с').attributes('disabled')).toBeDefined()
+    await button(w,'Повторить через 3 с').trigger('click');expect(h.session.restoreSession).not.toHaveBeenCalled()
+    h.session.refreshCooldownSeconds.value=0;await nextTick()
     expect(button(w,'Повторить').text()).toBe('');await button(w,'Повторить').trigger('click');await flushPromises();expect(h.router.replace).not.toHaveBeenCalled()
     h.session.restoreSession.mockImplementationOnce(()=>{h.session.restoreProblem.value=null;return Promise.resolve()});await button(w,'Повторить').trigger('click');await flushPromises();expect(h.router.replace).toHaveBeenCalledWith('/users');expect(w.text()).toContain('Сервер 0.0.6');expect(w.text()).toContain(`Клиент ${version}`);expect(w.text()).toContain('Иванов Иван');expect(w.find('nav a[href="/users"] i').attributes('data-icon')).toBe('$staff');expect(w.find('nav a[href="/legal-documents"] i').attributes('data-icon')).toBe('$legalDocuments');expect(w.find('nav a[href="/service-catalogue"] i').attributes('data-icon')).toBe('$serviceCatalogue');expect(w.find('nav a[href="/customer-consents"]').exists()).toBe(false);expect(w.find('nav a[href="/users/1"] i').attributes('data-icon')).toBe('$profile');expect(w.find('nav a[href="/users/1"]').text()).toContain('Мой профиль');expect(w.findAll('nav a').slice(0,7).map(link=>link.text())).toEqual(['Заказы','Магазины','Тарифы','Перс. данные','Правовые документы','Пользователи','Мой профиль'])
     const drawer=w.findComponent({name:'VNavigationDrawer'});expect(drawer.props('permanent')).toBe(true);const initiallyOpen=drawer.props('modelValue');await button(w,'Открыть меню').trigger('click');expect(drawer.props('modelValue')).toBe(!initiallyOpen)

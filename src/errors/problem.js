@@ -15,6 +15,8 @@ export const CORE_PROBLEM_TYPES = Object.freeze({
   invalidAccessToken: `${PROBLEM_TYPE_ROOT}invalid-backoffice-access-token`,
   invalidRefreshToken: `${PROBLEM_TYPE_ROOT}invalid-backoffice-refresh-token`,
   loginFailed: `${PROBLEM_TYPE_ROOT}backoffice-login-failed`,
+  rateLimited: `${PROBLEM_TYPE_ROOT}rate-limited`,
+  anonymousApiTimeout: `${PROBLEM_TYPE_ROOT}anonymous-api-timeout`,
   emailExists: `${PROBLEM_TYPE_ROOT}backoffice-email-exists`,
   lastAdministrator: `${PROBLEM_TYPE_ROOT}last-backoffice-administrator`,
   accessDenied: `${PROBLEM_TYPE_ROOT}access-denied`,

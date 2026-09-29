@@ -24,6 +24,101 @@ const deferred = () => { let resolve; const promise = new Promise(r => { resolve
 afterEach(() => vi.unstubAllGlobals())
 
 describe('staff session boundary', () => {
+  it('presents a staff login timeout as service unavailability', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(problemResponse(503, 'anonymous-api-timeout')))
+    const session = createSession()
+    await expect(session.login('admin@example.test', 'password')).rejects.toMatchObject({ code:'ui_service_unavailable' })
+    expect(session.user.value).toBeNull()
+    expect(session.loginProblem.value).toMatchObject({ code:'ui_service_unavailable', detail:'Сервис временно недоступен' })
+  })
+  it('retains identity when an authorized request refresh times out', async () => {
+    const fetch = vi.fn(url => {
+      if (url === '/api/v1/backoffice/auth/login') return Promise.resolve(auth())
+      if (url === '/api/v1/backoffice/users') return Promise.resolve(problemResponse(401, 'invalid-backoffice-access-token'))
+      if (url === '/api/v1/backoffice/auth/refresh') return Promise.resolve(problemResponse(503, 'anonymous-api-timeout'))
+      throw new Error(`Unexpected request: ${url}`)
+    })
+    vi.stubGlobal('fetch', fetch)
+    const session = createSession()
+    await session.login('admin@example.test', 'password')
+    await expect(session.listUsers()).rejects.toMatchObject({ code:'anonymous_api_timeout' })
+    expect(session.user.value).toEqual(identity)
+    expect(session.refreshCooldownSeconds.value).toBeGreaterThan(0)
+    await expect(session.listUsers()).rejects.toMatchObject({ code:'anonymous_api_timeout' })
+    expect(fetch.mock.calls.filter(([url]) => url.endsWith('/refresh'))).toHaveLength(1)
+    expect(fetch.mock.calls.filter(([url]) => url.endsWith('/users'))).toHaveLength(1)
+    expect(session.user.value).toEqual(identity)
+  })
+  it('allows session restoration again after the timeout cooldown expires', async () => {
+    vi.useFakeTimers()
+    try {
+      const fetch = vi.fn().mockResolvedValueOnce(problemResponse(503, 'anonymous-api-timeout')).mockResolvedValueOnce(auth())
+      vi.stubGlobal('fetch', fetch)
+      const session = createSession()
+      await session.restoreSession()
+      expect(session.restoreProblem.value).toMatchObject({ code:'anonymous_api_timeout' })
+      expect(session.refreshCooldownSeconds.value).toBeGreaterThan(0)
+      await vi.advanceTimersByTimeAsync(1250)
+      expect(session.refreshCooldownSeconds.value).toBe(0)
+      await session.restoreSession()
+      expect(fetch).toHaveBeenCalledTimes(2)
+      expect(session.restoreProblem.value).toBeNull()
+      expect(session.user.value).toEqual(identity)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+  it('treats a direct timeout on a staff request as service unavailability', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(auth()).mockResolvedValueOnce(problemResponse(503, 'anonymous-api-timeout')))
+    const session = createSession()
+    await session.login('admin@example.test', 'password')
+    await expect(session.listUsers()).rejects.toMatchObject({ code:'ui_service_unavailable' })
+    expect(session.user.value).toBeNull()
+  })
+  it('retains identity and blocks refresh requests during a throttling cooldown', async () => {
+    let refreshCount = 0
+    const fetch = vi.fn(url => {
+      if (url === '/api/v1/backoffice/auth/login') return Promise.resolve(auth())
+      if (url === '/api/v1/backoffice/auth/refresh') {
+        refreshCount++
+        return Promise.resolve(problemResponse(429, 'rate-limited'))
+      }
+      if (url === '/api/v1/backoffice/users') return Promise.resolve(response(200, []))
+      throw new Error(`Unexpected request: ${url}`)
+    })
+    vi.stubGlobal('fetch', fetch)
+    const session = createSession()
+    await session.login('admin@example.test', 'password')
+    await session.restoreSession()
+    expect(session.user.value).toEqual(identity)
+    expect(session.restoreProblem.value).toMatchObject({ code:'rate_limited' })
+    expect(session.refreshCooldownSeconds.value).toBeGreaterThan(0)
+    await session.restoreSession()
+    expect(refreshCount).toBe(1)
+    expect(session.user.value).toEqual(identity)
+    await expect(session.listUsers()).resolves.toEqual([])
+    expect(fetch.mock.calls.filter(([url]) => url === '/api/v1/backoffice/users')).toHaveLength(1)
+  })
+  it('blocks requests known to need renewal until the refresh cooldown ends', async () => {
+    let refreshCount = 0
+    const fetch = vi.fn(url => {
+      if (url === '/api/v1/backoffice/auth/login') return Promise.resolve(auth())
+      if (url === '/api/v1/backoffice/auth/refresh') {
+        refreshCount++
+        return Promise.resolve(problemResponse(429, 'rate-limited'))
+      }
+      if (url === '/api/v1/backoffice/users') return Promise.resolve(problemResponse(401, 'invalid-backoffice-access-token'))
+      throw new Error(`Unexpected request: ${url}`)
+    })
+    vi.stubGlobal('fetch', fetch)
+    const session = createSession()
+    await session.login('admin@example.test', 'password')
+    await expect(session.listUsers()).rejects.toMatchObject({ code:'rate_limited' })
+    await expect(session.listUsers()).rejects.toMatchObject({ code:'rate_limited' })
+    expect(refreshCount).toBe(1)
+    expect(fetch.mock.calls.filter(([url]) => url === '/api/v1/backoffice/users')).toHaveLength(1)
+    expect(session.user.value).toEqual(identity)
+  })
   it('clears memory preferences on identity change and logout', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(auth()).mockResolvedValueOnce(auth({ ...identity, id:2 })).mockResolvedValueOnce(response(200, {})))
     const session = createSession()

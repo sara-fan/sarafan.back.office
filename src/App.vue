@@ -13,7 +13,7 @@ import { suppressProblem } from './errors/problem.js'
 import PageAlertRegion from './components/PageAlertRegion.vue'
 import ExchangeRateDisplay from './components/ExchangeRateDisplay.vue'
 const session = useSession()
-const { user, ready, restoring, restoreProblem } = session
+const { user, ready, restoring, restoreProblem, refreshCooldownSeconds } = session
 const router = useRouter()
 const { mdAndUp } = useDisplay()
 const drawer = ref(mdAndUp.value)
@@ -57,7 +57,8 @@ watch(() => user.value?.id, async (id, _previous, onCleanup) => {
         <h1>Не удалось восстановить сеанс</h1><PageAlertRegion :problem="restoreProblem" /><ActionButton
           variant="blue"
           icon="$refresh"
-          tooltip-text="Повторить"
+          :disabled="refreshCooldownSeconds > 0"
+          :tooltip-text="refreshCooldownSeconds > 0 ? `Повторить через ${refreshCooldownSeconds} с` : 'Повторить'"
           @click="retry"
         />
       </template><p
