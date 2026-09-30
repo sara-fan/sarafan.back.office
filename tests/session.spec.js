@@ -7,7 +7,7 @@ import { createSession } from '../src/stores/session.js'
 import { problemResponse, response } from './fixtures/http.js'
 
 const identity = { id:1, email:'admin@example.test', firstName:'Иван', lastName:'Иванов', patronymic:null, roles:['administrator'], isActive:true }
-const legalOps = { kinds:[{ value:4, name:'Политика обработки персональных данных', routeAlias:'privacy-policy' }] }
+const legalOps = { kinds:[{ value:1, name:'Согласие на обработку персональных данных', routeAlias:'personal-data-consent' }, { value:2, name:'Пользовательское соглашение', routeAlias:'user-agreement' }] }
 const orderOps = {
   statuses:[
     { value:0,name:'На проверке',routeAlias:'under_review',upperStatusValue:0,upperStatusName:'На проверке',upperStatusRouteAlias:'under_review' },
@@ -249,6 +249,21 @@ describe('staff session boundary', () => {
   it.each([null,{}, {accessToken:'',user:identity},{accessToken:'a',user:{}},{accessToken:'a',user:{...identity,roles:['unknown']}}])('rejects malformed authentication payloads %j', async value => {
     vi.stubGlobal('fetch',vi.fn().mockResolvedValue(response(200,value)))
     const s=createSession(); await expect(s.login('a@b.test','p')).rejects.toMatchObject({code:'ui_protocol_error'}); expect(s.user.value).toBeNull()
+  })
+  it.each([
+    { kinds:[legalOps.kinds[0]] },
+    { kinds:[legalOps.kinds[0], { ...legalOps.kinds[1], value:3 }] },
+    { kinds:[legalOps.kinds[0], { ...legalOps.kinds[1], value:4 }] },
+    { kinds:[...legalOps.kinds, { value:3, name:'Retired', routeAlias:'order-rules' }] },
+    { kinds:[legalOps.kinds[0], { ...legalOps.kinds[1], value:1 }] },
+    { kinds:[legalOps.kinds[0], { ...legalOps.kinds[1], routeAlias:legalOps.kinds[0].routeAlias }] }
+  ])('rejects incomplete, retired or duplicate legal catalogues %j', async value => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(auth()).mockResolvedValueOnce(response(200,value)))
+    const session = createSession()
+    await session.login('a', 'p')
+    await expect(session.getLegalDocumentOps()).rejects.toMatchObject({ code:'ui_protocol_error' })
+    expect(session.legalDocumentOps.value).toBeNull()
+    expect(session.user.value).toEqual(identity)
   })
   it('shares refresh across concurrent requests and retries each request only once', async () => {
     const refresh=deferred(); let calls=0

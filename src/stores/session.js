@@ -7,6 +7,7 @@ import { UUID_PATH_PATTERN, createApiClient } from '../api/client.js'
 import { CORE_PROBLEM_TYPES, INTERNAL_PROBLEM_TYPES, createInternalProblem, suppressProblem } from '../errors/problem.js'
 import { validateOrderOps } from '../orderFormatting.js'
 import { can } from '../roles.js'
+import { LEGAL_DOCUMENT_KIND } from '../consentFormatting.js'
 import { serviceCatalogueIdentity, validateServiceCatalogueOps } from '../serviceCatalogue.js'
 
 const BASE = '/api/v1/backoffice'
@@ -212,11 +213,11 @@ export function createSession() {
     return result
   }
   function validateLegalDocumentOps(value) {
-    if (!value || !Array.isArray(value.kinds) || value.kinds.length === 0) throw createInternalProblem('protocolError')
+    if (!value || !Array.isArray(value.kinds) || value.kinds.length !== 2) throw createInternalProblem('protocolError')
     const values = new Set()
     const aliases = new Set()
     for (const item of value.kinds) {
-      if (!item || !Number.isInteger(item.value) || item.value <= 0 || typeof item.name !== 'string' || !item.name.trim()
+      if (!item || !Object.values(LEGAL_DOCUMENT_KIND).includes(item.value) || typeof item.name !== 'string' || !item.name.trim()
         || typeof item.routeAlias !== 'string' || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/u.test(item.routeAlias)
         || values.has(item.value) || aliases.has(item.routeAlias)) throw createInternalProblem('protocolError')
       values.add(item.value)
