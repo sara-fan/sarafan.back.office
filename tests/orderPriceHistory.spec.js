@@ -87,3 +87,12 @@ it('does not infer a cause for an inconsistent total or unrelated product edits'
   d.productAfter = { ...d.productBefore, color:'Blue' }
   expect(rows(d)[0].reason).toBe('-')
 })
+
+it('interprets customs zero without changing its saved numeric evidence or other service zeros', () => {
+  const d = fixture()
+  Object.assign(component(d, 800), { state:0, amount:0, amountRub:0 })
+  Object.assign(component(d, 300), { state:0, amount:0, amountRub:0 })
+  expect(rows(d).find(row => row.key === 800).after).toBe('Не ожидаются')
+  expect(rows(d).find(row => row.key === 300).after).toBe('0,00₽')
+  expect(component(d, 800).amountRub).toBe(0)
+})

@@ -398,6 +398,24 @@ describe('pricing recovery and field errors', () => {
     const payload = JSON.parse(h.session.orderRequest.mock.calls.find(([, options]) => options?.method === 'PUT')[1].body)
     expect(payload.inputs.manualAmounts).toEqual({})
   })
+  it('focuses repeated customs confirmation errors without discarding pricing or locking edits', async () => {
+    await render()
+    const saved = vm().pricing
+    for (let attempt = 0; attempt < 2; attempt++) {
+      h.session.orderRequest.mockRejectedValueOnce(new ProblemError({
+        type:'https://sarafan.sw.consulting/problems/order-customs-unresolved', code:'order_customs_unresolved',
+        status:409, title:'Таможенные платежи не определены', detail:'Определите таможенные платежи.', instance:'/test',
+        errors:{ manualAmounts:['Укажите таможенные платежи; 0 означает, что платежи не ожидаются.'] }
+      }))
+      wrapper.get('button[aria-label="Подтвердить сохранённый расчёт"]').element.focus()
+      await vm().confirmPrice()
+      expect(wrapper.get('#manual-amounts-error').text()).toContain('0 означает')
+      expect(document.activeElement).toBe(wrapper.get('button#manualAmount100').element)
+      expect(wrapper.findAll('[role="alert"]')).toHaveLength(0)
+      expect(vm().pricing).toBe(saved)
+      expect(vm().locked).toBe(false)
+    }
+  })
   it('shows server amount errors beside the price controls and focuses the existing inline editor', async () => {
     await render()
     h.session.orderRequest.mockRejectedValueOnce(createInternalProblem('invalidInput', { errors:{ manualAmounts:['Тариф изменился.'] } }))

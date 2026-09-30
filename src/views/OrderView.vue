@@ -108,7 +108,11 @@ function calculatePrice() {
   pricingExpanded.value = true
   return pricingFocusAfter(() => mutatePricing(), () => validationFields(problem.value))
 }
-async function confirmPrice() { confirmingPrice.value = false; await mutatePricing(true) }
+async function confirmPrice() {
+  confirmingPrice.value = false
+  pricingExpanded.value = true
+  await pricingFocusAfter(() => mutatePricing(true), () => validationFields(problem.value))
+}
 function apply(value) {
   details.value = validateOrderDetails(value, ops.value, number.value)
   pricing.value = null

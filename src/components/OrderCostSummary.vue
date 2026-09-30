@@ -43,7 +43,10 @@ function validateAmount(value, service) {
 const currency = alias => props.ops.catalogue.currencies.find(item => item.routeAlias === alias)
 const money = amount => amount === null ? '—' : formatMoneyAmount(amount)
 const service = value => props.ops.catalogue.services.find(item => item.value === value)
-const state = value => props.ops.componentStates.find(item => item.value === value).name
+const isCustoms = component => service(component.service).routeAlias === 'customs-payments'
+const state = component => isCustoms(component) && component.state === 0 && component.amountRub === 0
+  ? 'Не ожидаются' : props.ops.componentStates.find(item => item.value === component.state).name
+const customsUnresolved = computed(() => props.pricing.calculation.components.some(component => isCustoms(component) && component.amountRub === null))
 function serviceStatus(value) {
   if (!optionalServices(props.ops).some(item => item.value === value)) return 'mandatory'
   return props.pricing.calculation.inputs.selectedServices.includes(value) ? 'ordered' : 'notOrdered'
@@ -92,6 +95,18 @@ function prices(component) {
         </div>
       </div>
       <p
+        v-if="editable"
+        class="price-note"
+      >
+        Для таможенных платежей 0 означает, что платежи не ожидаются.
+      </p>
+      <p
+        v-if="editable && customsUnresolved"
+        role="status"
+      >
+        Определите таможенные платежи и сохраните расчёт перед подтверждением.
+      </p>
+      <p
         v-if="pricing.expired"
         role="status"
       >
@@ -134,7 +149,7 @@ function prices(component) {
               <td class="service-status-column">
                 <ServiceStatusIcon :status="serviceStatus(component.service)" />
               </td>
-              <td><ListText :text="state(component.state)" /></td>
+              <td><ListText :text="state(component)" /></td>
               <td
                 v-for="price in prices(component)"
                 :key="price.alias"
@@ -191,7 +206,7 @@ function prices(component) {
               <td class="service-status-column">
                 <ServiceStatusIcon :status="serviceStatus(component.service)" />
               </td>
-              <td><ListText :text="state(component.state)" /></td>
+              <td><ListText :text="state(component)" /></td>
               <td
                 v-for="price in prices(component)"
                 :key="price.alias"

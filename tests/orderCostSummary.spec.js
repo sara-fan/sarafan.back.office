@@ -123,3 +123,17 @@ describe('order cost summary', () => {
     expect(wrapper.get('button').attributes('aria-expanded')).toBe('true')
   })
 })
+
+it('explains unresolved customs, follows Core confirmation capability, and presents zero as not expected', async () => {
+  const pricing = render()
+  await wrapper.setProps({ editable:true, canConfirm:false })
+  expect(wrapper.text()).toContain('0 означает, что платежи не ожидаются')
+  expect(wrapper.text()).toContain('Определите таможенные платежи')
+  const confirm = wrapper.findAll('button').find(button => button.attributes('aria-label') === 'Подтвердить сохранённый расчёт')
+  expect(confirm.attributes('disabled')).toBeDefined()
+  Object.assign(pricing.calculation.components.find(item => item.service === 800), { state:0, amount:0, amountRub:0 })
+  await wrapper.setProps({ pricing:{ ...pricing }, canConfirm:true })
+  expect(wrapper.text()).not.toContain('Определите таможенные платежи')
+  expect(wrapper.findAll('tfoot tr').at(-1).text()).toContain('Не ожидаются')
+  expect(confirm.attributes('disabled')).toBeUndefined()
+})
