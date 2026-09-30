@@ -201,6 +201,8 @@ For other comment-capable formats, use the same three lines with that format's n
 
 - Privacy-request lists accept optional requestedFrom/requestedTo (YYYY-MM-DD), filter RequestedAt by inclusive Moscow calendar days before counting/paging, and echo both dates. Persist validated date filters in the staff view; keep date controls editable during read refreshes. No database migration is required.
 
+- Customs RUB null means unresolved, zero means not expected, and positive means expected. Keep tariff-driven editing (zero guidance for staff) and display calculated customs zero as `Не ожидаются` in the order summary and history without changing numeric evidence. Core `canConfirm` requires resolved customs; missing delivery does not block confirmation.
+
 - Keep pricing calculation/confirmation on the order card and manual tariff amounts in `InlineEditableField`. Optional service selections are customer-owned and read-only for staff. Legacy pricing URLs redirect to the card; protect both product and pricing drafts from discard and prevent concurrent edits from using stale order versions.
 
 ## Order history and continuation

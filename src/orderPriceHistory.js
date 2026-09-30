@@ -19,6 +19,7 @@ export function priceHistoryRows(detail, ops) {
   const value = component => {
     if (!component) return missing
     if (component.state !== 0) return ops.componentStates.find(item => item.value === component.state).name
+    if (component.amountRub === 0 && ops.catalogue.services.find(item => item.value === component.service).routeAlias === 'customs-payments') return 'Не ожидаются'
     return money(component.amount, component.currency) + (component.currency === rub.value ? '' : ' (' + (component.amountRub === null ? 'Нет данных' : money(component.amountRub, rub.value)) + ')')
   }
   const automatic = []
