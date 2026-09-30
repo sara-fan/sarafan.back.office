@@ -20,8 +20,6 @@ const id = '11111111-1111-1111-1111-111111111111'
 const ops = { kinds:[
   { value:1, name:'Согласие на обработку персональных данных', routeAlias:'personal-data-consent' },
   { value:2, name:'Пользовательское соглашение', routeAlias:'user-agreement' },
-  { value:3, name:'Правила заказа товаров', routeAlias:'order-rules' },
-  { value:4, name:'Политика обработки персональных данных', routeAlias:'privacy-policy' }
 ] }
 const doc = { id, status:'future', kind:LEGAL_DOCUMENT_KIND.PERSONAL_DATA_CONSENT, locale:'ru', title:'Отдельное согласие', displayVersion:'2', html:'<p>Правовой текст</p>', sourceHash:'b'.repeat(64), contentHash:'a'.repeat(64), effectiveAt:'2027-09-07T21:00:00Z', canDelete:true }
 const audit = { id:1, documentId:id, actorId:1, actorName:'Иванов Иван', action:'created', at:'2026-09-07T09:00:00Z', kind:doc.kind, title:doc.title, displayVersion:doc.displayVersion, effectiveAt:doc.effectiveAt }
@@ -664,8 +662,8 @@ it('connects every legal-document form control to its submitted value', async ()
   Object.defineProperty(input.element, 'files', { configurable:true, value:[upload()] })
   await input.trigger('change')
   expect(vm().form).toMatchObject({title:'Название из формы',displayVersion:'v3',effectiveDate:'2027-03-01'})
-  await wrapper.get('#kind').setValue(String(LEGAL_DOCUMENT_KIND.PRIVACY_POLICY))
-  expect(vm().form.kind).toBe(LEGAL_DOCUMENT_KIND.PRIVACY_POLICY)
+  await wrapper.get('#kind').setValue(String(LEGAL_DOCUMENT_KIND.USER_AGREEMENT))
+  expect(vm().form.kind).toBe(LEGAL_DOCUMENT_KIND.USER_AGREEMENT)
   for (const name of ['kind','title','displayVersion','effectiveDate','file']) {
     expect(wrapper.get('label[for="'+name+'"]').attributes('for')).toBe(wrapper.get('[name="'+name+'"]').attributes('id'))
   }

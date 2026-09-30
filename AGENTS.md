@@ -137,6 +137,8 @@ For other comment-capable formats, use the same three lines with that format's n
 
 ## Versioned customer consent
 
+- LEGAL at `sara-fan/sarafan@aba6c7abaad915e5224e4398c9429d74c7eceae9` and issue #11 use exactly PersonalDataConsent=1 and UserAgreement=2; values 0, 3 and 4 are retired and reserved. Validate the complete two-kind Ops catalogue, consuming Core names and aliases. The Privacy Policy is an appendix in the same consent document/version, with no separate link or confirmation; order terms belong in the User Agreement.
+
 - Legal-document creation previews automatically after 300ms without input changes when a nonblank title and source file are present. Clear preview/save eligibility immediately when preview inputs change; show only the current server-validated preview. Background validation keeps controls editable and does not move focus. Discard obsolete responses after input changes, refresh, identity changes or unmount.
 
 - Consent history contains only versioned events with a document ID and content digest. Do not add legacy record labels or fallbacks; pre-versioned records are deleted by the Core consent migration, and existing customers without a new receipt have missing consent.
