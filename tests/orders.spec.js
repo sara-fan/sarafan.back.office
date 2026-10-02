@@ -153,7 +153,8 @@ describe('orders server table', () => {
     expect(vm().busy).toBe(true)
     expect(search.element.matches(':disabled')).toBe(false)
     expect(wrapper.getComponent({ name:'VSelect' }).props('disabled')).toBe(true)
-    expect(wrapper.findAll('input[type="date"]').every(input => !input.element.matches(':disabled'))).toBe(true)
+    expect(wrapper.findAll('.order-date-filter input')).toHaveLength(2)
+    expect(wrapper.findAll('.order-date-filter input').every(input => !input.element.matches(':disabled'))).toBe(true)
     expect(document.activeElement).toBe(search.element)
     const oldPath = h.session.orderRequest.mock.calls.at(-1)[0]
     await search.setValue('76')

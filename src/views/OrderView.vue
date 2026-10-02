@@ -14,15 +14,16 @@ import PageAlertRegion from '../components/PageAlertRegion.vue'
 import OrderCostSummary from '../components/OrderCostSummary.vue'
 import OrderStatusBadge from '../components/OrderStatusBadge.vue'
 import CollapsibleSection from '../components/CollapsibleSection.vue'
-import { moscowTime } from '../consentFormatting.js'
+import { moscowDate, moscowTime } from '../consentFormatting.js'
 import { manualPricingTariffs, optionalServices, pricingForm, pricingPayload, validateOrderPricing, validatePricingOps } from '../orderPricing.js'
-import { CORE_PROBLEM_TYPES, formPageProblem, normalizeProblem, problemFieldErrors } from '../errors/problem.js'
+import { CORE_PROBLEM_TYPES, createInternalProblem, formPageProblem, normalizeProblem, problemFieldErrors } from '../errors/problem.js'
 import { formatMoneyAmount } from '../moneyFormatting.js'
 import { safeOrderSource } from '../orderFormatting.js'
-import { CUSTOMER_FIELDS, PRODUCT_FIELDS, priceCents, productForm, productPayload, productValidation, validateOrderDetails } from '../orderProduct.js'
+import { CUSTOMER_FIELDS, PRODUCT_FIELDS, productExceedsLimit, priceCents, productForm, productPayload, productValidation, validateOrderDetails } from '../orderProduct.js'
 import { can } from '../roles.js'
 import { useSession } from '../stores/session.js'
 
+const limitConfirmation = ref(false), rejectionOpen = ref(false), rejectionReason = ref(''), rejectionRoot = ref(null)
 const focusRoot = ref(null)
 const costSummary = ref(null), continuing = ref(false)
 const productExpanded = ref(true)
@@ -53,9 +54,11 @@ const historyContinuation = ref(false)
 const locked = ref(false)
 let version = 0
 let confirmAction = null
+let resolveLimit = null
 const dirty = computed(() => productDirty.value || pricingDirty.value || pricingEditing.value)
 const editable = computed(() => details.value?.canEditProduct && can(session.user.value, 'manualQuotes') && !locked.value)
-const productEditingEnabled = computed(() => editable.value && details.value?.limitCheck.available)
+const productEditingEnabled = computed(() => editable.value)
+const productSavingEnabled = computed(() => editable.value && (details.value?.limitCheck.available || !form.value?.sellerPrice.trim()))
 const limitRatesUnavailable = computed(() => editable.value && details.value?.limitCheck.available === false)
 const localProblem = computed(() => productEditingEnabled.value && form.value
   ? productValidation(form.value, ops.value.productLimits, details.value.limitCheck) : null)
@@ -63,6 +66,9 @@ const fieldProblem = computed(() => problem.value ?? localProblem.value)
 const pricingFields = computed(() => pricingEditable.value && pricing.value && manualPricingTariffs(pricing.value, pricingOps.value).some(item =>
   !optionalServices(pricingOps.value).some(service => service.value === item.service) || pricing.value.calculation.inputs.selectedServices.includes(item.service)) ? ['manualAmounts'] : [])
 const pageProblem = computed(() => formPageProblem(fieldProblem.value, [...(details.value && form.value ? PRODUCT_FIELDS : []), ...pricingFields.value]))
+const rejectionPageProblem = computed(() => formPageProblem(problem.value, ['reason']))
+const customerValue = key => key === 'passportIssueDate' && details.value.customer[key]
+  ? moscowDate(details.value.customer[key]) : details.value.customer[key] || 'Не указано'
 const total = computed(() => {
   const cents = priceCents(form.value?.sellerPrice ?? '')
   const quantity = Number(form.value?.quantity)
@@ -122,6 +128,7 @@ function apply(value) {
 }
 
 async function load() {
+  resolveValueLimit(false); rejectionOpen.value = false
   const current = ++version
   busy.value = true
   problem.value = null
@@ -145,15 +152,24 @@ async function load() {
   } finally { if (current === version) busy.value = false }
 }
 
-async function saveAction() {
-  if (busy.value || !productEditingEnabled.value || localProblem.value || pricingDirty.value || pricingEditing.value) return
+async function saveAction(acceptValueLimitExceeded = false) {
+  if (busy.value || !productSavingEnabled.value || localProblem.value || pricingDirty.value || pricingEditing.value) return
+  if (limitConfirmation.value) return
+  if (!acceptValueLimitExceeded && productExceedsLimit(form.value, details.value.limitCheck)) {
+    const context = JSON.stringify([session.user.value?.id, number.value, details.value.updatedAt, form.value])
+    limitConfirmation.value = true
+    const accepted = await new Promise(resolve => { resolveLimit = resolve })
+    if (!accepted || context !== JSON.stringify([session.user.value?.id, number.value, details.value?.updatedAt, form.value])) return
+    return saveAction(true)
+  }
+  limitConfirmation.value = false
   const current = ++version
   busy.value = true
   problem.value = null
   try {
     const result = await session.orderRequest(`/orders/${number.value}/product`, {
       method:'PUT', headers:{ 'Content-Type':'application/json' },
-      body:JSON.stringify(productPayload(form.value, ops.value.productLimits, details.value.updatedAt))
+      body:JSON.stringify({ ...productPayload(form.value, ops.value.productLimits, details.value.updatedAt), acceptValueLimitExceeded })
     })
     if (current === version) {
       apply(result)
@@ -165,6 +181,37 @@ async function saveAction() {
     if ([CORE_PROBLEM_TYPES.orderUpdateConflict, CORE_PROBLEM_TYPES.orderNotEditable].includes(problem.value.type)) locked.value = true
   } finally { if (current === version) busy.value = false }
 }
+
+function resolveValueLimit(accepted) {
+  limitConfirmation.value = false
+  resolveLimit?.(accepted)
+  resolveLimit = null
+}
+async function rejectReview() {
+  if (busy.value || locked.value || dirty.value || !pricingEditable.value || !rejectionOpen.value) return
+  const reason = rejectionReason.value.trim()
+  if (!reason || reason.length > 2000) {
+    problem.value = createInternalProblem('invalidInput', { errors:{ reason:[!reason ? 'Укажите причину.' : 'Причина не должна превышать 2000 символов.'] } })
+    return
+  }
+  const current = ++version
+  busy.value = true; problem.value = null
+  try {
+    const result = await session.orderRequest(`/orders/${number.value}/review/reject`, {
+      method:"POST", headers:{ "Content-Type":"application/json" },
+      body:JSON.stringify({ expectedUpdatedAt:details.value.updatedAt, reason })
+    })
+    if (current !== version) return
+    const rejected = validateOrderDetails(result, ops.value, number.value)
+    if (rejected.status !== 600) throw createInternalProblem('protocolError')
+    apply(rejected); rejectionOpen.value = false; rejectionReason.value = ""
+    await load()
+  } catch (value) {
+    if (current === version) { problem.value = normalizeProblem(value); if ([CORE_PROBLEM_TYPES.orderUpdateConflict, CORE_PROBLEM_TYPES.orderNotEditable].includes(problem.value.type)) locked.value = true }
+  } finally { if (current === version) busy.value = false }
+}
+const rejectionFocus = useValidationFocus(rejectionRoot, { context:() => [session.user.value?.id, number.value], active:() => rejectionOpen.value, ready:() => !busy.value })
+function submitRejection() { return rejectionFocus(rejectReview, () => validationFields(problem.value)) }
 
 function ask(action, history = false) {
   cancelConfirmation()
@@ -242,6 +289,7 @@ function beforeUnload(event) {
   event.returnValue = ''
 }
 function clear() {
+  resolveValueLimit(false); rejectionOpen.value = false; rejectionReason.value = ""
   version += 1
   details.value = null
   form.value = null
@@ -283,10 +331,35 @@ const focusAfter = useValidationFocus(focusRoot, { context:() => [session.user.v
         :loaded="!!details"
         :busy="busy"
         :show-save="!!details?.canEditProduct && can(session.user.value, 'manualQuotes')"
-        :save-disabled="!productEditingEnabled || !!localProblem || !productDirty || pricingDirty || pricingEditing"
+        :save-disabled="!productSavingEnabled || !!localProblem || !productDirty || pricingDirty || pricingEditing"
         @refresh="refresh"
         @cancel="back"
       >
+        <template #leading>
+          <div
+            v-if="pricingEditable"
+            class="header-actions"
+          >
+            <ActionButton
+              icon="$orderPricing"
+              tooltip-text="Рассчитать и сохранить стоимость"
+              :disabled="busy || locked || productDirty || pricingEditing"
+              @click="calculatePrice"
+            />
+            <ActionButton
+              icon="$confirmQuote"
+              tooltip-text="Подтвердить сохранённый расчёт"
+              :disabled="busy || !canConfirmPrice"
+              @click="confirmingPrice = true"
+            />
+            <ActionButton
+              icon="$cannotDeliver"
+              tooltip-text="Не можем привезти"
+              :disabled="busy || dirty || locked"
+              @click="rejectionOpen = true; rejectionReason = ''; problem = null"
+            />
+          </div>
+        </template>
         <template #before>
           <ActionButton
             icon="$audit"
@@ -298,12 +371,15 @@ const focusAfter = useValidationFocus(focusRoot, { context:() => [session.user.v
       </EditorHeaderActions>
     </header>
     <hr class="hr">
-    <PageAlertRegion :problem="pageProblem" />
+    <PageAlertRegion :problem="rejectionOpen ? null : pageProblem" />
     <p
       v-if="busy && !details"
       role="status"
     >
       Загрузка заказа…
+    </p>
+    <p v-if="details?.reviewReason">
+      Причина: {{ details.reviewReason }}
     </p>
     <template v-if="details && form">
       <div class="order-meta">
@@ -465,10 +541,7 @@ const focusAfter = useValidationFocus(focusRoot, { context:() => [session.user.v
           :draft="pricingDraft"
           :editable="!!pricingEditable"
           :disabled="busy || locked || productDirty"
-          :can-confirm="!!canConfirmPrice"
           :problem="pricingFields.length ? problem : null"
-          @calculate="calculatePrice"
-          @confirm="confirmingPrice = true"
           @editing-change="pricingEditing = $event"
           @amount-change="(service, value) => pricingDraft.manualAmounts[service] = value"
         />
@@ -484,12 +557,67 @@ const focusAfter = useValidationFocus(focusRoot, { context:() => [session.user.v
             <dt class="staff-form-label">
               {{ label }}
             </dt><dd class="staff-form-value staff-form-value--readonly">
-              {{ details.customer[key] || 'Не указано' }}
+              {{ customerValue(key) }}
             </dd>
           </div>
         </dl>
       </CollapsibleSection>
     </template>
+    <ConfirmDialog
+      v-if="limitConfirmation"
+      :open="limitConfirmation"
+      :busy="busy"
+      title="Превышен лимит стоимости"
+      :message="details?.limitCheck.exceededMessage || 'Подтвердите превышение лимита стоимости.'"
+      action="Продолжить с этой ценой"
+      @cancel="resolveValueLimit(false)"
+      @confirm="resolveValueLimit(true)"
+    />
+    <v-dialog
+      v-model="rejectionOpen"
+      :persistent="busy"
+      max-width="560"
+    >
+      <section
+        ref="rejectionRoot"
+        class="confirm-card"
+      >
+        <h2>Не можем привезти</h2>
+        <PageAlertRegion :problem="rejectionPageProblem" />
+        <p v-if="locked">
+          Заказ изменился. Обновите данные заказа перед повторной проверкой.
+        </p>
+        <ActionButton
+          v-if="locked"
+          label="Обновить заказ"
+          icon="$refresh"
+          tooltip-text="Обновить заказ"
+          :disabled="busy"
+          @click="load"
+        />
+        <FormField
+          v-model="rejectionReason"
+          name="reason"
+          label="Причина"
+          :problem="problem"
+          :disabled="busy"
+        />
+        <ActionButton
+          label="Отмена"
+          icon="$close"
+          tooltip-text="Отмена"
+          :disabled="busy"
+          @click="rejectionOpen = false"
+        />
+        <ActionButton
+          label="Завершить проверку"
+          icon="$save"
+          tooltip-text="Завершить проверку"
+          :disabled="busy || locked || !rejectionReason.trim()"
+          @click="submitRejection"
+        />
+      </section>
+    </v-dialog>
     <ConfirmDialog
       :open="confirmation"
       :title="historyContinuation ? 'Сохранить изменения?' : 'Отменить изменения?'"

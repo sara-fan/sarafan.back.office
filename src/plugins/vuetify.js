@@ -3,6 +3,7 @@
 // This file is a part of the Sarafan application
 
 import { createVuetify } from 'vuetify'
+import { ru } from 'vuetify/locale'
 import { aliases, fa } from 'vuetify/iconsets/fa'
 
 export const sarafanAliases = {
@@ -12,6 +13,7 @@ export const sarafanAliases = {
   audit: 'fas fa-clock-rotate-left',
   block: 'fas fa-user-slash',
   brush: 'fas fa-broom',
+  cannotDeliver: 'fas fa-bridge-circle-xmark',
   close: 'fas fa-xmark',
   collapseSection: 'fas fa-chevron-up',
   expandSection: 'fas fa-chevron-down',
@@ -48,6 +50,8 @@ export const sarafanAliases = {
 
 export function createSarafanVuetify() {
   return createVuetify({
+    locale: { locale: 'ru', messages: { ru } },
+    date: { locale: { ru: 'ru-RU' } },
     icons: {
       defaultSet: 'fa',
       aliases: sarafanAliases,

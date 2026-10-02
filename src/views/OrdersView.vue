@@ -10,6 +10,7 @@ import ListText from '../components/ListText.vue'
 import OrderStatusBadge from '../components/OrderStatusBadge.vue'
 import ActionButton from '../components/ActionButton.vue'
 import ListFilterBar from '../components/ListFilterBar.vue'
+import DateInput from '../components/DateInput.vue'
 import PageAlertRegion from '../components/PageAlertRegion.vue'
 import { moscowTime } from '../consentFormatting.js'
 import { createInternalProblem, normalizeProblem } from '../errors/problem.js'
@@ -300,11 +301,11 @@ onUnmounted(() => {
         hide-details
         @update:model-value="onStatusChange"
       />
-      <v-text-field
+      <DateInput
         :model-value="createdFrom"
         class="filter-control order-date-filter"
         label="Создан с"
-        type="date"
+        :allow-invalid="false"
         variant="solo"
         density="compact"
         active
@@ -313,11 +314,11 @@ onUnmounted(() => {
         clear-icon="$brush"
         @update:model-value="onCreatedFromChange"
       />
-      <v-text-field
+      <DateInput
         :model-value="createdTo"
         class="filter-control order-date-filter"
         label="Создан по"
-        type="date"
+        :allow-invalid="false"
         variant="solo"
         density="compact"
         active

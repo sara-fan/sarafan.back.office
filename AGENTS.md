@@ -108,7 +108,7 @@ For other comment-capable formats, use the same three lines with that format's n
 - Leave table action-button column headings blank in every list view; retain accessible action names and tooltips on the buttons.
 
 - Use the local ActionButton component for application actions: an icon, tooltip, item payload emitted on click, semantic variant, and disabled/loading state. Workspace and recovery ActionButtons are icon-only; only login actions and modal-dialog actions may add visible labels. Put the full Russian action text in the tooltip and accessible name.
-- Every create/edit form uses `EditorHeaderActions`: the default rightmost group contains refresh, save (double check) and cancel, in that order, with availability based on permissions and state. Put additional actions in separate bordered groups to its left; the shared `before` slot provides an auxiliary group. Feature views own handlers and availability.
+- Every create/edit form uses `EditorHeaderActions`: the default rightmost group contains refresh, save (double check) and cancel, in that order, with availability based on permissions and state. Put additional actions in separate bordered groups to its left; the shared `before` slot provides an auxiliary group, and `leading` accepts additional groups before it. Keep pricing calculation, confirmation and review rejection together in the order header, followed by history and the standard editor actions. Feature views own handlers and availability.
 - Read-only forms hide the double-check save action and keep refresh/cancel. Editable forms may disable save temporarily during loading, validation failures or unchanged state.
 - Place entity deletion on its list row with permission checks and explicit confirmation. Keep deletion out of create/edit form headers. Preserve concurrency tokens, block repeated deletion after conflicts until refresh, and ignore obsolete responses after identity changes or navigation.
 - Keep disabled-action explanations keyboard-accessible through a focusable tooltip activator. Never emit actions while disabled or loading. Keep native button types and accessible names. Navigation and confirmations stay with the owning view.
@@ -127,6 +127,7 @@ For other comment-capable formats, use the same three lines with that format's n
 - Keep feature CSS to layout and feature-specific presentation. Add reusable control or table styling to the corresponding shared set in `src/styles.css` instead of duplicating it in a view.
 - Use `InlineEditableField` for table values edited with a pen, apply, and cancel controls. The component owns the temporary value and keyboard/focus behavior; forms track `editing-change` to prevent saving an uncommitted value.
 - Present read-only values inside an editor with the same `staff-form` label and value alignment as editable controls. For large forms with many attributes, prefer disabled `staff-form` controls with a light-gray background; use label/value rows for compact read-only blocks. Feature views own their field order and column layout.
+- Display dates with an explicit `ru-RU` locale; render DateOnly values as `DD.MM.YYYY`, including profile and order passport dates. Keep ISO values in form models and API payloads. Use the shared localized date input and Russian Vuetify calendar for editable dates; native date controls depend on browser locale and are not permitted.
 - Format displayed monetary amounts with `Intl.NumberFormat('ru-RU')`, two fractional digits and a comma decimal separator. Monetary form inputs must be normalized to the same ungrouped presentation while accepting either `,` or `.`; API payloads remain numeric.
 
 - Application logger adapters fix service/version identity, event catalogue, severities and catalogue validation after configurable test/runtime options; callers cannot override these invariants.
@@ -203,7 +204,7 @@ For other comment-capable formats, use the same three lines with that format's n
 
 - Privacy-request lists accept optional requestedFrom/requestedTo (YYYY-MM-DD), filter RequestedAt by inclusive Moscow calendar days before counting/paging, and echo both dates. Persist validated date filters in the staff view; keep date controls editable during read refreshes. No database migration is required.
 
-- Customs RUB null means unresolved, zero means not expected, and positive means expected. Keep tariff-driven editing (zero guidance for staff) and display calculated customs zero as `Не ожидаются` in the order summary and history without changing numeric evidence. Core `canConfirm` requires resolved customs; missing delivery does not block confirmation.
+- Customs RUB null means unresolved, zero means not expected, and positive means expected. Keep tariff-driven editing (zero guidance for staff) and display calculated customs zero as `Не ожидаются` in the order summary and history without changing numeric evidence. Core `canConfirm` requires a complete included total; missing customs or delivery does not block confirmation under current FR-PRICE-050.
 
 - Keep pricing calculation/confirmation on the order card and manual tariff amounts in `InlineEditableField`. Optional service selections are customer-owned and read-only for staff. Legacy pricing URLs redirect to the card; protect both product and pricing drafts from discard and prevent concurrent edits from using stale order versions.
 
@@ -220,3 +221,14 @@ For other comment-capable formats, use the same three lines with that format's n
 - List free-text search matches all displayed data fields using their displayed string values, including formatted numbers, dates, and localized labels. Expandable lists search only collapsed-row fields. Reuse shared search and presentation helpers. Search works without explanatory UI notes; retain only the concise search label and accessibility semantics.
 
 - Order history exposes and displays the actor name without name-provenance flags, suffixes or explanatory notices. Search matches the displayed actor name.
+
+## Product review results
+
+- REVIEW at `f9d10cf3e3d2cc181d7853e0ea358b7a98d60090` and specification #12 govern review outcomes. Administrator/Shift manager may finish an UnderReview order as CannotDeliver with a required free-text reason; use structured field errors, exact ExpectedUpdatedAt and current identity/order guards. Render reasons only as text.
+- Staff may save a correction above the creation value cap only after a modal acknowledgement. Do not hard-reject that amount locally; preserve ordinary price/quantity validation and pass `acceptValueLimitExceeded` only for the acknowledged draft/context. Unknown name/price remains valid; unknown customs does not block confirmation of a complete included total. Version-3 history represents rejection and quote expiry while older evidence remains readable.
+
+- Checkout history adds kind 800, area 16 and evidence version 4. Display its server-provided delivery method name; checkout recipient/passport evidence remains private on the server. Preserve reads of previous history versions and metadata.
+
+- Customer personal details are projected from Core's single Customer row. Staff order details use the account phone; there is no recipient-phone, birth-date or passport-department-code field. Checkout history remains limited to its delivery method name.
+
+- An open order-action dialog owns its non-field errors through PageAlertRegion; do not duplicate them behind the modal. Version/state conflicts disable the action and offer an explicit authoritative reload in the dialog.

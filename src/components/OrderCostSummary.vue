@@ -8,15 +8,14 @@ import { formatMoneyAmount } from '../moneyFormatting.js'
 import ListText from './ListText.vue'
 import CollapsibleSection from './CollapsibleSection.vue'
 import ServiceStatusIcon from './ServiceStatusIcon.vue'
-import ActionButton from './ActionButton.vue'
 import InlineEditableField from './InlineEditableField.vue'
 import PriceTotalContext from './PriceTotalContext.vue'
 import { manualPricingTariffs, pricingPayload, optionalServices } from '../orderPricing.js'
 
-const props = defineProps({ pricing:{ type:Object, default:null }, ops:{ type:Object, default:null }, loading:Boolean, draft:{ type:Object, default:null }, editable:Boolean, disabled:Boolean, canConfirm:Boolean, problem:{ type:Object, default:null } })
+const props = defineProps({ pricing:{ type:Object, default:null }, ops:{ type:Object, default:null }, loading:Boolean, draft:{ type:Object, default:null }, editable:Boolean, disabled:Boolean, problem:{ type:Object, default:null } })
 const expanded = defineModel({ type:Boolean, default:true })
 const errors = computed(() => associatedFieldErrors(props.problem, 'manualAmounts'))
-const emit = defineEmits(['calculate', 'confirm', 'editing-change', 'amount-change'])
+const emit = defineEmits(['editing-change', 'amount-change'])
 const editing = ref(new Set())
 const editors = new Map()
 function editorRef(service, value) { if (value) editors.set(service, value); else editors.delete(service) }
@@ -46,7 +45,6 @@ const service = value => props.ops.catalogue.services.find(item => item.value ==
 const isCustoms = component => service(component.service).routeAlias === 'customs-payments'
 const state = component => isCustoms(component) && component.state === 0 && component.amountRub === 0
   ? 'Не ожидаются' : props.ops.componentStates.find(item => item.value === component.state).name
-const customsUnresolved = computed(() => props.pricing.calculation.components.some(component => isCustoms(component) && component.amountRub === null))
 function serviceStatus(value) {
   if (!optionalServices(props.ops).some(item => item.value === value)) return 'mandatory'
   return props.pricing.calculation.inputs.selectedServices.includes(value) ? 'ordered' : 'notOrdered'
@@ -72,40 +70,6 @@ function prices(component) {
     title="Услуги и стоимость"
   >
     <template v-if="pricing && ops">
-      <div
-        v-if="editable"
-        class="header-with-actions cost-actions"
-      >
-        <div
-          v-if="editable"
-          class="header-actions"
-        >
-          <ActionButton
-            icon="$orderPricing"
-            tooltip-text="Рассчитать и сохранить стоимость"
-            :disabled="disabled || editing.size > 0"
-            @click="emit('calculate')"
-          />
-          <ActionButton
-            icon="$confirmQuote"
-            tooltip-text="Подтвердить сохранённый расчёт"
-            :disabled="disabled || !canConfirm || editing.size > 0"
-            @click="emit('confirm')"
-          />
-        </div>
-      </div>
-      <p
-        v-if="editable"
-        class="price-note"
-      >
-        Для таможенных платежей 0 означает, что платежи не ожидаются.
-      </p>
-      <p
-        v-if="editable && customsUnresolved"
-        role="status"
-      >
-        Определите таможенные платежи и сохраните расчёт перед подтверждением.
-      </p>
       <p
         v-if="pricing.expired"
         role="status"
@@ -263,6 +227,5 @@ function prices(component) {
 .cost-table :deep(table) { min-width:560px; table-layout:fixed; }
 .cost-table :deep(th:first-child) { width:34%; }
 .cost-table .service-status-column { width:52px; text-align:center; }
-.cost-actions { justify-content:flex-end; }
 .original-price { font-weight:700; }
 </style>

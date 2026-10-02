@@ -9,6 +9,7 @@ import { useRoute, useRouter } from 'vue-router'
 import ActionButton from '../components/ActionButton.vue'
 import ListText from '../components/ListText.vue'
 import ListFilterBar from '../components/ListFilterBar.vue'
+import DateInput from '../components/DateInput.vue'
 import PageAlertRegion from '../components/PageAlertRegion.vue'
 import OrderHistoryDetails from '../components/OrderHistoryDetails.vue'
 import { moscowTime } from '../consentFormatting.js'
@@ -170,20 +171,20 @@ onUnmounted(invalidate)
         hide-details
         @update:model-value="filter('actorType', $event)"
       />
-      <v-text-field
+      <DateInput
         :model-value="state.filters.from"
         label="Дата с"
-        type="date"
+        :allow-invalid="false"
         class="filter-control"
         variant="solo"
         density="compact"
         hide-details
         @update:model-value="filter('from', $event ?? '')"
       />
-      <v-text-field
+      <DateInput
         :model-value="state.filters.to"
         label="Дата по"
-        type="date"
+        :allow-invalid="false"
         class="filter-control"
         variant="solo"
         density="compact"

@@ -33,6 +33,12 @@ const priceRows = computed(() => priceHistoryRows(props.detail, props.pricingOps
     >
       <strong>Причина отмены:</strong> {{ detail.cancellationReason }}
     </p>
+    <p v-if="detail.reviewReason">
+      <strong>Причина:</strong> {{ detail.reviewReason }}
+    </p>
+    <p v-if="detail.checkoutDeliveryName">
+      Данные получателя сохранены. Способ доставки: {{ detail.checkoutDeliveryName }}.
+    </p>
     <v-table
       v-if="changes.length"
       density="compact"

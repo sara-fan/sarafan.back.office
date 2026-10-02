@@ -269,3 +269,18 @@ it('shows the saved confirmed rate beneath the historical total', () => {
   expect(total.get('.price-total-context').text()).toBe('Итого, утверждённая стоимость $ 80.0000 ₽ (ЦБ РФ, 24.09.2026)')
   expect(total.get('small.price-note.price-total-rate').text()).toBe('$ 80.0000 ₽ (ЦБ РФ, 24.09.2026)')
 })
+
+it('accepts and displays privacy-safe checkout history details', () => {
+  const currentOps = { ...ops, kinds:[...ops.kinds, ...[600, 700, 800].map(value => ({ value, name:'Операция', routeAlias:'kind-' + value }))], areas:[...ops.areas, { value:16, name:'Получатель и доставка', routeAlias:'checkout' }] }
+  const quoteOps = { ...orderOps, statuses:[...orderOps.statuses, { value:100, name:'Расчёт готов' }] }
+  expect(validateHistoryOps(currentOps)).toBe(currentOps)
+  expect(normalizeHistoryFilters({ ...historyDefaults.filters, area:16 }).area).toBe(16)
+  const event = { ...row, kind:800, areas:16, actorType:0, actorName:'Покупатель' }
+  const checkout = { ...detail, event, version:4, productBefore:null, productAfter:null, sourceUrl:null, pricingBefore:null, pricingAfter:null,
+    statusBefore:100, statusAfter:100, checkoutDeliveryName:'Пункт выдачи' }
+  expect(validateHistoryDetail(checkout, event, currentOps, quoteOps, pricingOps)).toBe(checkout)
+  for (const change of [{ checkoutDeliveryName:null }, { checkoutDeliveryName:'' }, { checkoutDeliveryName:'a'.repeat(501) }, { statusAfter:0 }, { version:1 }])
+    expect(() => validateHistoryDetail({ ...checkout, ...change }, event, currentOps, quoteOps, pricingOps)).toThrow()
+  wrapper = mount(OrderHistoryDetails, { props:{ detail:checkout, orderOps:quoteOps, pricingOps }, global:{ plugins:[createSarafanVuetify()] } })
+  expect(wrapper.text()).toContain('Данные получателя сохранены. Способ доставки: Пункт выдачи.')
+})
