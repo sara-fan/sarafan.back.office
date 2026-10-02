@@ -4,6 +4,7 @@
 // This file is a part of the Sarafan application
 import { computed, ref } from 'vue'
 import ActionButton from './ActionButton.vue'
+import DateInput from './DateInput.vue'
 import { associatedFieldErrors } from '../errors/problem.js'
 defineOptions({ inheritAttrs:false })
 const props = defineProps({
@@ -45,15 +46,15 @@ const reveal = ref(false)
         v-else-if="type === 'date'"
         class="staff-form-control date-control"
       >
-        <input
+        <DateInput
           :id="name"
           v-model="model"
           v-bind="$attrs"
-          type="date"
+          :label="label"
           :name="name"
           :aria-invalid="errors.length > 0"
           :aria-describedby="`${hint ? `${name}-hint ` : ''}${name}-error`"
-        >
+        />
         <ActionButton
           icon="$brush"
           :tooltip-text="`Очистить дату: ${label.replace(/:$/, '')}`"
@@ -92,5 +93,5 @@ const reveal = ref(false)
 </template>
 <style scoped>
 .date-control { display:flex; align-items:center; gap:4px; min-width:0; }
-.date-control input { flex:1; min-width:0; }
+.date-control :deep(.staff-date-input) { flex:1; min-width:0; }
 </style>

@@ -4,6 +4,7 @@
 // This file is a part of the Sarafan application
 import { computed } from 'vue'
 import ListText from './ListText.vue'
+import { orderStatusName } from '../orderFormatting.js'
 
 const props = defineProps({
   status:{ type:Number, required:true },
@@ -13,13 +14,13 @@ const props = defineProps({
 const tones = new Map([
   ['under_review', ['#854D0E', '#FEF9C3']],
   ['quote_ready', ['#1D4ED8', '#DBEAFE']],
-  ['quote_expired', ['#9A3412', '#FFEDD5']],
+  ['quote_expired', ['#9A3412', '#FED7AA']],
   ['in_progress', ['#4338CA', '#E0E7FF']],
   ['received', ['#166534', '#DCFCE7']],
   ['cancelled', ['#475569', '#F1F5F9']]
 ])
 const metadata = computed(() => props.ops?.statuses.find(item => item.value === props.status))
-const label = computed(() => metadata.value?.name ?? '—')
+const label = computed(() => orderStatusName(props.status, props.ops))
 const colors = computed(() => {
   const tone = tones.get(metadata.value?.routeAlias) ?? tones.get(metadata.value?.upperStatusRouteAlias) ?? tones.get('cancelled')
   return { '--order-status-text':tone[0], '--order-status-background':tone[1] }

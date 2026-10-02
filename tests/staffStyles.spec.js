@@ -37,7 +37,7 @@ describe('shared staff screen styles', () => {
 
   it.each([
     ['OrderView.vue', 'product-grid'],
-    ['OrderView.vue', 'buyer-grid'],
+    ['OrderView.vue', 'information-grid'],
     ['LegalDocumentView.vue', 'legal-form-grid']
   ])('uses shared condensed row spacing in %s / %s', (name, section) => {
     const view = views.find(item => item.name === name)

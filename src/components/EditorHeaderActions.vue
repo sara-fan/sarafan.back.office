@@ -19,6 +19,7 @@ const emit = defineEmits(['refresh', 'cancel'])
 
 <template>
   <div class="header-action-groups">
+    <slot name="leading" />
     <div
       v-if="$slots.before"
       class="header-actions"

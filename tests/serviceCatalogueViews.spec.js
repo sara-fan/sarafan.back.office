@@ -228,7 +228,7 @@ describe('service catalogue editor', () => {
     await wrapper.get('#availableBy').setValue('2026-10-31')
     await wrapper.get('button[aria-label="Очистить дату: Действует с"]').trigger('click')
     expect(wrapper.get('#availableFrom').element.value).toBe('')
-    expect(wrapper.get('#availableBy').element.value).toBe('2026-10-31')
+    expect(wrapper.get('#availableBy').element.value).toBe('31.10.2026')
     await wrapper.get('button[aria-label="Очистить дату: Действует по"]').trigger('click')
     expect(wrapper.get('#availableBy').element.value).toBe('')
     expect(vm().form.availableBy).toBe('')

@@ -272,6 +272,7 @@ describe('RFC 9457 API client', () => {
     ['/api/v1/backoffice/stores/123/logo?v=private-digest', '/api/v1/backoffice/stores/{id}/logo'],
     ['/api/v1/backoffice/stores/01', undefined],
     ['/api/v1/backoffice/orders/12345678-1/product', '/api/v1/backoffice/orders/{number}/product'],
+    ['/api/v1/backoffice/orders/12345678-1/review/reject', '/api/v1/backoffice/orders/{number}/review/reject'],
     ['/api/v1/backoffice/legal-documents/AAAAAAAA-1111-2222-3333-BBBBBBBBBBBB', '/api/v1/backoffice/legal-documents/{id}'],
     ['/api/v1/backoffice/legal-documents/11111111-1111-1111-1111-111111111111/source', '/api/v1/backoffice/legal-documents/{id}/source'],
     ['/api/v1/backoffice/legal-documents/a', undefined],

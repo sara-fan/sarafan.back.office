@@ -3,7 +3,7 @@
 // This file is a part of the Sarafan application
 
 import { describe, expect, it } from 'vitest'
-import { dateIsValid, timestampIsValid, limitIsValid, validateProductLimits, validateOrderDetails, productForm, productValidation, priceCents, productPayload } from '../src/orderProduct.js'
+import { dateIsValid, timestampIsValid, limitIsValid, validateProductLimits, validateOrderDetails, productForm, productValidation, productExceedsLimit, priceCents, productPayload } from '../src/orderProduct.js'
 import { details, product, currencies, ops, productLimits, limit } from './fixtures/orderProduct.js'
 
 describe('order product contracts', () => {
@@ -17,7 +17,7 @@ describe('order product contracts', () => {
     expect(validateProductLimits(productLimits, currencies)).toBe(productLimits)
     expect(limitIsValid({ ...limit, available:false, sourceEffectiveDate:null, maximumTotalUsd:null }, currencies)).toBe(true)
   })
-  it.each([null, {}, { ...details, orderNumber:'bad' }, { ...details, status:999 }, { ...details, sourceUrl:4 },
+  it.each([null, {}, { ...details, orderNumber:'bad' }, { ...details, status:'999' }, { ...details, sourceUrl:4 },
     { ...details, createdAt:'2026-02-30T00:00:00Z' }, { ...details, updatedAt:'2020-01-01T00:00:00Z' },
     { ...details, product:null }, { ...details, product:{ ...product, color:3 } },
     { ...details, product:{ ...product, quantity:1.5 } }, { ...details, product:{ ...product, sellerPrice:{ amount:0, currency:840 } } },
@@ -28,7 +28,7 @@ describe('order product contracts', () => {
     { ...details, customer:{ ...details.customer, email:9 } }, { ...details, customer:{ ...details.customer, email:'x'.repeat(2001) } },
     { ...details, imageUrl:5 }, { ...details, dimensions:{} }, { ...details, dimensions:[] }, { ...details, savedLimitSourceEffectiveDate:'bad' },
     { ...details, characteristics:[] }, { ...details, characteristics:{ a:1 } }, { ...details, characteristics:{ '':'x' } },
-    { ...details, limitCheck:null }, { ...details, canEditProduct:null }, { ...details, status:300 }
+    { ...details, limitCheck:null }, { ...details, canEditProduct:null }, { ...details, status:300.5 }
   ])('rejects malformed detail DTO (%j)', value => {
     expect(() => validateOrderDetails(value, ops, details.orderNumber)).toThrow()
   })
@@ -68,7 +68,8 @@ describe('form rules and payload', () => {
     expect(priceCents('1')).toBe(100n)
     expect(priceCents('1.001')).toBeNull()
     form.sellerPrice = '281.26'
-    expect(productValidation(form, productLimits, limit).errors.sellerPrice).toEqual([limit.exceededMessage])
+    expect(productValidation(form, productLimits, limit)).toBeNull()
+    expect(productExceedsLimit(form, limit)).toBe(true)
     expect(productValidation(form, productLimits, { ...limit, available:false })).toBeNull()
     form.sellerPrice = '1124.99'; form.quantity = '1'
     expect(productValidation(form, productLimits, limit)).toBeNull()
@@ -82,6 +83,15 @@ describe('form rules and payload', () => {
     for (const sellerPrice of ['0', '100000000', '-1', '1e3']) expect(productValidation({ ...form, sellerPrice }, productLimits, limit).errors.sellerPrice).toBeDefined()
     expect(productValidation({ ...form, productName:'x'.repeat(501) }, productLimits, limit).errors.productName).toEqual(['Не более 500 символов.'])
   })
+  it.each(['', '  '])('requires name and price for staff corrections: %j', blank => {
+    const form = { ...productForm(product, productLimits), productName:blank, sellerPrice:blank }
+    expect(productValidation(form, productLimits).errors).toMatchObject({
+      productName:['Укажите название товара.'], sellerPrice:['Укажите положительную цену, не более двух знаков после запятой.']
+    })
+    const value = { ...details, status:999, canEditProduct:false }
+    expect(validateOrderDetails(value, ops, details.orderNumber)).toBe(value)
+    expect(() => validateOrderDetails({ ...value, status:'999' }, ops, details.orderNumber)).toThrow()
+  })
   it('whitelists payload and keeps server version verbatim', () => {
     const form = { ...productForm(product, productLimits), productName:' Чайник ', storeName:' Магазин 2 ', sellerPrice:'40,01', comment:' note ', size:' L ', sourceUrl:'evil' }
     expect(productPayload(form, productLimits, details.updatedAt)).toEqual({
@@ -92,3 +102,50 @@ describe('form rules and payload', () => {
     expect(productForm({ ...product, color:null, sellerPrice:{ amount:1, currency:978 } }, productLimits).sellerPrice).toBe('')
   })
 })
+
+describe('order delivery snapshot contract', () => {
+  it.each([
+    null,
+    { routeAlias:'pickup', name:'Пункт выдачи', destination:'Сохранённый ПВЗ: Москва, Улица, 1' },
+    { routeAlias:'courier', name:'Историческое название курьера', destination:'Тестовый адрес: Москва, Улица, 1' },
+    { routeAlias:'courier', name:'Курьер', destination:'а'.repeat(674) }
+  ])('accepts the order destination independently of profile fields and live options: %#', delivery => {
+    const value = { ...details, delivery }
+    expect(validateOrderDetails(value, ops, details.orderNumber)).toBe(value)
+  })
+  it.each([
+    undefined, {}, false, [],
+    { routeAlias:'other', name:'Способ', destination:'Адрес' },
+    { routeAlias:'courier', name:null, destination:'Адрес' },
+    { routeAlias:'courier', name:' ', destination:'Адрес' },
+    { routeAlias:'courier', name:'а'.repeat(501), destination:'Адрес' },
+    { routeAlias:'courier', name:'Курьер', destination:null },
+    { routeAlias:'courier', name:'Курьер', destination:' ' },
+    { routeAlias:'courier', name:'Курьер', destination:45 },
+    { routeAlias:'pickup', name:'ПВЗ', destination:'а'.repeat(675) }
+  ])('rejects incomplete or malformed saved delivery: %#', delivery => {
+    expect(() => validateOrderDetails({ ...details, delivery }, ops, details.orderNumber)).toThrow()
+  })
+})
+
+
+describe('tolerant order status reads', () => {
+  it.each([-1, 999, 1001, 300])('retains status %s and disables unsupported product editing', status => {
+    const value = { ...details, status, reviewCompletedAt:details.updatedAt };
+    expect(validateOrderDetails(value, ops, details.orderNumber)).toMatchObject({ status, canEditProduct:false, reviewCompletedAt:details.updatedAt });
+    expect(value.canEditProduct).toBe(true);
+  });
+  it.each([0, 300, 999])('retains valid completion evidence independently of status %s', status => {
+    const value = { ...details, status, canEditProduct:false, reviewReason:'Причина из сохранённых данных', reviewCompletedAt:details.updatedAt };
+    expect(validateOrderDetails(value, ops, details.orderNumber)).toBe(value);
+  });
+  it.each([{ reviewReason:' ' }, { reviewReason:7 }, { reviewReason:'a'.repeat(2001) },
+    { reviewCompletedAt:'bad' }, { reviewCompletedAt:'2026-09-14T00:00:00Z' }, { reviewCompletedAt:'2026-09-16T00:00:00Z' },
+    { status:600 }, { status:600, reviewReason:'Причина' }])('continues rejecting malformed evidence %#', change => {
+    expect(() => validateOrderDetails({ ...details, ...change }, ops, details.orderNumber)).toThrow();
+  });
+  it('reads CannotDeliver while normalizing stale edit permissions', () => {
+    expect(validateOrderDetails({ ...details, status:600, reviewReason:'Причина', reviewCompletedAt:details.updatedAt }, ops, details.orderNumber))
+      .toMatchObject({ status:600, canEditProduct:false });
+  });
+});

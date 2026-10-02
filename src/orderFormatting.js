@@ -112,14 +112,17 @@ export function safeOrderSource(value) {
   }
 }
 
+export function orderStatusName(value, ops) {
+  return ops?.statuses.find(item => item.value === value)?.name ?? `Статус ${value}`
+}
+
 export function orderRowIsValid(row, ops) {
-  const statusValues = new Set(ops.statuses.map(item => item.value))
   const currencyValues = new Set(ops.currencies.map(item => item.value))
   const created = new Date(row?.createdAt)
   const updated = new Date(row?.updatedAt)
   const price = row?.sellerPrice
   return typeof row?.orderNumber === 'string' && /^\d{8}-[1-9]\d*$/u.test(row.orderNumber)
-    && statusValues.has(row.status) && safeOrderSource(row.sourceUrl) !== null
+    && Number.isInteger(row.status) && safeOrderSource(row.sourceUrl) !== null
     && (row.productName === null || (typeof row.productName === 'string' && row.productName.length <= 500))
     && (row.storeName === null || (typeof row.storeName === 'string' && row.storeName.length <= 200))
     && Number.isInteger(row.quantity) && row.quantity > 0
