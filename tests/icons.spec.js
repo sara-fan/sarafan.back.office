@@ -13,6 +13,7 @@ const applicationAliases = {
   addUser:'fa-user-plus',
   audit:'fa-clock-rotate-left',
   block:'fa-user-slash',
+  cannotDeliver:'fa-bridge-circle-xmark',
   close:'fa-xmark',
   delete:'fa-trash-can',
   download:'fa-download',

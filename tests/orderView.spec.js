@@ -2,7 +2,7 @@
 // All rights reserved.
 // This file is a part of the Sarafan application
 
-import { mount, flushPromises } from '@vue/test-utils'
+import { mount, flushPromises, DOMWrapper } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { reactive, ref } from 'vue'
 import OrderView from '../src/views/OrderView.vue'
@@ -86,11 +86,14 @@ describe('staff order card', () => {
     expect(vm().details).toBeNull()
   })
   it('shows profile and recognition, edits store and sends only allowed fields with exact timestamp', async () => {
+    h.session.orderRequest.mockResolvedValueOnce({ ...details, customer:{ ...details.customer, passportIssueDate:'2010-02-03' } })
     await render()
     expect(wrapper.get('.order-state .order-status-pill').text()).toBe('На проверке')
     expect(wrapper.find('.order-state .order-validity').exists()).toBe(false)
     expect(wrapper.get('.order-dates').text()).toContain('Заказ создан:')
     expect(wrapper.text()).toContain('Иванов')
+    expect(wrapper.text()).toContain('03.02.2010')
+    expect(wrapper.text()).not.toContain('2010-02-03')
     expect(wrapper.text()).toContain('Не указано')
     expect(wrapper.text()).toContain('Габариты: 1 × 2 × 3 см')
     expect(wrapper.text()).toContain('Материал')
@@ -102,6 +105,11 @@ describe('staff order card', () => {
     ])
     expect(wrapper.text()).not.toContain('как на сайте')
     expect(wrapper.findAll('.buyer-field')).toHaveLength(Object.keys(details.customer).length)
+    expect(wrapper.findAll('.buyer-field').filter(field => field.text().includes('Телефон'))).toHaveLength(1)
+    expect(wrapper.text()).toContain(details.customer.phone)
+    expect(wrapper.text()).not.toContain('Дата рождения')
+    expect(wrapper.text()).not.toContain('Код подразделения')
+    expect(wrapper.text()).not.toContain('Телефон получателя')
     expect(wrapper.findAll('.buyer-field .staff-form-value').at(-1).text()).toBe('Не указано')
     expect(wrapper.findAll('.buyer-field .staff-form-value').every(field => field.classes().includes('staff-form-value--readonly'))).toBe(true)
     await wrapper.get('#productName').setValue(' Новое название ')
@@ -118,7 +126,7 @@ describe('staff order card', () => {
     h.session.orderRequest.mockResolvedValueOnce(result)
     await vm().save()
     expect(JSON.parse(h.session.orderRequest.mock.calls.at(-1)[1].body)).toEqual({
-      expectedUpdatedAt:details.updatedAt, storeName:'Новый магазин', productName:'Новое название', sellerPrice:{ amount:40, currency:840 }, quantity:1, color:'Красный', size:null, comment:null
+      expectedUpdatedAt:details.updatedAt, acceptValueLimitExceeded:false, storeName:'Новый магазин', productName:'Новое название', sellerPrice:{ amount:40, currency:840 }, quantity:1, color:'Красный', size:null, comment:null
     })
     expect(vm().dirty).toBe(false)
     expect(vm().details.updatedAt).toBe(result.updatedAt)
@@ -135,7 +143,12 @@ describe('staff order card', () => {
     expect(document.activeElement).toBe(wrapper.get('#quantity').element)
     await wrapper.get('#quantity').setValue('4')
     await wrapper.get('#sellerPrice').setValue('281.26')
-    expect(wrapper.text().match(/Максимальная стоимость заказа/g)).toHaveLength(1)
+    const saving = vm().save()
+    await flushPromises()
+    expect(vm().limitConfirmation).toBe(true)
+    expect(h.session.orderRequest).toHaveBeenCalledTimes(3)
+    vm().resolveValueLimit(false)
+    await saving
     await wrapper.get('#sellerPrice').setValue('abc')
     expect(vm().total).toBe('—')
     expect(wrapper.findAll('[role="alert"]')).toHaveLength(0)
@@ -215,10 +228,16 @@ describe('staff order card', () => {
     expect(wrapper.find('a').exists()).toBe(false)
     expect(wrapper.get('.product-page-link').text()).toBe('Страница товара недоступна')
     expect(wrapper.get('button[aria-label="Сохранить изменения"]').attributes('disabled')).toBeDefined()
-    expect(wrapper.get('.product-grid').attributes('disabled')).toBeDefined()
+    expect(wrapper.get('.product-grid').attributes('disabled')).toBeUndefined()
     expect(wrapper.get('.total-line .staff-form-value').classes()).toContain('staff-form-value--readonly')
     expect(wrapper.text()).toContain('Исправление товара временно недоступно')
     expect(wrapper.find('.saved-limit').exists()).toBe(false)
+    await wrapper.get('#sellerPrice').setValue('11')
+    expect(wrapper.get('.product-grid').attributes('disabled')).toBeUndefined()
+    await wrapper.get('#sellerPrice').setValue('')
+    expect(wrapper.get('.product-grid').attributes('disabled')).toBeUndefined()
+    expect(wrapper.get('button[aria-label="Сохранить изменения"]').attributes('disabled')).toBeUndefined()
+    await wrapper.get('#sellerPrice').setValue('11')
     await vm().save()
     expect(h.session.orderRequest).toHaveBeenCalledTimes(3)
   })
@@ -229,7 +248,13 @@ describe('staff order card', () => {
     expect(vm().editable).toBe(false)
     await flushPromises()
     expect(wrapper.find('button[aria-label="Сохранить изменения"]').exists()).toBe(false)
-    expect(wrapper.findAll('header .header-actions button').map(button => button.attributes('aria-label'))).toEqual(['История заказа', 'Обновить данные', 'Отменить'])
+    expect(wrapper.findAll('header .header-actions button').map(button => button.attributes('aria-label'))).toEqual([...(['administrator', 'shift-manager'].includes(role) ? ['Рассчитать и сохранить стоимость', 'Подтвердить сохранённый расчёт', 'Не можем привезти'] : []), 'История заказа', 'Обновить данные', 'Отменить'])
+    if (['administrator', 'shift-manager'].includes(role)) {
+      const reject = wrapper.get('button[aria-label="Не можем привезти"]')
+      expect(reject.classes()).not.toContain('action-button--labelled')
+      expect(reject.text()).toBe('')
+      expect(reject.get('.v-icon').classes()).toContain('fa-bridge-circle-xmark')
+    }
   })
   it('reloads a changed order number only after the dirty draft is confirmed', async () => {
     await render()
@@ -297,6 +322,14 @@ describe('pricing on the order card', () => {
   beforeEach(() => { h.session.user.value.roles = ['shift-manager'] })
   it('uses the existing inline editor, validates and normalizes manual amounts, and preserves customer choices', async () => {
     await render()
+    expect(wrapper.findAll('header .header-actions').map(group => group.findAll('button').map(button => button.attributes('aria-label')))).toEqual([
+      ['Рассчитать и сохранить стоимость', 'Подтвердить сохранённый расчёт', 'Не можем привезти'],
+      ['История заказа'], ['Обновить данные', 'Сохранить изменения', 'Отменить']
+    ])
+    expect(wrapper.findAll('button[aria-label="Рассчитать и сохранить стоимость"]')).toHaveLength(1)
+    expect(wrapper.findAll('button[aria-label="Подтвердить сохранённый расчёт"]')).toHaveLength(1)
+    expect(wrapper.text()).not.toContain('Для таможенных платежей 0 означает')
+    expect(wrapper.text()).not.toContain('Определите таможенные платежи и сохраните расчёт')
     expect(wrapper.find('input[type="checkbox"]').exists()).toBe(false)
     await edit('-1')
     expect(calculate().attributes('disabled')).toBeDefined()
@@ -584,5 +617,107 @@ describe('order confirmation action selection', () => {
     const leaving = h.leave({ path:'/orders/12345678-1/history' })
     wrapper.unmount(); wrapper = null
     expect(await leaving).toBe(false)
+  })
+})
+
+
+describe('review reconciliation actions', () => {
+  it('requires acknowledgement before saving an over-limit draft', async () => {
+    await render()
+    await wrapper.get('#sellerPrice').setValue('1200')
+    const saving = vm().save()
+    await flushPromises()
+    expect(h.session.orderRequest).toHaveBeenCalledTimes(3)
+    expect(vm().limitConfirmation).toBe(true)
+    const accepted = { ...details, product:{ ...details.product, sellerPrice:{ amount:1200, currency:840 } }, updatedAt:'2026-09-15T12:00:00Z' }
+    h.session.orderRequest.mockResolvedValueOnce(accepted)
+    wrapper.getComponent(ConfirmDialog).vm.$emit('confirm')
+    await saving
+    expect(JSON.parse(h.session.orderRequest.mock.calls.at(-1)[1].body).acceptValueLimitExceeded).toBe(true)
+    expect(vm().dirty).toBe(false)
+    expect(h.push).toHaveBeenCalledWith('/orders')
+  })
+  it('cancels review actions without saving or losing the product draft', async () => {
+    h.session.user.value = { id:1, roles:['shift-manager'] }
+    await render()
+    await wrapper.get('button[aria-label="Не можем привезти"]').trigger('click')
+    await flushPromises()
+    await new DOMWrapper(document.querySelector('button[aria-label="Отмена"]')).trigger('click')
+    expect(vm().rejectionOpen).toBe(false)
+    await wrapper.get('button[aria-label="Не можем привезти"]').trigger('click')
+    await flushPromises()
+    wrapper.getComponent({ name:'VDialog' }).vm.$emit('update:modelValue', false)
+    expect(vm().rejectionOpen).toBe(false)
+    await wrapper.get('#sellerPrice').setValue('1200')
+    const saving = vm().save()
+    await flushPromises()
+    wrapper.getComponent(ConfirmDialog).vm.$emit('cancel')
+    await saving
+    expect(h.session.orderRequest).toHaveBeenCalledTimes(3)
+    expect(vm().dirty).toBe(true)
+    expect(vm().form.sellerPrice).toBe('1200')
+    expect(h.push).not.toHaveBeenCalled()
+  })
+  it('discards acknowledgement when the staff identity changes' , async () => {
+    await render()
+    await wrapper.get('#sellerPrice').setValue('1200')
+    const saving = vm().save(); await flushPromises()
+    h.session.user.value = { id:2, roles:['operator'] }
+    await saving
+    expect(h.session.orderRequest).toHaveBeenCalledTimes(3)
+    expect(vm().limitConfirmation).toBe(false)
+  })
+  it('finishes review with a versioned free-text reason and displays it safely', async () => {
+    h.session.user.value = { id:1, roles:['shift-manager'] }
+    await render()
+    await wrapper.get('button[aria-label="Не можем привезти"]').trigger('click')
+    await flushPromises()
+    await new DOMWrapper(document.querySelector('input[name="reason"]')).setValue(' <script>text</script> ')
+    const rejected = { ...details, status:600, canEditProduct:false, updatedAt:'2026-09-15T12:00:00Z', reviewCompletedAt:'2026-09-15T12:00:00Z', reviewReason:'<script>text</script>' }
+    h.session.orderRequest.mockResolvedValueOnce(rejected)
+      .mockResolvedValueOnce(rejected).mockResolvedValueOnce(pricingOps).mockResolvedValueOnce({ ...pricingDetails, canEdit:false, canConfirm:false })
+    await vm().submitRejection(); await flushPromises()
+    expect(h.session.orderRequest.mock.calls[3][0]).toBe('/orders/12345678-1/review/reject')
+    expect(JSON.parse(h.session.orderRequest.mock.calls[3][1].body)).toEqual({ expectedUpdatedAt:details.updatedAt, reason:'<script>text</script>' })
+    expect(vm().details.status).toBe(600)
+    expect(wrapper.text()).toContain('<script>text</script>')
+    expect(wrapper.find('script').exists()).toBe(false)
+    expect(wrapper.find('button[aria-label="Не можем привезти"]').exists()).toBe(false)
+  })
+  it('preserves a failed rejection reason and focuses a local length error', async () => {
+    h.session.user.value = { id:1, roles:['shift-manager'] }
+    await render()
+    vm().rejectionOpen = true; vm().rejectionReason = 'я'.repeat(2001)
+    await flushPromises(); await vm().submitRejection()
+    expect(h.session.orderRequest).toHaveBeenCalledTimes(3)
+    expect(vm().problem.errors.reason[0]).toContain('2000')
+    expect(vm().rejectionReason).toHaveLength(2001)
+    vm().rejectionReason = 'Причина'
+    h.session.orderRequest.mockRejectedValueOnce(remote(CORE_PROBLEM_TYPES.orderUpdateConflict))
+    await vm().submitRejection()
+    expect(vm().locked).toBe(true)
+    expect(vm().rejectionOpen).toBe(true)
+    expect(vm().rejectionReason).toBe('Причина')
+    await flushPromises()
+    const dialog = new DOMWrapper(document.querySelector('.confirm-card'))
+    expect(dialog.get('[role="alert"]').text()).toContain('Обновите данные заказа.')
+    expect(dialog.get('button[aria-label="Завершить проверку"]').element.disabled).toBe(true)
+    expect(wrapper.find('[role="alert"]').exists()).toBe(false)
+    await dialog.get('button[aria-label="Обновить заказ"]').trigger('click'); await flushPromises()
+    expect(vm().locked).toBe(false)
+    expect(vm().rejectionOpen).toBe(false)
+  })
+  it('presents transport failures inside the rejection dialog and keeps its reason available for retry', async () => {
+    h.session.user.value = { id:1, roles:['shift-manager'] }
+    await render()
+    await wrapper.get('button[aria-label="Не можем привезти"]').trigger('click'); await flushPromises()
+    const dialog = new DOMWrapper(document.querySelector('.confirm-card'))
+    await dialog.get('input[name="reason"]').setValue('Причина')
+    h.session.orderRequest.mockRejectedValueOnce(createInternalProblem('networkUnavailable'))
+    await dialog.get('button[aria-label="Завершить проверку"]').trigger('click'); await flushPromises()
+    expect(dialog.get('[role="alert"]').text()).not.toBe('')
+    expect(dialog.get('input[name="reason"]').element.value).toBe('Причина')
+    expect(dialog.get('button[aria-label="Завершить проверку"]').element.disabled).toBe(false)
+    expect(wrapper.find('[role="alert"]').exists()).toBe(false)
   })
 })

@@ -3,7 +3,7 @@
 // This file is a part of the Sarafan application
 
 import { describe, expect, it } from 'vitest'
-import { dateIsValid, timestampIsValid, limitIsValid, validateProductLimits, validateOrderDetails, productForm, productValidation, priceCents, productPayload } from '../src/orderProduct.js'
+import { dateIsValid, timestampIsValid, limitIsValid, validateProductLimits, validateOrderDetails, productForm, productValidation, productExceedsLimit, priceCents, productPayload } from '../src/orderProduct.js'
 import { details, product, currencies, ops, productLimits, limit } from './fixtures/orderProduct.js'
 
 describe('order product contracts', () => {
@@ -68,14 +68,15 @@ describe('form rules and payload', () => {
     expect(priceCents('1')).toBe(100n)
     expect(priceCents('1.001')).toBeNull()
     form.sellerPrice = '281.26'
-    expect(productValidation(form, productLimits, limit).errors.sellerPrice).toEqual([limit.exceededMessage])
+    expect(productValidation(form, productLimits, limit)).toBeNull()
+    expect(productExceedsLimit(form, limit)).toBe(true)
     expect(productValidation(form, productLimits, { ...limit, available:false })).toBeNull()
     form.sellerPrice = '1124.99'; form.quantity = '1'
     expect(productValidation(form, productLimits, limit)).toBeNull()
   })
   it('preserves invalid input and reports all fields', () => {
     const form = { productName:'', storeName:'m'.repeat(201), sellerPrice:'abc', quantity:'1.5', color:'c'.repeat(201), size:'s'.repeat(201), comment:'x'.repeat(2001) }
-    expect(Object.keys(productValidation(form, productLimits, limit).errors)).toHaveLength(7)
+    expect(Object.keys(productValidation(form, productLimits, limit).errors)).toHaveLength(6)
     expect(form.quantity).toBe('1.5')
     for (const quantity of ['0', '-1', 'abc', '999999999999999999999999']) expect(productValidation({ ...form, quantity }, productLimits, limit).errors.quantity).toBeDefined()
     expect(productValidation({ ...form, quantity:'5' }, productLimits, limit).errors.quantity).toEqual(['Такое количество товара может быть признано коммерческой партией и запрещено к ввозу'])

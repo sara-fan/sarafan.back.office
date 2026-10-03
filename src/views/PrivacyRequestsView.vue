@@ -9,6 +9,7 @@ import { validDate } from '../orderFormatting.js'
 import ListText from '../components/ListText.vue'
 import ActionButton from '../components/ActionButton.vue'
 import ListFilterBar from '../components/ListFilterBar.vue'
+import DateInput from '../components/DateInput.vue'
 import PageAlertRegion from '../components/PageAlertRegion.vue'
 import { moscowTime } from '../consentFormatting.js'
 import { createInternalProblem, normalizeProblem } from '../errors/problem.js'
@@ -262,13 +263,13 @@ onUnmounted(() => {
         hide-details
         @update:model-value="onProcessedChange"
       />
-      <v-text-field
+      <DateInput
         id="privacy-request-from"
         :model-value="requestedFrom"
         :max="requestedTo || undefined"
         class="filter-control"
         label="Дата с"
-        type="date"
+        :allow-invalid="false"
         variant="solo"
         density="compact"
         active
@@ -277,13 +278,13 @@ onUnmounted(() => {
         clear-icon="$brush"
         @update:model-value="onDateChange('requestedFrom', $event)"
       />
-      <v-text-field
+      <DateInput
         id="privacy-request-to"
         :model-value="requestedTo"
         :min="requestedFrom || undefined"
         class="filter-control"
         label="Дата по"
-        type="date"
+        :allow-invalid="false"
         variant="solo"
         density="compact"
         active

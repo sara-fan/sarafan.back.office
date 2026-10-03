@@ -62,7 +62,7 @@ fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
 .count { display: inline-block; padding: 3px 9px; color: var(--primary); font-size: 14px; font-weight: 650; vertical-align: middle; background: #e4f2fa; border-radius: 12px; }
 .header-actions { display: flex; align-items: center; gap: 3px; flex: 0 0 auto; padding: 5px 7px; background: #fff; border: 1px solid #9aa8b5; border-radius: 7px; box-shadow: 0 2px 5px rgb(21 50 77 / 10%); }
 .header-with-actions:has(> .header-action-groups) { flex-wrap: wrap; }
-.header-action-groups { display: flex; align-items: center; justify-content: flex-end; gap: 12px; flex: 0 0 auto; margin-left: auto; }
+.header-action-groups { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 12px; flex: 0 0 auto; max-width: 100%; margin-left: auto; }
 .header-spinner { width: 18px; height: 18px; margin: 0 7px; border: 2px solid #c6dce9; border-top-color: var(--primary); border-radius: 50%; animation: header-spin .75s linear infinite; }
 @keyframes header-spin { to { transform: rotate(360deg); } }
 .hr { height: 2px; margin: 7px 0 20px; background: var(--primary); border: 0; }

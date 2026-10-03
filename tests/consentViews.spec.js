@@ -406,8 +406,8 @@ it('filters withdrawal dates, persists the range and validates calendar dates', 
   expect(vm().problem).toBeNull()
   wrapper.unmount()
   render(PrivacyRequestsView); await flushPromises()
-  expect(wrapper.get('#privacy-request-from').element.value).toBe('2026-09-01')
-  expect(wrapper.get('#privacy-request-to').element.value).toBe('2026-09-16')
+  expect(wrapper.get('#privacy-request-from').element.value).toBe('01.09.2026')
+  expect(wrapper.get('#privacy-request-to').element.value).toBe('16.09.2026')
   const calls = h.session.consentRequest.mock.calls.length
   vm().onDateChange('requestedTo', '2026-08-31')
   vm().onDateChange('requestedFrom', '2026-02-30')

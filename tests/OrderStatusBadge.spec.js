@@ -9,7 +9,7 @@ describe('OrderStatusBadge', () => {
   it.each([
     ['under_review', 'under_review', '#854D0E', '#FEF9C3'],
     ['quote_ready', 'quote_ready', '#1D4ED8', '#DBEAFE'],
-    ['quote_expired', 'quote_expired', '#9A3412', '#FFEDD5'],
+    ['quote_expired', 'quote_expired', '#9A3412', '#FED7AA'],
     ...['paid', 'purchasing_item', 'delivering_to_us_warehouse', 'delivered_to_us_warehouse',
       'delivering_to_russia', 'delivered_to_russian_warehouse', 'delivering_in_russia']
       .map(alias => [alias, 'in_progress', '#4338CA', '#E0E7FF']),
