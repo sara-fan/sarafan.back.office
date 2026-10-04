@@ -6,6 +6,7 @@ import ActionButton from './ActionButton.vue'
 defineProps({
   open:Boolean,
   busy:Boolean,
+  actionDisabled:Boolean,
   actionVariant:{ type:String, default:'orange' },
   secondaryAction:{ type:String, default:'' },
   title:{ type:String, default:'Подтвердите действие' },
@@ -51,7 +52,7 @@ defineEmits(['confirm','cancel','secondary'])
           @click="$emit('secondary')"
         />
         <ActionButton
-          :disabled="busy"
+          :disabled="busy || actionDisabled"
           :variant="actionVariant"
           :icon="actionIcon"
           :label="action"
