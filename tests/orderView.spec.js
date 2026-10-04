@@ -101,7 +101,7 @@ describe('staff order card', () => {
     expect(wrapper.get('.product-page-link').text()).toBe('Страница товара')
     expect(wrapper.get('.product-page-link').attributes('rel')).toBe('noopener noreferrer')
     expect(wrapper.findAll('.product-grid label').map(label => label.text())).toEqual([
-      'Название товара', 'Магазин', 'Цена за единицу, $', 'Количество', 'Цвет', 'Размер', 'Комментарий'
+      'Название товара', 'Магазин', 'Цена за единицу, $', 'Количество', 'Общая цена, $', 'Цвет', 'Размер', 'Комментарий'
     ])
     expect(wrapper.text()).not.toContain('как на сайте')
     expect(wrapper.findAll('.buyer-field')).toHaveLength(Object.keys(details.customer).length)
@@ -126,7 +126,7 @@ describe('staff order card', () => {
     h.session.orderRequest.mockResolvedValueOnce(result)
     await vm().save()
     expect(JSON.parse(h.session.orderRequest.mock.calls.at(-1)[1].body)).toEqual({
-      expectedUpdatedAt:details.updatedAt, acceptValueLimitExceeded:false, storeName:'Новый магазин', productName:'Новое название', sellerPrice:{ amount:40, currency:840 }, quantity:1, color:'Красный', size:null, comment:null
+      expectedUpdatedAt:details.updatedAt, storeName:'Новый магазин', productName:'Новое название', sellerPrice:{ amount:40, currency:840 }, quantity:1, color:'Красный', size:null, comment:null
     })
     expect(vm().dirty).toBe(false)
     expect(vm().details.updatedAt).toBe(result.updatedAt)
@@ -142,15 +142,22 @@ describe('staff order card', () => {
     expect(h.session.orderRequest).toHaveBeenCalledTimes(3)
     expect(document.activeElement).toBe(wrapper.get('#quantity').element)
     await wrapper.get('#quantity').setValue('4')
+    await wrapper.get('#sellerPrice').setValue('281,25')
+    expect(wrapper.get('#sellerTotal-error').text()).toBe('')
     await wrapper.get('#sellerPrice').setValue('281.26')
-    const saving = vm().save()
-    await flushPromises()
-    expect(vm().limitConfirmation).toBe(true)
+    expect(wrapper.get('#sellerTotal-error').text()).toBe(limit.exceededMessage)
+    expect(wrapper.get('#sellerTotal').attributes('aria-describedby')).toBe('sellerTotal-error')
+    expect(wrapper.get('button[aria-label="Сохранить изменения"]').element.disabled).toBe(true)
+    expect(wrapper.get('#sellerPrice').attributes('aria-describedby')).toContain('sellerTotal-error')
+    expect(wrapper.get('#sellerPrice').attributes('aria-invalid')).toBe('true')
+    expect(wrapper.findAll('[role="alert"]')).toHaveLength(0)
+    await vm().save()
     expect(h.session.orderRequest).toHaveBeenCalledTimes(3)
-    vm().resolveValueLimit(false)
-    await saving
+    expect(document.activeElement).toBe(wrapper.get('#sellerPrice').element)
+    expect(wrapper.findAllComponents(ConfirmDialog).every(dialog => !dialog.props('open'))).toBe(true)
     await wrapper.get('#sellerPrice').setValue('abc')
     expect(vm().total).toBe('—')
+    expect(wrapper.get('#sellerTotal-error').text()).toBe('')
     expect(wrapper.findAll('[role="alert"]')).toHaveLength(0)
     await wrapper.get('#comment').setValue('x'.repeat(2001))
     expect(wrapper.get('#comment-error').text()).toContain('2000')
@@ -232,7 +239,8 @@ describe('staff order card', () => {
     expect(wrapper.get('.total-line .staff-form-value').classes()).toContain('staff-form-value--readonly')
     expect(wrapper.text()).toContain('Исправление товара временно недоступно')
     expect(wrapper.find('.saved-limit').exists()).toBe(false)
-    await wrapper.get('#sellerPrice').setValue('11')
+    await wrapper.get('#sellerPrice').setValue('14009,99')
+    expect(wrapper.get('#sellerTotal-error').text()).toBe('')
     expect(wrapper.get('.product-grid').attributes('disabled')).toBeUndefined()
     await wrapper.get('#sellerPrice').setValue('')
     expect(wrapper.get('.product-grid').attributes('disabled')).toBeUndefined()
@@ -487,6 +495,23 @@ describe('pricing recovery and field errors', () => {
 
 
 describe('save before order navigation', () => {
+  it.each([{ quantity:'1', price:'1200' }, { quantity:'5', price:'40' }])('disables saving before departure for an exceeded limit: %s', async ({ quantity, price }) => {
+    await render()
+    await wrapper.get('#quantity').setValue(quantity)
+    await wrapper.get('#sellerPrice').setValue(price)
+    const leaving = h.leave({ path:'/orders/12345678-1/history' })
+    await flushPromises()
+    const dialog = wrapper.findComponent(ConfirmDialog)
+    expect(dialog.props('actionDisabled')).toBe(true)
+    expect(document.querySelector('button[aria-label="Сохранить и продолжить"]').disabled).toBe(true)
+    expect(document.querySelector('button[aria-label="Не сохранять и продолжить"]').disabled).toBe(false)
+    await vm().saveAndContinue()
+    expect(await leaving).toBe(false)
+    expect(h.session.orderRequest).toHaveBeenCalledTimes(3)
+    expect(vm().form.quantity).toBe(quantity)
+    expect(vm().form.sellerPrice).toBe(price)
+    expect(h.push).not.toHaveBeenCalled()
+  })
   it('saves a product and resolves the pending departure without redirecting to the list', async () => {
     await render(); await wrapper.get('#size').setValue('XL')
     const leaving = h.leave({ path:'/orders/12345678-1/history' })
@@ -622,20 +647,16 @@ describe('order confirmation action selection', () => {
 
 
 describe('review reconciliation actions', () => {
-  it('requires acknowledgement before saving an over-limit draft', async () => {
+  it('blocks an over-limit draft without requesting acknowledgement or saving', async () => {
     await render()
     await wrapper.get('#sellerPrice').setValue('1200')
-    const saving = vm().save()
-    await flushPromises()
+    expect(wrapper.get('button[aria-label="Сохранить изменения"]').element.disabled).toBe(true)
+    await vm().save()
     expect(h.session.orderRequest).toHaveBeenCalledTimes(3)
-    expect(vm().limitConfirmation).toBe(true)
-    const accepted = { ...details, product:{ ...details.product, sellerPrice:{ amount:1200, currency:840 } }, updatedAt:'2026-09-15T12:00:00Z' }
-    h.session.orderRequest.mockResolvedValueOnce(accepted)
-    wrapper.getComponent(ConfirmDialog).vm.$emit('confirm')
-    await saving
-    expect(JSON.parse(h.session.orderRequest.mock.calls.at(-1)[1].body).acceptValueLimitExceeded).toBe(true)
-    expect(vm().dirty).toBe(false)
-    expect(h.push).toHaveBeenCalledWith('/orders')
+    expect(wrapper.findAllComponents(ConfirmDialog).every(dialog => !dialog.props('open'))).toBe(true)
+    expect(vm().form.sellerPrice).toBe('1200')
+    expect(vm().dirty).toBe(true)
+    expect(h.push).not.toHaveBeenCalled()
   })
   it('cancels review actions without saving or losing the product draft', async () => {
     h.session.user.value = { id:1, roles:['shift-manager'] }
@@ -649,23 +670,22 @@ describe('review reconciliation actions', () => {
     wrapper.getComponent({ name:'VDialog' }).vm.$emit('update:modelValue', false)
     expect(vm().rejectionOpen).toBe(false)
     await wrapper.get('#sellerPrice').setValue('1200')
-    const saving = vm().save()
-    await flushPromises()
-    wrapper.getComponent(ConfirmDialog).vm.$emit('cancel')
-    await saving
+    await vm().save()
+    expect(wrapper.findAllComponents(ConfirmDialog).every(dialog => !dialog.props('open'))).toBe(true)
     expect(h.session.orderRequest).toHaveBeenCalledTimes(3)
     expect(vm().dirty).toBe(true)
     expect(vm().form.sellerPrice).toBe('1200')
     expect(h.push).not.toHaveBeenCalled()
   })
-  it('discards acknowledgement when the staff identity changes' , async () => {
+  it('clears an over-limit draft when the staff identity changes', async () => {
     await render()
     await wrapper.get('#sellerPrice').setValue('1200')
-    const saving = vm().save(); await flushPromises()
+    await vm().save()
     h.session.user.value = { id:2, roles:['operator'] }
-    await saving
+    await flushPromises()
     expect(h.session.orderRequest).toHaveBeenCalledTimes(3)
-    expect(vm().limitConfirmation).toBe(false)
+    expect(vm().form).toBeNull()
+    expect(vm().details).toBeNull()
   })
   it('finishes review with a versioned free-text reason and displays it safely', async () => {
     h.session.user.value = { id:1, roles:['shift-manager'] }
@@ -927,3 +947,45 @@ describe('review rejection independent of pricing', () => {
     expect(h.session.orderRequest).toHaveBeenCalledTimes(before);
   });
 });
+
+it('shows both quantity and value-limit messages below their controls without changing the draft', async () => {
+  await render()
+  await wrapper.get('#quantity').setValue('7')
+  await wrapper.get('#sellerPrice').setValue('14009,99')
+  expect(wrapper.get('#quantity-error').text()).toContain('Такое количество товара')
+  const totalField = wrapper.get('.total-line')
+  expect(totalField.get('output').text()).toBe('98\u00a0069,93')
+  expect(totalField.get('label').attributes('for')).toBe('sellerTotal')
+  expect(totalField.get('.field-error').text()).toBe(limit.exceededMessage)
+  expect(wrapper.text().split(limit.exceededMessage)).toHaveLength(2)
+  expect(wrapper.findAll('[role="alert"]')).toHaveLength(0)
+  expect(vm().form.quantity).toBe('7')
+  expect(vm().form.sellerPrice).toBe('14009,99')
+  expect(wrapper.get('button[aria-label="Сохранить изменения"]').element.disabled).toBe(true)
+  await vm().save()
+  expect(h.session.orderRequest).toHaveBeenCalledTimes(3)
+  await wrapper.get('#sellerPrice').setValue('100')
+  expect(totalField.get('.field-error').text()).toBe('')
+  expect(wrapper.get('#quantity-error').text()).toContain('Такое количество товара')
+  expect(wrapper.get('button[aria-label="Сохранить изменения"]').element.disabled).toBe(true)
+  await vm().save()
+  expect(h.session.orderRequest).toHaveBeenCalledTimes(3)
+  await wrapper.get('#quantity').setValue('4')
+  await wrapper.get('#sellerPrice').setValue('281,25')
+  expect(wrapper.get('#quantity-error').text()).toBe('')
+  expect(totalField.get('.field-error').text()).toBe('')
+  expect(wrapper.get('button[aria-label="Сохранить изменения"]').element.disabled).toBe(false)
+})
+it('does not duplicate an authoritative unit-price error beside the calculated total', async () => {
+  await render()
+  await wrapper.get('#sellerPrice').setValue('1200')
+  expect(wrapper.get('#sellerTotal-error').text()).toBe(limit.exceededMessage)
+  vm().problem = createInternalProblem('invalidInput', { errors:{ sellerPrice:[limit.exceededMessage] } })
+  await flushPromises()
+  expect(wrapper.get('#sellerPrice-error').text()).toBe(limit.exceededMessage)
+  expect(wrapper.get('#sellerTotal-error').text()).toBe('')
+  expect(wrapper.text().split(limit.exceededMessage)).toHaveLength(2)
+  expect(wrapper.get('button[aria-label="Сохранить изменения"]').element.disabled).toBe(true)
+  await vm().save()
+  expect(h.session.orderRequest).toHaveBeenCalledTimes(3)
+})

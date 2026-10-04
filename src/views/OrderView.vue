@@ -23,7 +23,7 @@ import { CUSTOMER_FIELDS, PRODUCT_FIELDS, productExceedsLimit, priceCents, produ
 import { can } from '../roles.js'
 import { useSession } from '../stores/session.js'
 
-const limitConfirmation = ref(false), rejectionOpen = ref(false), rejectionReason = ref(''), rejectionRoot = ref(null)
+const rejectionOpen = ref(false), rejectionReason = ref(''), rejectionRoot = ref(null)
 const focusRoot = ref(null)
 const costSummary = ref(null), continuing = ref(false)
 const productExpanded = ref(true)
@@ -58,7 +58,6 @@ const historyContinuation = ref(false)
 const locked = ref(false)
 let version = 0
 let confirmAction = null
-let resolveLimit = null
 const dirty = computed(() => productDirty.value || pricingDirty.value || pricingEditing.value)
 const editable = computed(() => details.value?.canEditProduct && can(session.user.value, 'manualQuotes') && !locked.value)
 const productEditingEnabled = computed(() => editable.value)
@@ -67,6 +66,11 @@ const limitRatesUnavailable = computed(() => editable.value && details.value?.li
 const localProblem = computed(() => productEditingEnabled.value && form.value
   ? productValidation(form.value, ops.value.productLimits, details.value.limitCheck) : null)
 const fieldProblem = computed(() => problem.value ?? localProblem.value)
+const valueLimitExceeded = computed(() => productEditingEnabled.value && form.value && productExceedsLimit(form.value, details.value.limitCheck))
+const productSaveBlocked = computed(() => !productSavingEnabled.value || !!localProblem.value || valueLimitExceeded.value)
+const totalLimitProblem = computed(() => valueLimitExceeded.value
+  && !problemFieldErrors(fieldProblem.value, 'sellerPrice').length
+  ? createInternalProblem('invalidInput', { errors:{ sellerTotal:[details.value.limitCheck.exceededMessage] } }) : null)
 const pricingFields = computed(() => pricingEditable.value && pricing.value && manualPricingTariffs(pricing.value, pricingOps.value).some(item =>
   !optionalServices(pricingOps.value).some(service => service.value === item.service) || pricing.value.calculation.inputs.selectedServices.includes(item.service)) ? ['manualAmounts'] : [])
 const pageProblem = computed(() => formPageProblem(fieldProblem.value, [...(details.value && form.value ? PRODUCT_FIELDS : []), ...pricingFields.value]))
@@ -140,7 +144,7 @@ function apply(value) {
 }
 
 async function load() {
-  resolveValueLimit(false); rejectionOpen.value = false
+  rejectionOpen.value = false
   const current = ++version
   busy.value = true
   problem.value = null
@@ -164,24 +168,15 @@ async function load() {
   } finally { if (current === version) busy.value = false }
 }
 
-async function saveAction(acceptValueLimitExceeded = false) {
-  if (busy.value || !productSavingEnabled.value || localProblem.value || pricingDirty.value || pricingEditing.value) return
-  if (limitConfirmation.value) return
-  if (!acceptValueLimitExceeded && productExceedsLimit(form.value, details.value.limitCheck)) {
-    const context = JSON.stringify([session.user.value?.id, number.value, details.value.updatedAt, form.value])
-    limitConfirmation.value = true
-    const accepted = await new Promise(resolve => { resolveLimit = resolve })
-    if (!accepted || context !== JSON.stringify([session.user.value?.id, number.value, details.value?.updatedAt, form.value])) return
-    return saveAction(true)
-  }
-  limitConfirmation.value = false
+async function saveAction() {
+  if (busy.value || productSaveBlocked.value || pricingDirty.value || pricingEditing.value) return
   const current = ++version
   busy.value = true
   problem.value = null
   try {
     const result = await session.orderRequest(`/orders/${number.value}/product`, {
       method:'PUT', headers:{ 'Content-Type':'application/json' },
-      body:JSON.stringify({ ...productPayload(form.value, ops.value.productLimits, details.value.updatedAt), acceptValueLimitExceeded })
+      body:JSON.stringify(productPayload(form.value, ops.value.productLimits, details.value.updatedAt))
     })
     if (current === version) {
       apply(result)
@@ -194,11 +189,6 @@ async function saveAction(acceptValueLimitExceeded = false) {
   } finally { if (current === version) busy.value = false }
 }
 
-function resolveValueLimit(accepted) {
-  limitConfirmation.value = false
-  resolveLimit?.(accepted)
-  resolveLimit = null
-}
 async function rejectReview() {
   if (busy.value || locked.value || dirty.value || !canRejectReview.value || !rejectionOpen.value) return
   const reason = rejectionReason.value.trim()
@@ -262,7 +252,7 @@ async function saveAndContinue() {
     await nextTick()
     if (action !== confirmAction) return
     if (pricingEditing.value && !costSummary.value?.applyEdits()) return
-    if (productDirty.value) { productExpanded.value = true; saved = await focusAfter(() => saveAction(), () => validationFields(fieldProblem.value)) }
+    if (productDirty.value) { productExpanded.value = true; saved = await focusAfter(() => saveAction(), productValidationFields) }
     else if (pricingDirty.value) saved = await calculatePrice()
     else saved = !locked.value
   } finally {
@@ -301,7 +291,7 @@ function beforeUnload(event) {
   event.returnValue = ''
 }
 function clear() {
-  resolveValueLimit(false); rejectionOpen.value = false; rejectionReason.value = ""
+  rejectionOpen.value = false; rejectionReason.value = ""
   version += 1
   details.value = null
   form.value = null
@@ -322,9 +312,12 @@ watch(() => route.params.orderNumber, () => {
 }, { flush:'sync' })
 onMounted(() => { globalThis.addEventListener('beforeunload', beforeUnload); load() })
 onUnmounted(() => { clear(); globalThis.removeEventListener('beforeunload', beforeUnload) })
+function productValidationFields() {
+  return [...validationFields(fieldProblem.value), ...validationFields(totalLimitProblem.value, { aliases:{ sellerTotal:'sellerPrice' } })]
+}
 async function save() {
   productExpanded.value = true
-  const saved = await focusAfter(saveAction, () => validationFields(fieldProblem.value))
+  const saved = await focusAfter(saveAction, productValidationFields)
   if (saved) await back()
   return saved
 }
@@ -344,7 +337,7 @@ const focusAfter = useValidationFocus(focusRoot, { context:() => [session.user.v
         :loaded="!!details"
         :busy="busy"
         :show-save="!!details?.canEditProduct && can(session.user.value, 'manualQuotes')"
-        :save-disabled="!productSavingEnabled || !!localProblem || !productDirty || pricingDirty || pricingEditing"
+        :save-disabled="productSaveBlocked || !productDirty || pricingDirty || pricingEditing"
         @refresh="refresh"
         @cancel="back"
       >
@@ -472,7 +465,16 @@ const focusAfter = useValidationFocus(focusRoot, { context:() => [session.user.v
                 :label="`Цена за единицу, ${dollarSymbol}`"
                 inputmode="decimal"
                 :problem="fieldProblem"
-              />
+              >
+                <template #control="{ controlAttrs }">
+                  <input
+                    v-model="form.sellerPrice"
+                    v-bind="controlAttrs"
+                    :aria-invalid="controlAttrs['aria-invalid'] || !!totalLimitProblem"
+                    :aria-describedby="`${controlAttrs['aria-describedby']} sellerTotal-error`"
+                  >
+                </template>
+              </FormField>
             </div>
             <div class="quantity-cell">
               <FormField
@@ -483,9 +485,19 @@ const focusAfter = useValidationFocus(focusRoot, { context:() => [session.user.v
                 :problem="fieldProblem"
               />
             </div>
-            <div class="staff-form-row total-line">
-              <span class="staff-form-label">Общая цена, {{ dollarSymbol }}</span>
-              <span class="staff-form-value staff-form-value--readonly">{{ total }}</span>
+            <div class="total-line">
+              <FormField
+                name="sellerTotal"
+                :label="`Общая цена, ${dollarSymbol}`"
+                :problem="totalLimitProblem"
+              >
+                <template #control="{ controlAttrs }">
+                  <output
+                    v-bind="controlAttrs"
+                    class="staff-form-value staff-form-value--readonly"
+                  >{{ total }}</output>
+                </template>
+              </FormField>
             </div>
             <div class="color-cell">
               <FormField
@@ -585,16 +597,6 @@ const focusAfter = useValidationFocus(focusRoot, { context:() => [session.user.v
         </dl>
       </CollapsibleSection>
     </template>
-    <ConfirmDialog
-      v-if="limitConfirmation"
-      :open="limitConfirmation"
-      :busy="busy"
-      title="Превышен лимит стоимости"
-      :message="details?.limitCheck.exceededMessage || 'Подтвердите превышение лимита стоимости.'"
-      action="Продолжить с этой ценой"
-      @cancel="resolveValueLimit(false)"
-      @confirm="resolveValueLimit(true)"
-    />
     <v-dialog
       v-model="rejectionOpen"
       :persistent="busy"
@@ -652,6 +654,7 @@ const focusAfter = useValidationFocus(focusRoot, { context:() => [session.user.v
       :secondary-action="historyContinuation ? 'Не сохранять и продолжить' : ''"
       :action-icon="historyContinuation ? '$saveChanges' : '$continue'"
       :busy="busy || continuing"
+      :action-disabled="historyContinuation && productDirty && productSaveBlocked"
       @cancel="cancelConfirmation"
       @confirm="historyContinuation ? saveAndContinue() : acceptConfirmation()"
       @secondary="acceptConfirmation"
