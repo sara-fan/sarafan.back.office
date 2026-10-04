@@ -9,8 +9,7 @@ export const PRODUCT_FIELDS = ['productName', 'storeName', 'sellerPrice', 'quant
 export const CUSTOMER_FIELDS = Object.freeze({
   lastName:'Фамилия', firstName:'Имя', patronymic:'Отчество', inn:'ИНН',
   phone:'Телефон', email:'Email', passportSeries:'Серия паспорта', passportNumber:'Номер паспорта',
-  passportIssueDate:'Дата выдачи паспорта', passportIssuedBy:'Кем выдан паспорт',
-  postalCode:'Индекс', city:'Город', address:'Адрес'
+  passportIssueDate:'Дата выдачи паспорта', passportIssuedBy:'Кем выдан паспорт'
 })
 const positive = value => typeof value === 'number' && Number.isFinite(value) && value > 0
 const text = (value, max) => value === null || (typeof value === 'string' && value.length <= max)
@@ -50,9 +49,15 @@ export function productIsValid(product, currencies, limits) {
       && currencies.some(item => item.value === product.sellerPrice.currency)))
 }
 
+function deliveryIsValid(value) {
+  return value === null || !!value && ['courier', 'pickup'].includes(value.routeAlias)
+    && [['name', 500], ['destination', 674]].every(([key, maximum]) =>
+      typeof value[key] === 'string' && !!value[key].trim() && value[key].length <= maximum)
+}
+
 export function validateOrderDetails(value, ops, number) {
   if (!value || value.orderNumber !== number || !orderNumberIsValid(number)
-    || !ops.statuses.some(item => item.value === value.status)
+    || !Number.isInteger(value.status)
     || typeof value.sourceUrl !== 'string'
     || !timestampIsValid(value.createdAt) || !timestampIsValid(value.updatedAt)
     || Date.parse(value.updatedAt) < Date.parse(value.createdAt)
@@ -60,16 +65,20 @@ export function validateOrderDetails(value, ops, number) {
     || !value.customer || !Object.keys(CUSTOMER_FIELDS).every(key => key === 'passportIssueDate'
       ? value.customer[key] === null || dateIsValid(value.customer[key]) : text(value.customer[key], 2000))
     || typeof value.customer.phone !== 'string' || !value.customer.phone
+    || !deliveryIsValid(value.delivery)
     || !text(value.imageUrl, 2048)
     || !(value.savedLimitSourceEffectiveDate === null || dateIsValid(value.savedLimitSourceEffectiveDate))
     || !(value.dimensions === null || (value.dimensions && ['lengthCm', 'widthCm', 'heightCm'].every(key => positive(value.dimensions[key]))))
     || !(value.characteristics === null || (typeof value.characteristics === 'object' && !Array.isArray(value.characteristics)
       && Object.entries(value.characteristics).every(([key, item]) => key.length > 0 && typeof item === 'string')))
-    || !limitIsValid(value.limitCheck, ops.currencies) || typeof value.canEditProduct !== 'boolean'
-    || (value.canEditProduct && !ops.statuses.some(item => item.value === value.status && item.routeAlias === 'under_review'))) {
+    || value.reviewReason != null && (typeof value.reviewReason !== 'string' || !value.reviewReason.trim() || value.reviewReason.length > 2000)
+    || value.reviewCompletedAt != null && (!timestampIsValid(value.reviewCompletedAt) || Date.parse(value.reviewCompletedAt) < Date.parse(value.createdAt) || Date.parse(value.reviewCompletedAt) > Date.parse(value.updatedAt))
+    || value.status === 600 && (!value.reviewReason || !value.reviewCompletedAt)
+    || !limitIsValid(value.limitCheck, ops.currencies) || typeof value.canEditProduct !== 'boolean') {
     throw createInternalProblem('protocolError')
   }
-  return value
+  return value.canEditProduct && !ops.statuses.some(item => item.value === value.status && item.routeAlias === 'under_review')
+    ? { ...value, canEditProduct:false } : value
 }
 
 export function productForm(product, limits) {
@@ -86,7 +95,7 @@ export function priceCents(value) {
   return BigInt(whole) * 100n + BigInt(fraction.padEnd(2, '0'))
 }
 
-export function productValidation(form, limits, limit) {
+export function productValidation(form, limits) {
   const errors = {}
   if (!form.productName.trim()) errors.productName = ['Укажите название товара.']
   for (const [key, max] of [['productName', limits.productNameMaximumLength], ['storeName', limits.storeNameMaximumLength], ['color', limits.colorMaximumLength],
@@ -99,14 +108,17 @@ export function productValidation(form, limits, limit) {
   const cents = priceCents(form.sellerPrice)
   if (cents === null || cents <= 0n || cents > priceCents(limits.maximumUnitPrice)) errors.sellerPrice = ['Укажите положительную цену, не более двух знаков после запятой.']
   // Core supplies a conservative USD-cent ceiling. Core owns the exact cross-rate validation and message.
-  else if (!errors.quantity && limit.available && cents * BigInt(quantity) > priceCents(limit.maximumTotalUsd)) {
-    errors.sellerPrice = [limit.exceededMessage]
-  }
+
   return Object.keys(errors).length ? createInternalProblem('invalidInput', { errors }) : null
 }
 
 export function productPayload(form, limits, expectedUpdatedAt) {
-  return { expectedUpdatedAt, storeName:form.storeName.trim() || null, productName:form.productName.trim(),
-    sellerPrice:{ amount:Number(priceCents(form.sellerPrice)) / 100, currency:limits.sellerPriceCurrency },
+  return { expectedUpdatedAt, storeName:form.storeName.trim() || null, productName:form.productName.trim() || null,
+    sellerPrice:form.sellerPrice.trim() ? { amount:Number(priceCents(form.sellerPrice)) / 100, currency:limits.sellerPriceCurrency } : null,
     quantity:Number(form.quantity), color:form.color.trim() || null, size:form.size.trim() || null, comment:form.comment.trim() || null }
+}
+
+export function productExceedsLimit(form, limit) {
+  const cents = priceCents(form.sellerPrice), quantity = Number(form.quantity)
+  return cents !== null && Number.isSafeInteger(quantity) && quantity > 0 && limit.available && cents * BigInt(quantity) > priceCents(limit.maximumTotalUsd)
 }

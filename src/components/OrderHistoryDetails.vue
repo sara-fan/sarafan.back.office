@@ -4,6 +4,7 @@
 // This file is a part of the Sarafan application
 
 import { computed } from 'vue'
+import { orderStatusName } from '../orderFormatting.js'
 import { formatMoneyAmount } from '../moneyFormatting.js'
 import { priceHistoryRows } from '../orderPriceHistory.js'
 import PriceTotalContext from './PriceTotalContext.vue'
@@ -12,7 +13,7 @@ const props = defineProps({ detail:{ type:Object, required:true }, orderOps:{ ty
 const fields = { storeName:'Магазин', productName:'Товар', sellerPrice:'Цена продавца', quantity:'Количество', color:'Цвет', size:'Размер', comment:'Комментарий' }
 const display = value => value === null || value === undefined ? '—' : typeof value === 'object'
   ? `${formatMoneyAmount(value.amount)}${props.orderOps.currencies.find(item => item.value === value.currency).symbol}` : String(value)
-const status = value => value === null ? '—' : props.orderOps.statuses.find(item => item.value === value).name
+const status = value => value === null ? '—' : orderStatusName(value, props.orderOps)
 const changes = computed(() => {
   const result = Object.entries(fields).filter(([key]) => JSON.stringify(props.detail.productBefore?.[key] ?? null) !== JSON.stringify(props.detail.productAfter?.[key] ?? null))
     .map(([key, name]) => ({ name, before:display(props.detail.productBefore?.[key]), after:display(props.detail.productAfter?.[key]) }))
@@ -32,6 +33,12 @@ const priceRows = computed(() => priceHistoryRows(props.detail, props.pricingOps
       class="history-cancellation-reason"
     >
       <strong>Причина отмены:</strong> {{ detail.cancellationReason }}
+    </p>
+    <p v-if="detail.reviewReason">
+      <strong>Причина:</strong> {{ detail.reviewReason }}
+    </p>
+    <p v-if="detail.checkoutDeliveryName">
+      Данные получателя сохранены. Способ доставки: {{ detail.checkoutDeliveryName }}.
     </p>
     <v-table
       v-if="changes.length"

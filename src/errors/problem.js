@@ -10,6 +10,7 @@ export { PROBLEM_TYPE_ROOT, ProblemError } from '@sara-fan/ui-shared/problems'
 
 export const CORE_PROBLEM_TYPES = Object.freeze({
   orderUpdateConflict: `${PROBLEM_TYPE_ROOT}order-update-conflict`,
+  orderReviewUnavailable: `${PROBLEM_TYPE_ROOT}order-review-unavailable`,
   orderNotEditable: `${PROBLEM_TYPE_ROOT}order-not-editable`,
   userNotFound: `${PROBLEM_TYPE_ROOT}backoffice-user-not-found`,
   invalidAccessToken: `${PROBLEM_TYPE_ROOT}invalid-backoffice-access-token`,

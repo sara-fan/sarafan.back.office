@@ -337,3 +337,19 @@ it('allows only the staff history route shapes', async () => {
   }
   for (const suffix of ['history/4-1', 'history/0-0', 'history/0-01', 'history/0-1/edit']) expect(() => s.orderRequest('/orders/12345678-1/' + suffix)).toThrow()
 })
+
+
+it('forwards review rejection through the staff boundary and retains the session after a conflict', async () => {
+  const fetch = vi.fn().mockResolvedValueOnce(auth()).mockResolvedValueOnce(response(200, {}))
+    .mockResolvedValueOnce(problemResponse(409, 'order-review-unavailable'));
+  vi.stubGlobal('fetch', fetch);
+  const session = createSession();
+  await session.login('a@b.test', 'password');
+  const options = { method:'POST', body:JSON.stringify({ expectedUpdatedAt:'2026-10-04T10:00:00Z', reason:'Причина' }) };
+  await session.orderRequest('/orders/12345678-1/review/reject', options);
+  expect(fetch.mock.calls.at(-1)[0]).toBe('/api/v1/backoffice/orders/12345678-1/review/reject');
+  expect(fetch.mock.calls.at(-1)[1]).toMatchObject(options);
+  await expect(session.orderRequest('/orders/12345678-1/review/reject', options)).rejects.toMatchObject({ code:'order_review_unavailable' });
+  expect(session.user.value).toEqual(identity);
+  expect(() => session.orderRequest('/orders/12345678-1/review/other', options)).toThrow();
+});

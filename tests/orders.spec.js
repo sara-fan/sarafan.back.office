@@ -126,6 +126,8 @@ describe('order catalogue and formatting', () => {
       { search:'x'.repeat(2049), status:'', createdFrom:'', createdTo:'' }
     ]) expect(normalizeOrderFilters(invalid)).toBeNull()
     expect(orderRowIsValid(rows[0], ops)).toBe(true)
+    expect(orderRowIsValid({ ...rows[0], status:999 }, ops)).toBe(true)
+    expect(orderRowIsValid({ ...rows[0], status:'999' }, ops)).toBe(false)
     expect(orderRowIsValid({ ...rows[0], orderNumber:'internal' }, ops)).toBe(false)
     expect(orderRowIsValid({ ...rows[0], sourceUrl:'javascript:alert(1)' }, ops)).toBe(false)
     expect(orderRowIsValid({ ...rows[0], createdAt:'2026-09-13' }, ops)).toBe(false)
@@ -153,7 +155,8 @@ describe('orders server table', () => {
     expect(vm().busy).toBe(true)
     expect(search.element.matches(':disabled')).toBe(false)
     expect(wrapper.getComponent({ name:'VSelect' }).props('disabled')).toBe(true)
-    expect(wrapper.findAll('input[type="date"]').every(input => !input.element.matches(':disabled'))).toBe(true)
+    expect(wrapper.findAll('.order-date-filter input')).toHaveLength(2)
+    expect(wrapper.findAll('.order-date-filter input').every(input => !input.element.matches(':disabled'))).toBe(true)
     expect(document.activeElement).toBe(search.element)
     const oldPath = h.session.orderRequest.mock.calls.at(-1)[0]
     await search.setValue('76')

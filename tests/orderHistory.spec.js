@@ -51,7 +51,7 @@ describe('history protocol', () => {
     { ...ops, actorTypes:ops.actorTypes.map(item => ({ ...item, name:'' })) }, { ...ops, kinds:ops.kinds.map(item => ({ ...item, routeAlias:'' })) }])('rejects invalid metadata %#', value => expect(() => validateHistoryOps(value)).toThrow())
   it.each([{ eventKey:'0-0' }, { at:'bad' }, { kind:1 }, { areas:0 }, { areas:16 }, { actorType:1 }, { actorName:'' }])('rejects invalid list item %#', change => expect(historyItemIsValid({ ...row, ...change }, ops)).toBeFalsy())
   it.each([null, {}, { ...historyDefaults.filters, search:'x'.repeat(201) }, { ...historyDefaults.filters, area:3 }, { ...historyDefaults.filters, actorType:1 }, { ...historyDefaults.filters, from:'bad' }])('rejects invalid preferences %#', value => expect(normalizeHistoryFilters(value)).toBeNull())
-  it.each([{ version:2 }, { event:{ ...row, eventKey:'0-2' } }, { missingCreationDetails:null }, { productAfter:{} }, { statusAfter:123 }, { sourceUrl:3 }, { validUntilAfter:'bad' }, { pricingAfter:{} }])('rejects invalid details %#', change => expect(() => validateHistoryDetail({ ...detail, ...change }, row, ops, orderOps, pricingOps)).toThrow())
+  it.each([{ version:2 }, { event:{ ...row, eventKey:'0-2' } }, { missingCreationDetails:null }, { productAfter:{} }, { statusAfter:'123' }, { sourceUrl:3 }, { validUntilAfter:'bad' }, { pricingAfter:{} }])('rejects invalid details %#', change => expect(() => validateHistoryDetail({ ...detail, ...change }, row, ops, orderOps, pricingOps)).toThrow())
 })
 
 describe('Vuetify order history', () => {
@@ -175,7 +175,7 @@ describe('history control events', () => {
 
 
 describe('history evidence boundaries', () => {
-  it('requires a cancellable-to-cancelled transition in version-2 evidence', () => {
+  it('reads retained version-2 transitions without reenforcing current state rules', () => {
     const orderOpsWithCancelled = { ...orderOps, statuses:[...orderOps.statuses,
       { value:100, name:'Расчёт готов', routeAlias:'quote_ready' },
       { value:200, name:'Расчёт истёк', routeAlias:'quote_expired' },
@@ -183,12 +183,12 @@ describe('history evidence boundaries', () => {
     const cancelledRow = { ...row, kind:500, areas:8, actorType:0, actorName:'Покупатель' }
     const cancelled = { ...detail, event:cancelledRow, version:2, statusBefore:0, statusAfter:500,
       cancellationReason:null }
-    for (const statusBefore of [0, 100, 200]) {
+    for (const statusBefore of [0, 100, 200, 999]) {
       expect(validateHistoryDetail({ ...cancelled, statusBefore }, cancelledRow, ops, orderOpsWithCancelled, pricingOps))
         .toMatchObject({ statusBefore, statusAfter:500 })
     }
-    for (const change of [{ statusBefore:null }, { statusBefore:300 }, { statusBefore:500 },
-      { statusAfter:null }, { statusAfter:0 }, { statusAfter:300 }]) {
+    for (const change of [{ statusBefore:null }, { statusBefore:'300' }, { statusBefore:1.5 },
+      { statusAfter:null }, { statusAfter:'500' }, { statusAfter:1.5 }]) {
       expect(() => validateHistoryDetail({ ...cancelled, ...change }, cancelledRow, ops, orderOpsWithCancelled, pricingOps))
         .toThrow()
     }
@@ -269,3 +269,66 @@ it('shows the saved confirmed rate beneath the historical total', () => {
   expect(total.get('.price-total-context').text()).toBe('Итого, утверждённая стоимость $ 80.0000 ₽ (ЦБ РФ, 24.09.2026)')
   expect(total.get('small.price-note.price-total-rate').text()).toBe('$ 80.0000 ₽ (ЦБ РФ, 24.09.2026)')
 })
+
+it('accepts and displays privacy-safe checkout history details', () => {
+  const currentOps = { ...ops, kinds:[...ops.kinds, ...[600, 700, 800].map(value => ({ value, name:'Операция', routeAlias:'kind-' + value }))], areas:[...ops.areas, { value:16, name:'Получатель и доставка', routeAlias:'checkout' }] }
+  const quoteOps = { ...orderOps, statuses:[...orderOps.statuses, { value:100, name:'Расчёт готов' }] }
+  expect(validateHistoryOps(currentOps)).toBe(currentOps)
+  expect(normalizeHistoryFilters({ ...historyDefaults.filters, area:16 }).area).toBe(16)
+  const event = { ...row, kind:800, areas:16, actorType:0, actorName:'Покупатель' }
+  const checkout = { ...detail, event, version:4, productBefore:null, productAfter:null, sourceUrl:null, pricingBefore:null, pricingAfter:null,
+    statusBefore:100, statusAfter:100, checkoutDeliveryName:'Пункт выдачи' }
+  expect(validateHistoryDetail(checkout, event, currentOps, quoteOps, pricingOps)).toBe(checkout)
+  for (const change of [{ checkoutDeliveryName:null }, { checkoutDeliveryName:'' }, { checkoutDeliveryName:'a'.repeat(501) }, { statusAfter:'100' }, { version:1 }])
+    expect(() => validateHistoryDetail({ ...checkout, ...change }, event, currentOps, quoteOps, pricingOps)).toThrow()
+  wrapper = mount(OrderHistoryDetails, { props:{ detail:checkout, orderOps:quoteOps, pricingOps }, global:{ plugins:[createSarafanVuetify()] } })
+  expect(wrapper.text()).toContain('Данные получателя сохранены. Способ доставки: Пункт выдачи.')
+})
+
+it('renders unknown historical statuses without a catalogue entry', () => {
+  const value = { ...detail, statusBefore:999, statusAfter:1001 }
+  expect(validateHistoryDetail(value, row, ops, orderOps, pricingOps)).toBe(value)
+  const rendered = mount(OrderHistoryDetails, { props:{ detail:value, orderOps, pricingOps }, global:{ plugins:[createSarafanVuetify()] } })
+  expect(rendered.text()).toContain('Статус 999')
+  expect(rendered.text()).toContain('Статус 1001')
+  rendered.unmount()
+})
+
+
+describe('extensible history metadata and retained evidence', () => {
+  const extension = values => ({ ...ops, kinds:[...ops.kinds, ...values.map(value => ({ value, name:'Операция ' + value, routeAlias:'kind-' + value }))],
+    areas:[...ops.areas, { value:16, name:'Доставка', routeAlias:'checkout' }] });
+  it.each([[600], [700], [800], [600, 700], [600, 700, 800], [600, 700, 800, 900]].map(values => [values]))('accepts independent catalogue extensions %j', values => {
+    const value = extension(values);
+    expect(validateHistoryOps(value)).toBe(value);
+  });
+  it.each([null, { value:600, name:'', routeAlias:'reject' }, { value:600, name:'Проверка', routeAlias:'' },
+    { value:'600', name:'Проверка', routeAlias:'reject' }, { value:-1, name:'Проверка', routeAlias:'reject' },
+    { value:0, name:'Дубликат', routeAlias:'other' }])('rejects malformed or duplicate metadata %#', item => {
+    expect(() => validateHistoryOps({ ...ops, kinds:[...ops.kinds, item] })).toThrow();
+  });
+  it.each([[500, 2], [600, 3], [700, 3], [800, 4]])('displays unfamiliar transitions for kind %s', (kind, version) => {
+    const event = { ...row, kind };
+    const value = { ...detail, event, version, statusBefore:999, statusAfter:1001,
+      cancellationReason:null, reviewReason:kind === 600 ? '<script>Причина</script>' : null,
+      checkoutDeliveryName:kind === 800 ? 'Пункт выдачи' : null };
+    expect(validateHistoryDetail(value, event, extension([600, 700, 800]), orderOps, pricingOps)).toBe(value);
+    const rendered = mount(OrderHistoryDetails, { props:{ detail:value, orderOps, pricingOps }, global:{ plugins:[createSarafanVuetify()] } });
+    expect(rendered.text()).toContain('Статус 999');
+    expect(rendered.text()).toContain('Статус 1001');
+    expect(rendered.find('script').exists()).toBe(false);
+    rendered.unmount();
+  });
+  it.each([[600, 1], [600, 2], [700, 1], [700, 4], [800, 1], [800, 3]])('rejects kind %s with wrong evidence version %s', (kind, version) => {
+    const event = { ...row, kind };
+    expect(() => validateHistoryDetail({ ...detail, event, version, statusBefore:999, statusAfter:1001 }, event, extension([600, 700, 800]), orderOps, pricingOps)).toThrow();
+  });
+  it.each([null, '', ' ', 7, 'a'.repeat(2001)])('requires a valid rejection reason %j', reviewReason => {
+    const event = { ...row, kind:600 };
+    expect(() => validateHistoryDetail({ ...detail, event, version:3, reviewReason, statusBefore:999, statusAfter:1001 }, event, extension([600]), orderOps, pricingOps)).toThrow();
+  });
+  it('rejects a rejection reason on quote-expiry evidence', () => {
+    const event = { ...row, kind:700 };
+    expect(() => validateHistoryDetail({ ...detail, event, version:3, reviewReason:'Причина', statusBefore:999, statusAfter:1001 }, event, extension([700]), orderOps, pricingOps)).toThrow();
+  });
+});
