@@ -208,6 +208,11 @@ For other comment-capable formats, use the same three lines with that format's n
 
 - Keep pricing calculation/confirmation on the order card and manual tariff amounts in `InlineEditableField`. Optional service selections are customer-owned and read-only for staff. Legacy pricing URLs redirect to the card; protect both product and pricing drafts from discard and prevent concurrent edits from using stale order versions.
 
+## Customs payment evidence
+
+- The order header exposes a separate Payments ActionButton group (file-invoice-dollar, «Платежи») with one «Таможенная пошлина оплачена» item. All staff roles use Core canMarkCustomsPaid plus a saved positive calculated customs amount; disable unknown, zero, paid, dirty, busy or conflict states. Send the exact order version to `/customs/paid`, retain normal orderRequest error ownership and discard obsolete replies. Register every new order path in both the session allowlist and transport template catalogue, with a real-session transport test. Disabled menu items retain a keyboard-focusable explanation of the current reason.
+- Render the paid check beside the customs RUB amount through `@sara-fan/ui-shared/paid-indicator` with injected Vue h, also used by customer UI. Never infer paid from amount or status. Preserve kind 900/area 32/version 5 false-to-true history alongside older evidence.
+
 ## Order history and continuation
 
 - Customer cancellation appears as history kind 500 with version-2 status evidence and an optional staff-only reason. Keep version-1 evidence readable and render reasons as plain text; do not include them in logs or list searches.

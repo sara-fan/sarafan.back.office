@@ -9,6 +9,7 @@ import { uiLogger } from '../observability/logger.js'
 export { PROBLEM_TYPE_ROOT, ProblemError } from '@sara-fan/ui-shared/problems'
 
 export const CORE_PROBLEM_TYPES = Object.freeze({
+  customsPaymentUnavailable: `${PROBLEM_TYPE_ROOT}customs-payment-unavailable`,
   orderUpdateConflict: `${PROBLEM_TYPE_ROOT}order-update-conflict`,
   orderReviewUnavailable: `${PROBLEM_TYPE_ROOT}order-review-unavailable`,
   orderNotEditable: `${PROBLEM_TYPE_ROOT}order-not-editable`,

@@ -33,6 +33,117 @@ beforeEach(() => {
 afterEach(() => { wrapper?.unmount(); wrapper = null; vi.restoreAllMocks() })
 
 describe('staff order card', () => {
+  function dutyReply(amount = 120, paid = false) {
+    const normal = h.session.orderRequest.getMockImplementation()
+    h.session.orderRequest.mockImplementation(path => {
+      if (path.endsWith('/customs/paid')) return Promise.resolve({ ...details, customsPaid:true, canMarkCustomsPaid:false, updatedAt:'2026-09-15T11:00:01.654321Z' })
+      if (path.endsWith('/pricing')) {
+        const value = globalThis.structuredClone(pricingDetails)
+        Object.assign(value.calculation.components.find(item => item.service === 800),
+          { state:amount === null ? 100 : 0, amount, amountRub:amount })
+        return Promise.resolve(value)
+      }
+      if (path === '/orders/12345678-1') return Promise.resolve({ ...details, customsPaid:paid, canMarkCustomsPaid:!paid && amount > 0 })
+      return normal(path)
+    })
+  }
+  it('uses a separate Payments ActionButton group and records duty with the exact version', async () => {
+    dutyReply()
+    await render()
+    const button = wrapper.get('#order-payments')
+    expect(button.attributes('aria-label')).toBe('Платежи')
+    expect(button.find('.fa-file-invoice-dollar').exists()).toBe(true)
+    await button.trigger('click'); await flushPromises()
+    const items = wrapper.findAllComponents({ name:'VListItem' })
+    expect(items).toHaveLength(1)
+    expect(items[0].props('title')).toBe('Таможенная пошлина оплачена')
+    expect(items[0].props('disabled')).toBe(false)
+    expect(document.querySelector('.duty-payment-activator').hasAttribute('tabindex')).toBe(false)
+    await items[0].trigger('click'); await flushPromises()
+    const call = h.session.orderRequest.mock.calls.find(([path]) => path.endsWith('/customs/paid'))
+    expect(call[1].method).toBe('POST')
+    expect(JSON.parse(call[1].body)).toEqual({ expectedUpdatedAt:details.updatedAt })
+    expect(vm().details.status).toBe(details.status)
+    expect(vm().pricing.calculation.totalRub).toBe(pricingDetails.calculation.totalRub)
+    expect(vm().pricing.updatedAt).toBe('2026-09-15T11:00:01.654321Z')
+    expect(vm().canMarkDutyPaid).toBe(false)
+    expect(wrapper.get('[role="img"][aria-label="Таможенная пошлина оплачена"]').exists()).toBe(true)
+  })
+  it.each([[null, false, 'неизвестна'], [0, false, 'не ожидается'], [120, true, 'уже отмечена']])('disables duty for amount %s and paid=%s', async (amount, paid, reason) => {
+    dutyReply(amount, paid)
+    await render()
+    await wrapper.get('#order-payments').trigger('click'); await flushPromises()
+    expect(wrapper.findComponent({ name:'VListItem' }).props('disabled')).toBe(true)
+    const explanation = new DOMWrapper(document.querySelector('.duty-payment-activator'))
+    expect(explanation.attributes('tabindex')).toBe('0')
+    expect(explanation.attributes('aria-disabled')).toBe('true')
+    expect(explanation.attributes('aria-label')).toContain(reason)
+    explanation.element.focus()
+    expect(document.activeElement).toBe(explanation.element)
+    await vm().markDutyPaid()
+    expect(h.session.orderRequest.mock.calls.some(([path]) => path.endsWith('/customs/paid'))).toBe(false)
+  })
+  it.each(['busy', 'locked', 'dirty'])('guards payment while %s', async guard => {
+    dutyReply()
+    await render()
+    await wrapper.get('#order-payments').trigger('click'); await flushPromises()
+    if (guard === 'dirty') await wrapper.get('#size').setValue('XL')
+    else vm()[guard] = true
+    await flushPromises()
+    const explanation = new DOMWrapper(document.querySelector('.duty-payment-activator'))
+    expect(explanation.attributes('tabindex')).toBe('0')
+    expect(explanation.attributes('aria-label')).toContain(guard === 'busy' ? 'завершения' : guard === 'locked' ? 'Обновите' : 'несохранённые')
+    await vm().markDutyPaid()
+    expect(h.session.orderRequest.mock.calls.some(([path]) => path.endsWith('/customs/paid'))).toBe(false)
+  })
+  it('explains a server capability denial even for a known positive amount', async () => {
+    dutyReply()
+    await render()
+    vm().details = { ...vm().details, canMarkCustomsPaid:false }
+    await wrapper.get('#order-payments').trigger('click'); await flushPromises()
+    expect(wrapper.findComponent({ name:'VListItem' }).props('disabled')).toBe(true)
+    expect(document.querySelector('.duty-payment-activator').getAttribute('aria-label')).toContain('недоступна для этого заказа')
+    await vm().markDutyPaid()
+    expect(h.session.orderRequest.mock.calls.some(([path]) => path.endsWith('/customs/paid'))).toBe(false)
+  })
+  it.each([CORE_PROBLEM_TYPES.orderUpdateConflict, CORE_PROBLEM_TYPES.customsPaymentUnavailable])('locks duty action after %s', async type => {
+    dutyReply()
+    await render()
+    h.session.orderRequest.mockRejectedValueOnce(remote(type))
+    await vm().markDutyPaid(); await flushPromises()
+    expect(vm().locked).toBe(true)
+    expect(vm().details.customsPaid).toBe(false)
+    expect(wrapper.findAll('[role="alert"]')).toHaveLength(1)
+  })
+  it('retains unpaid state after a failed request and allows retry', async () => {
+    dutyReply()
+    await render()
+    const normal = h.session.orderRequest.getMockImplementation()
+    h.session.orderRequest.mockRejectedValueOnce(new Error('private'))
+    await vm().markDutyPaid(); await flushPromises()
+    expect(vm().details.customsPaid).toBe(false)
+    expect(vm().locked).toBe(false)
+    expect(wrapper.findAll('[role="alert"]')).toHaveLength(1)
+    expect(wrapper.text()).not.toContain('private')
+    h.session.orderRequest.mockImplementation(normal)
+    await vm().markDutyPaid()
+    expect(vm().details.customsPaid).toBe(true)
+  })
+  it.each([false, true])('ignores obsolete duty completion rejected=%s', async rejected => {
+    dutyReply()
+    await render()
+    const wait = pending()
+    h.session.orderRequest.mockReturnValueOnce(wait.promise)
+    const action = vm().markDutyPaid()
+    h.session.user.value = null
+    if (rejected) wait.reject(new Error('private'))
+    else wait.resolve({ ...details, customsPaid:true, canMarkCustomsPaid:false })
+    await action; await flushPromises()
+    expect(vm().details).toBeNull()
+    expect(vm().problem).toBeNull()
+    expect(vm().paymentsOpen).toBe(false)
+  })
+
   it('collapses sections independently, preserves drafts and reopens product validation', async () => {
     await render()
     await wrapper.get('#size').setValue('XL')
@@ -119,7 +230,7 @@ describe('staff order card', () => {
     expect(wrapper.get('tfoot').text()).toContain('112,48')
     expect(wrapper.get('.total-line').text()).toContain('Общая цена, $40,00')
     expect(wrapper.findAll('header .header-actions button').map(button => button.attributes('aria-label'))).toEqual([
-      'История заказа', 'Обновить данные', 'Сохранить изменения', 'Отменить'
+      'Платежи', 'История заказа', 'Обновить данные', 'Сохранить изменения', 'Отменить'
     ])
     expect(wrapper.find('.merchandise-summary').exists()).toBe(false)
     const result = { ...details, product:{ ...details.product, productName:'Новое название', storeName:'Новый магазин' }, updatedAt:'2026-09-15T12:00:00.123456Z' }
@@ -256,7 +367,7 @@ describe('staff order card', () => {
     expect(vm().editable).toBe(false)
     await flushPromises()
     expect(wrapper.find('button[aria-label="Сохранить изменения"]').exists()).toBe(false)
-    expect(wrapper.findAll('header .header-actions button').map(button => button.attributes('aria-label'))).toEqual([...(['administrator', 'shift-manager'].includes(role) ? ['Рассчитать и сохранить стоимость', 'Подтвердить сохранённый расчёт', 'Не можем привезти'] : []), 'История заказа', 'Обновить данные', 'Отменить'])
+    expect(wrapper.findAll('header .header-actions button').map(button => button.attributes('aria-label'))).toEqual(['Платежи', ...(['administrator', 'shift-manager'].includes(role) ? ['Рассчитать и сохранить стоимость', 'Подтвердить сохранённый расчёт', 'Не можем привезти'] : []), 'История заказа', 'Обновить данные', 'Отменить'])
     if (['administrator', 'shift-manager'].includes(role)) {
       const reject = wrapper.get('button[aria-label="Не можем привезти"]')
       expect(reject.classes()).not.toContain('action-button--labelled')
@@ -331,7 +442,7 @@ describe('pricing on the order card', () => {
   it('uses the existing inline editor, validates and normalizes manual amounts, and preserves customer choices', async () => {
     await render()
     expect(wrapper.findAll('header .header-actions').map(group => group.findAll('button').map(button => button.attributes('aria-label')))).toEqual([
-      ['Рассчитать и сохранить стоимость', 'Подтвердить сохранённый расчёт', 'Не можем привезти'],
+      ['Платежи'], ['Рассчитать и сохранить стоимость', 'Подтвердить сохранённый расчёт', 'Не можем привезти'],
       ['История заказа'], ['Обновить данные', 'Сохранить изменения', 'Отменить']
     ])
     expect(wrapper.findAll('button[aria-label="Рассчитать и сохранить стоимость"]')).toHaveLength(1)
