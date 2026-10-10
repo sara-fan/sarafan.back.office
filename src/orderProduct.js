@@ -66,6 +66,9 @@ export function validateOrderDetails(value, ops, number) {
       ? value.customer[key] === null || dateIsValid(value.customer[key]) : text(value.customer[key], 2000))
     || typeof value.customer.phone !== 'string' || !value.customer.phone
     || typeof value.customsPaid !== 'boolean' || typeof value.canMarkCustomsPaid !== 'boolean'
+    || typeof value.canMarkOrderPaid !== 'boolean' || !(value.mainPaymentRub === null || typeof value.mainPaymentRub === 'number' && Number.isFinite(value.mainPaymentRub) && value.mainPaymentRub >= 0)
+    || value.canMarkOrderPaid && ops.statuses.some(item => item.value === value.status)
+      && (value.mainPaymentRub === null || ![100, 200].includes(value.status))
     || !deliveryIsValid(value.delivery)
     || !text(value.imageUrl, 2048)
     || !(value.savedLimitSourceEffectiveDate === null || dateIsValid(value.savedLimitSourceEffectiveDate))
@@ -78,8 +81,11 @@ export function validateOrderDetails(value, ops, number) {
     || !limitIsValid(value.limitCheck, ops.currencies) || typeof value.canEditProduct !== 'boolean') {
     throw createInternalProblem('protocolError')
   }
-  return value.canEditProduct && !ops.statuses.some(item => item.value === value.status && item.routeAlias === 'under_review')
-    ? { ...value, canEditProduct:false } : value
+  const unsupportedEdit = value.canEditProduct && !ops.statuses.some(item => item.value === value.status && item.routeAlias === 'under_review')
+  const unsupportedPayment = value.canMarkOrderPaid && !ops.statuses.some(item => item.value === value.status)
+  return unsupportedEdit || unsupportedPayment
+    ? { ...value, canEditProduct:unsupportedEdit ? false : value.canEditProduct,
+      canMarkOrderPaid:unsupportedPayment ? false : value.canMarkOrderPaid } : value
 }
 
 export function productForm(product, limits) {

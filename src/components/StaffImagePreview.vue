@@ -3,41 +3,23 @@
 // All rights reserved.
 // This file is a part of the Sarafan application
 import { onUnmounted, ref, watch } from 'vue'
+import { createImagePreview } from '@sara-fan/ui-shared/image-preview'
 import { createInternalProblem, normalizeProblem, presentProblem } from '../errors/problem.js'
 
 const props = defineProps({ url:{ type:String, default:null }, file:{ type:Object, default:null }, revision:{ type:Number, default:0 }, identity:{ type:String, default:'' }, load:{ type:Function, required:true }, alt:{ type:String, required:true } })
 const emit = defineEmits(['invalid-file'])
 const source = ref('')
 const problem = ref(null)
-let generation = 0
-function clear() {
-  generation += 1
-  if (source.value) globalThis.URL.revokeObjectURL(source.value)
-  source.value = ''
-  problem.value = null
-}
-watch([() => props.url, () => props.file, () => props.revision, () => props.identity], async () => {
-  clear()
-  if (!props.identity || (!props.file && !props.url)) return
-  const current = generation
-  try {
-    const blob = props.file ?? await props.load(props.url)
-    if (current !== generation) return
-    if (!(blob instanceof globalThis.Blob) || !['image/png', 'image/jpeg', 'image/webp'].includes(blob.type) || !blob.size) throw createInternalProblem('protocolError')
-    source.value = globalThis.URL.createObjectURL(blob)
-  } catch (value) {
-    if (current !== generation) return
-    if (props.file) emit('invalid-file', props.file)
-    else problem.value = normalizeProblem(value)
-  }
-}, { immediate:true, flush:'sync' })
-function failed(event) {
-  if (event.target.getAttribute('src') !== source.value) return
-  clear()
-  if (props.file) emit('invalid-file', props.file)
-  else problem.value = createInternalProblem('protocolError')
-}
-onUnmounted(clear)
+const preview = createImagePreview({
+  load:url => props.load(url),
+  publish:({ source:value, error }) => { source.value = value; problem.value = error ? normalizeProblem(error) : null },
+  invalidFile:file => emit('invalid-file', file),
+  protocolError:() => createInternalProblem('protocolError')
+})
+watch([() => props.url, () => props.file, () => props.revision, () => props.identity],
+  () => preview.update(props), { immediate:true, flush:'sync' })
+function failed(event) { preview.failed(event.target.getAttribute('src')) }
+onUnmounted(preview.dispose)
 </script>
 <template>
   <div class="staff-image-preview">

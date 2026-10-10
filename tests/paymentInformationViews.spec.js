@@ -91,6 +91,10 @@ describe('payment draft editor',()=>{
   })
   it('preserves fields after validation failures and focuses the upload for repeated image failures',async()=>{
     await render()
+    expect(wrapper.get('label[for="qr"]').text()).toBe('QR СБП получателя')
+    expect(wrapper.get('#qr').attributes('aria-describedby')).toBe('qr-hint qr-error')
+    expect(wrapper.get('#qr-hint').text()).toContain(`до ${ops.limits.qrMaxBytes} байт`)
+    expect(wrapper.get('#qr').attributes('aria-invalid')).toBe('false')
     await wrapper.get('#bik').setValue('x');await vm().save()
     expect(wrapper.get('#bik-error').text()).not.toBe('')
     expect(document.activeElement).toBe(wrapper.get('#bik').element)
@@ -99,18 +103,27 @@ describe('payment draft editor',()=>{
     for(let attempt=0;attempt<2;attempt++) {
       await vm().selectQr(new globalThis.File(['svg'],'bad.svg',{type:'image/svg+xml'}))
       expect(wrapper.get('#qr-error').text()).toContain('PNG')
-      expect(document.activeElement).toBe(wrapper.get('button[aria-label="Выбрать QR СБП"]').element)
+      const upload = wrapper.get('button[aria-label="Выбрать QR СБП"]')
+      expect(upload.attributes('aria-describedby')).toBe('qr-hint qr-error')
+      expect(upload.attributes('aria-invalid')).toBe('true')
+      expect(wrapper.get('#qr').attributes('aria-invalid')).toBe('true')
+      expect(document.activeElement).toBe(upload.element)
     }
     const selected=new globalThis.File(['invalid png'],'qr.png',{type:'image/png'})
     await vm().selectQr(selected);await flushPromises()
+    expect(wrapper.get('#qr-error').text()).toBe('')
+    expect(wrapper.get('#qr').attributes('aria-invalid')).toBe('false')
     await wrapper.get('img').trigger('error');await flushPromises()
     expect(vm().invalidFile).toBe(selected);expect(wrapper.get('#qr-error').text()).toContain('Не удалось показать')
     await wrapper.get('#recipientName').setValue('Черновик')
     await vm().save();expect(vm().problem.errors.qr).toBeDefined()
     await vm().selectQr(new globalThis.File(['png'],'good.png',{type:'image/png'}))
     await vm().previewFailed(selected);expect(vm().invalidFile).toBeNull()
-    h.session.paymentInformationRequest.mockRejectedValueOnce(createInternalProblem('invalidInput',{errors:{bankName:['Проверьте банк.']}}))
+    h.session.paymentInformationRequest.mockRejectedValueOnce(createInternalProblem('invalidInput',{errors:{bankName:['Проверьте банк.'],qr:['Проверьте QR.']}}))
     await vm().save();expect(wrapper.get('#bankName-error').text()).toContain('Проверьте банк.')
+    expect(wrapper.get('#qr-error').text()).toBe('Проверьте QR.')
+    expect(wrapper.get('#qr').attributes('aria-invalid')).toBe('true')
+    expect(wrapper.findAll('[role="alert"]')).toHaveLength(0)
     expect(vm().form.recipientName).toBe('Черновик')
     const count=h.session.paymentInformationRequest.mock.calls.length
     vm().busy=true;await vm().save();await vm().refresh();await vm().selectQr(selected)
@@ -286,6 +299,18 @@ it('discards stale successful list metadata and rows and never navigates a copy 
   h.session.paymentInformationRequest.mockResolvedValueOnce(paymentRow('draft',4)).mockReturnValueOnce(reload.promise)
   const copying=vm().mutate(rows[2],'copy');await flushPromises()
   h.session.user.value={id:2,roles:['administrator']};await flushPromises()
+  reload.resolve(paymentPage(rows));await copying
+  expect(h.push).not.toHaveBeenCalled()
+})
+
+it.each(['navigation','newer refresh'])('discards copy navigation after %s interrupts its reload',async interruption=>{
+  await render(PaymentInformationBundlesView)
+  const reload=pending()
+  h.session.paymentInformationRequest.mockResolvedValueOnce(paymentRow('draft',4)).mockReturnValueOnce(reload.promise)
+  const view=vm(), copying=view.mutate(rows[2],'copy')
+  await flushPromises()
+  if(interruption==='navigation') { wrapper.unmount();wrapper=null }
+  else await view.load()
   reload.resolve(paymentPage(rows));await copying
   expect(h.push).not.toHaveBeenCalled()
 })
