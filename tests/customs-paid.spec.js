@@ -44,3 +44,9 @@ it.each([false, true])('retains editable customs amount and clearing behavior wh
   expect(wrapper.emitted('amount-change')).toEqual([[800, '42,10'], [800, '']])
   wrapper.unmount()
 })
+
+it('keeps unfamiliar states readable and normalizes their payment capability', () => {
+  const unknown = { ...details, status:999, canMarkOrderPaid:true, mainPaymentRub:null }
+  const result = validateOrderDetails(unknown, ops, details.orderNumber)
+  expect(result.canMarkOrderPaid).toBe(false); expect(result.canEditProduct).toBe(false)
+})

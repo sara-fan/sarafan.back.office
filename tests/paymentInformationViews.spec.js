@@ -290,6 +290,18 @@ it('discards stale successful list metadata and rows and never navigates a copy 
   expect(h.push).not.toHaveBeenCalled()
 })
 
+it.each(['navigation','newer refresh'])('discards copy navigation after %s interrupts its reload',async interruption=>{
+  await render(PaymentInformationBundlesView)
+  const reload=pending()
+  h.session.paymentInformationRequest.mockResolvedValueOnce(paymentRow('draft',4)).mockReturnValueOnce(reload.promise)
+  const view=vm(), copying=view.mutate(rows[2],'copy')
+  await flushPromises()
+  if(interruption==='navigation') { wrapper.unmount();wrapper=null }
+  else await view.load()
+  reload.resolve(paymentPage(rows));await copying
+  expect(h.push).not.toHaveBeenCalled()
+})
+
 it('shows incomplete row fallbacks and storage-read recovery without logging financial information',async()=>{
   vi.spyOn(globalThis.Storage.prototype,'getItem').mockImplementation(()=>{throw new Error('private')})
   rows=[{...row,information:Object.fromEntries(Object.keys(row.information).map(key=>[key,null])),qrUrl:null,canEnable:false}]

@@ -115,8 +115,10 @@ async function mutate(item, action) {
   } finally { if (current === generation) mutating.value = false }
   if (completed && current === generation) {
     const identity = storeIdentity(session.user.value)
-    await load()
-    if (copied && identity === storeIdentity(session.user.value)) await open(copied)
+    const refreshing = load()
+    const refreshGeneration = generation
+    await refreshing
+    if (copied && refreshGeneration === generation && identity === storeIdentity(session.user.value)) await open(copied)
   }
 }
 watch(() => storeIdentity(session.user.value), () => {
