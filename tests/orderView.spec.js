@@ -55,10 +55,11 @@ describe('staff order card', () => {
     expect(button.find('.fa-file-invoice-dollar').exists()).toBe(true)
     await button.trigger('click'); await flushPromises()
     const items = wrapper.findAllComponents({ name:'VListItem' })
-    expect(items).toHaveLength(1)
+    expect(items).toHaveLength(2)
+    expect(items.shift().props('title')).toBe('Заказ оплачен')
     expect(items[0].props('title')).toBe('Таможенная пошлина оплачена')
     expect(items[0].props('disabled')).toBe(false)
-    expect(document.querySelector('.duty-payment-activator').hasAttribute('tabindex')).toBe(false)
+    expect(document.querySelectorAll('.duty-payment-activator')[1].hasAttribute('tabindex')).toBe(false)
     await items[0].trigger('click'); await flushPromises()
     const call = h.session.orderRequest.mock.calls.find(([path]) => path.endsWith('/customs/paid'))
     expect(call[1].method).toBe('POST')
@@ -100,8 +101,8 @@ describe('staff order card', () => {
     dutyReply(amount, paid)
     await render()
     await wrapper.get('#order-payments').trigger('click'); await flushPromises()
-    expect(wrapper.findComponent({ name:'VListItem' }).props('disabled')).toBe(true)
-    const explanation = new DOMWrapper(document.querySelector('.duty-payment-activator'))
+    expect(wrapper.findAllComponents({ name:'VListItem' })[1].props('disabled')).toBe(true)
+    const explanation = new DOMWrapper(document.querySelectorAll('.duty-payment-activator')[1])
     expect(explanation.attributes('tabindex')).toBe('0')
     expect(explanation.attributes('aria-disabled')).toBe('true')
     expect(explanation.attributes('aria-label')).toContain(reason)
@@ -117,7 +118,7 @@ describe('staff order card', () => {
     if (guard === 'dirty') await wrapper.get('#size').setValue('XL')
     else vm()[guard] = true
     await flushPromises()
-    const explanation = new DOMWrapper(document.querySelector('.duty-payment-activator'))
+    const explanation = new DOMWrapper(document.querySelectorAll('.duty-payment-activator')[1])
     expect(explanation.attributes('tabindex')).toBe('0')
     expect(explanation.attributes('aria-label')).toContain(guard === 'busy' ? 'завершения' : guard === 'locked' ? 'Обновите' : 'несохранённые')
     await vm().markDutyPaid()
@@ -128,8 +129,8 @@ describe('staff order card', () => {
     await render()
     vm().details = { ...vm().details, canMarkCustomsPaid:false }
     await wrapper.get('#order-payments').trigger('click'); await flushPromises()
-    expect(wrapper.findComponent({ name:'VListItem' }).props('disabled')).toBe(true)
-    expect(document.querySelector('.duty-payment-activator').getAttribute('aria-label')).toContain('недоступна для этого заказа')
+    expect(wrapper.findAllComponents({ name:'VListItem' })[1].props('disabled')).toBe(true)
+    expect(document.querySelectorAll('.duty-payment-activator')[1].getAttribute('aria-label')).toContain('недоступна для этого заказа')
     await vm().markDutyPaid()
     expect(h.session.orderRequest.mock.calls.some(([path]) => path.endsWith('/customs/paid'))).toBe(false)
   })
@@ -1126,4 +1127,61 @@ it('does not duplicate an authoritative unit-price error beside the calculated t
   expect(wrapper.get('button[aria-label="Сохранить изменения"]').element.disabled).toBe(true)
   await vm().save()
   expect(h.session.orderRequest).toHaveBeenCalledTimes(3)
+})
+
+describe('main payment confirmation', () => {
+  async function mainCard(status = 100, role = 'operator') {
+    h.session.user.value.roles = [role]
+    await render()
+    vm().ops = { ...ops, statuses:[...ops.statuses, { value:100, name:'Расчёт готов', routeAlias:'quote_ready' }, { value:200, name:'Расчёт истёк', routeAlias:'quote_expired' }] }
+    vm().details = { ...details, status, canEditProduct:false, canMarkOrderPaid:true, mainPaymentRub:1100, customsPaid:true }
+    await flushPromises()
+  }
+  it.each(['administrator', 'shift-manager', 'senior-operator', 'operator'])('confirms receipt after reconciliation for %s', async role => {
+    await mainCard(100, role)
+    await wrapper.get('#order-payments').trigger('click'); await flushPromises()
+    const main = wrapper.findAllComponents({ name:'VListItem' })[0]
+    expect(main.props('title')).toBe('Заказ оплачен')
+    await main.trigger('click'); await flushPromises()
+    const dialog = wrapper.findAllComponents(ConfirmDialog).find(item => item.props('title') === 'Заказ оплачен?')
+    expect(dialog.props('message')).toContain('1\u00a0100,00')
+    expect(dialog.props('message')).toContain('получена и сверена')
+    h.session.orderRequest.mockResolvedValueOnce({ ...vm().details, status:300, canMarkOrderPaid:false, updatedAt:'2026-09-15T11:00:02Z' })
+    dialog.vm.$emit('confirm'); await flushPromises()
+    expect(vm().details.status).toBe(300); expect(vm().details.customsPaid).toBe(true)
+    expect(vm().mainPaymentConfirmation).toBe(false)
+    const call = h.session.orderRequest.mock.calls.find(([path]) => path.endsWith('/payment/paid'))
+    expect(JSON.parse(call[1].body)).toEqual({ expectedUpdatedAt:details.updatedAt })
+  })
+  it('explains expired quote reconciliation and gives a conflict error one dialog owner', async () => {
+    await mainCard(200)
+    vm().openMainPayment(); await flushPromises()
+    const dialog = wrapper.findAllComponents(ConfirmDialog).find(item => item.props('title') === 'Заказ оплачен?')
+    expect(dialog.props('message')).toContain('внешняя сверка')
+    h.session.orderRequest.mockRejectedValueOnce(remote(CORE_PROBLEM_TYPES.orderUpdateConflict))
+    await vm().markPayment(true); await flushPromises()
+    expect(vm().locked).toBe(true); expect(document.querySelectorAll('[role="alert"]')).toHaveLength(1)
+    expect(document.querySelector('[role="alertdialog"] [role="alert"]')).not.toBeNull()
+    const calls = h.session.orderRequest.mock.calls.length
+    await vm().markPayment(true); expect(h.session.orderRequest).toHaveBeenCalledTimes(calls)
+    dialog.vm.$emit('cancel'); await flushPromises()
+    expect(vm().mainPaymentConfirmation).toBe(false)
+  })
+  it.each(['busy', 'locked', 'dirty', 'ineligible'])('blocks confirmation while %s', async guard => {
+    await mainCard()
+    if (guard === 'dirty') { vm().details.canEditProduct = true; vm().form.size = 'new' }
+    else if (guard === 'ineligible') vm().details.canMarkOrderPaid = false
+    else vm()[guard] = true
+    vm().openMainPayment(); await flushPromises()
+    expect(vm().mainPaymentConfirmation).toBe(false)
+    await vm().markPayment(true)
+    expect(h.session.orderRequest.mock.calls.some(([path]) => path.endsWith('/payment/paid'))).toBe(false)
+  })
+  it.each([{ status:100, canMarkOrderPaid:true }, { status:300, canMarkOrderPaid:true }, { status:100, canMarkOrderPaid:false }])('rejects inconsistent successful payment reply %j', async patch => {
+    await mainCard()
+    vm().openMainPayment()
+    h.session.orderRequest.mockResolvedValueOnce({ ...vm().details, ...patch })
+    await vm().markPayment(true)
+    expect(vm().locked).toBe(true); expect(vm().details.status).toBe(100)
+  })
 })

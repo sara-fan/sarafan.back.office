@@ -133,6 +133,13 @@ watch(() => user.value?.id, async (id, _previous, onCleanup) => {
             title="Тарифы"
           />
           <v-list-item
+            v-if="can(user, 'managePaymentInformation')"
+            to="/payment-information-bundles"
+            title="Реквизиты"
+            class="drawer-link"
+            prepend-icon="$payments"
+          />
+          <v-list-item
             v-if="can(user, 'manageConsentWithdrawalRequests')"
             to="/privacy-requests"
             title="Перс. данные"

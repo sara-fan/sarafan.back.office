@@ -7,6 +7,7 @@ import { reactive, ref } from 'vue'
 import { createRouter, createMemoryHistory } from 'vue-router'
 import StoreView from '../src/views/StoreView.vue'
 import StoresView from '../src/views/StoresView.vue'
+import StaffImagePreview from '../src/components/StaffImagePreview.vue'
 import StoreLogo from '../src/components/StoreLogo.vue'
 import StaffFileInput from '../src/components/StaffFileInput.vue'
 import ConfirmDialog from '../src/components/ConfirmDialog.vue'
@@ -541,7 +542,7 @@ describe('authenticated logo lifecycle', () => {
     expect(wrapper.emitted('invalid-file')).toEqual([[file]])
     expect(wrapper.find('[role="status"]').exists()).toBe(false)
     await wrapper.setProps({ file:new globalThis.File(['png'], 'good.png', { type:'image/png' }) })
-    vm().failed({ target:{ getAttribute:() => 'blob:obsolete' } })
+    wrapper.getComponent(StaffImagePreview).vm.$.setupState.failed({ target:{ getAttribute:() => 'blob:obsolete' } })
     expect(wrapper.find('img').exists()).toBe(true)
   })
   it('uses staff binary requests and revokes replacements and unmounted blobs', async () => {

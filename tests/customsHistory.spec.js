@@ -36,3 +36,16 @@ it('rejects payment evidence on legacy events', () => {
   const changed = { ...detail, version:1, event:{ ...row, kind:100 }, statusBefore:null, statusAfter:null }
   expect(() => validateHistoryDetail(changed, changed.event, ops, orderOps, pricingOps)).toThrow()
 })
+
+it.each([100, 200])('renders version-3 order payment status evidence from %s', before => {
+  const metadata = { ...ops, kinds:catalog([...ops.kinds.map(item => item.value), 1000]) }
+  const event = { ...row, kind:1000, areas:8 }
+  const paid = { ...detail, event, version:3, statusBefore:before, statusAfter:300, customsPaidBefore:null, customsPaidAfter:null }
+  expect(validateHistoryDetail(paid, event, metadata, orderOps, pricingOps)).toBe(paid)
+  const wrapper = mount(OrderHistoryDetails, { props:{ detail:paid, orderOps, pricingOps }, global:{ plugins:[createSarafanVuetify()] } })
+  expect(wrapper.text()).toContain('Оплачен'); wrapper.unmount()
+  for (const patch of [{ version:1 }, { statusBefore:0 }, { statusAfter:100 }, { reviewReason:'reason' }, { event:{ ...event, areas:32 } }]) {
+    const invalid = { ...paid, ...patch }
+    expect(() => validateHistoryDetail(invalid, invalid.event, metadata, orderOps, pricingOps)).toThrow()
+  }
+})

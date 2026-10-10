@@ -17,6 +17,13 @@ const ENCODED_PATH_BOUNDARIES = /%(?:2e|2f|5c)/iu
 const LEGAL_DOCUMENT_ROUTE_PATTERN = new RegExp(`(/legal-documents/)${UUID_PATH_PATTERN}(?=/source$|$)`, 'iu')
 
 const API_ROUTE_TEMPLATES = new Set([
+  '/api/v1/backoffice/payment-information-bundles',
+  '/api/v1/backoffice/payment-information-bundles/ops',
+  '/api/v1/backoffice/payment-information-bundles/{id}',
+  '/api/v1/backoffice/payment-information-bundles/{id}/qr',
+  '/api/v1/backoffice/payment-information-bundles/{id}/copy',
+  '/api/v1/backoffice/payment-information-bundles/{id}/enable',
+  '/api/v1/backoffice/payment-information-bundles/{id}/disable',
   '/api/v1/backoffice/stores',
   '/api/v1/backoffice/stores/ops',
   '/api/v1/backoffice/stores/{id}',
@@ -39,6 +46,7 @@ const API_ROUTE_TEMPLATES = new Set([
   '/api/v1/backoffice/orders/{number}/product',
   '/api/v1/backoffice/orders/{number}/review/reject',
   '/api/v1/backoffice/orders/{number}/customs/paid',
+  '/api/v1/backoffice/orders/{number}/payment/paid',
   '/api/v1/backoffice/orders/pricing/ops',
   '/api/v1/backoffice/orders/{number}/history',
   '/api/v1/backoffice/orders/{number}/history/ops',
@@ -51,7 +59,7 @@ const API_ROUTE_TEMPLATES = new Set([
 
 function routeTemplate(path) {
   try {
-    const pathname = new globalThis.URL(path, ROUTE_VALIDATION_ORIGIN).pathname.replace(/(\/backoffice\/stores\/)[1-9]\d*(?=\/logo$|$)/u, '$1{id}').replace(/(\/backoffice\/service-catalogue\/)[1-9]\d*$/u, '$1{id}').replace(/(\/backoffice\/orders\/)\d{8}-[1-9]\d*(?=\/(?:customs\/paid|review\/reject|product|history(?:\/(?:ops|[0-3]-[1-9]\d*))?|pricing(?:\/confirm)?)$|$)/u, '$1{number}').replace(/(\/history\/)[0-3]-[1-9]\d*$/u, '$1{eventKey}').replace(LEGAL_DOCUMENT_ROUTE_PATTERN, '$1{id}').replace(/(\/backoffice\/users\/)\d+$/u, '$1{id}')
+    const pathname = new globalThis.URL(path, ROUTE_VALIDATION_ORIGIN).pathname.replace(/(\/backoffice\/payment-information-bundles\/)[1-9]\d*(?=\/(?:qr|copy|enable|disable)$|$)/u, '$1{id}').replace(/(\/backoffice\/stores\/)[1-9]\d*(?=\/logo$|$)/u, '$1{id}').replace(/(\/backoffice\/service-catalogue\/)[1-9]\d*$/u, '$1{id}').replace(/(\/backoffice\/orders\/)\d{8}-[1-9]\d*(?=\/(?:(?:customs|payment)\/paid|review\/reject|product|history(?:\/(?:ops|[0-3]-[1-9]\d*))?|pricing(?:\/confirm)?)$|$)/u, '$1{number}').replace(/(\/history\/)[0-3]-[1-9]\d*$/u, '$1{eventKey}').replace(LEGAL_DOCUMENT_ROUTE_PATTERN, '$1{id}').replace(/(\/backoffice\/users\/)\d+$/u, '$1{id}')
     return API_ROUTE_TEMPLATES.has(pathname) ? pathname : undefined
   } catch {
     return undefined

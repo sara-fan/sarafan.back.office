@@ -12,9 +12,11 @@ const permissions = Object.freeze({
   access: Object.keys(ROLES),
   manualQuotes: Object.keys(ROLES),
   markCustomsPaid: Object.keys(ROLES),
+  markOrderPaid: Object.keys(ROLES),
   viewStores: Object.keys(ROLES),
   viewServiceCatalogue: Object.keys(ROLES),
   manageServiceCatalogue: ['administrator'],
+  managePaymentInformation: ['administrator'],
   manageOrderPricing: ['administrator', 'shift-manager'],
   createStore: ['administrator'],
   editStore: ['administrator', 'shift-manager'],
@@ -48,6 +50,7 @@ export function safeReturn(value, user) {
   if (can(user, 'viewStores') && /^\/stores(?:\/[1-9]\d*)?$/u.test(value)) return value
   if (can(user, 'manageServiceCatalogue') && value === '/service-catalogue/new') return value
   if (can(user, 'viewServiceCatalogue') && /^\/service-catalogue(?:\/(?:audit|[1-9]\d*))?$/u.test(value)) return value
+  if (can(user, 'managePaymentInformation') && /^\/payment-information-bundles(?:\/(?:new|[1-9]\d*))?$/u.test(value)) return value
   if (can(user, 'manageUsers') && /^\/users(?:\/(?:new|[1-9]\d*))?$/u.test(value)) return value
   if (can(user, 'manageLegalDocuments') && /^\/legal-documents(?:\/(?:new|audit|[0-9a-fA-F]{8}-(?:[0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}))?$/u.test(value)) return value
   if (can(user, 'manageConsentWithdrawalRequests') && value === '/privacy-requests') return value
