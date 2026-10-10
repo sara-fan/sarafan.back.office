@@ -3,6 +3,7 @@
 // All rights reserved.
 // This file is a part of the Sarafan application
 import { computed, ref } from 'vue'
+import { PaidIndicator } from '../paidIndicator.js'
 import { associatedFieldErrors } from '../errors/problem.js'
 import { formatMoneyAmount } from '../moneyFormatting.js'
 import ListText from './ListText.vue'
@@ -12,7 +13,7 @@ import InlineEditableField from './InlineEditableField.vue'
 import PriceTotalContext from './PriceTotalContext.vue'
 import { manualPricingTariffs, pricingPayload, optionalServices } from '../orderPricing.js'
 
-const props = defineProps({ pricing:{ type:Object, default:null }, ops:{ type:Object, default:null }, loading:Boolean, draft:{ type:Object, default:null }, editable:Boolean, disabled:Boolean, problem:{ type:Object, default:null } })
+const props = defineProps({ pricing:{ type:Object, default:null }, ops:{ type:Object, default:null }, loading:Boolean, draft:{ type:Object, default:null }, editable:Boolean, disabled:Boolean, customsPaid:Boolean, problem:{ type:Object, default:null } })
 const expanded = defineModel({ type:Boolean, default:true })
 const errors = computed(() => associatedFieldErrors(props.problem, 'manualAmounts'))
 const emit = defineEmits(['editing-change', 'amount-change'])
@@ -126,27 +127,33 @@ function prices(component) {
                 :class="{ 'original-price':price.original }"
                 :aria-label="price.original ? `${money(price.amount)} — исходная стоимость` : undefined"
               >
-                <InlineEditableField
-                  v-if="editable && manual(component, price.alias)"
-                  :id="`manualAmount${component.service}`"
-                  :ref="value => editorRef(component.service, value)"
-                  :model-value="draft.manualAmounts[component.service]"
-                  :label="`${service(component.service).name}, ${currency(price.alias).symbol}`"
-                  :edit-tooltip="`Изменить стоимость: ${service(component.service).name}`"
-                  inputmode="decimal"
-                  editable
-                  :disabled="disabled"
-                  :validate="value => validateAmount(value, component.service)"
-                  validation-field="manualAmounts"
-                  :invalid="errors.length > 0"
-                  described-by="manual-amounts-error"
-                  @update:model-value="emit('amount-change', component.service, $event === '' ? '' : Number($event.replace(',', '.')).toFixed(2).replace('.', ','))"
-                  @editing-change="editChanged(component.service, $event)"
-                />
-                <ListText
-                  v-else
-                  :text="money(price.amount)"
-                />
+                <div class="paid-amount">
+                  <InlineEditableField
+                    v-if="editable && manual(component, price.alias)"
+                    :id="`manualAmount${component.service}`"
+                    :ref="value => editorRef(component.service, value)"
+                    :model-value="draft.manualAmounts[component.service]"
+                    :label="`${service(component.service).name}, ${currency(price.alias).symbol}`"
+                    :edit-tooltip="`Изменить стоимость: ${service(component.service).name}`"
+                    inputmode="decimal"
+                    editable
+                    :disabled="disabled"
+                    :validate="value => validateAmount(value, component.service)"
+                    validation-field="manualAmounts"
+                    :invalid="errors.length > 0"
+                    described-by="manual-amounts-error"
+                    @update:model-value="emit('amount-change', component.service, $event === '' ? '' : Number($event.replace(',', '.')).toFixed(2).replace('.', ','))"
+                    @editing-change="editChanged(component.service, $event)"
+                  />
+                  <ListText
+                    v-else
+                    :text="money(price.amount)"
+                  />
+                  <PaidIndicator
+                    :paid="customsPaid && isCustoms(component) && price.alias === 'rub'"
+                    label="Таможенная пошлина оплачена"
+                  />
+                </div>
               </td>
             </tr>
           </tbody>
@@ -183,27 +190,33 @@ function prices(component) {
                 :class="{ 'original-price':price.original }"
                 :aria-label="price.original ? `${money(price.amount)} — исходная стоимость` : undefined"
               >
-                <InlineEditableField
-                  v-if="editable && manual(component, price.alias)"
-                  :id="`manualAmount${component.service}`"
-                  :ref="value => editorRef(component.service, value)"
-                  :model-value="draft.manualAmounts[component.service]"
-                  :label="`${service(component.service).name}, ${currency(price.alias).symbol}`"
-                  :edit-tooltip="`Изменить стоимость: ${service(component.service).name}`"
-                  inputmode="decimal"
-                  editable
-                  :disabled="disabled"
-                  :validate="value => validateAmount(value, component.service)"
-                  validation-field="manualAmounts"
-                  :invalid="errors.length > 0"
-                  described-by="manual-amounts-error"
-                  @update:model-value="emit('amount-change', component.service, $event === '' ? '' : Number($event.replace(',', '.')).toFixed(2).replace('.', ','))"
-                  @editing-change="editChanged(component.service, $event)"
-                />
-                <ListText
-                  v-else
-                  :text="money(price.amount)"
-                />
+                <div class="paid-amount">
+                  <InlineEditableField
+                    v-if="editable && manual(component, price.alias)"
+                    :id="`manualAmount${component.service}`"
+                    :ref="value => editorRef(component.service, value)"
+                    :model-value="draft.manualAmounts[component.service]"
+                    :label="`${service(component.service).name}, ${currency(price.alias).symbol}`"
+                    :edit-tooltip="`Изменить стоимость: ${service(component.service).name}`"
+                    inputmode="decimal"
+                    editable
+                    :disabled="disabled"
+                    :validate="value => validateAmount(value, component.service)"
+                    validation-field="manualAmounts"
+                    :invalid="errors.length > 0"
+                    described-by="manual-amounts-error"
+                    @update:model-value="emit('amount-change', component.service, $event === '' ? '' : Number($event.replace(',', '.')).toFixed(2).replace('.', ','))"
+                    @editing-change="editChanged(component.service, $event)"
+                  />
+                  <ListText
+                    v-else
+                    :text="money(price.amount)"
+                  />
+                  <PaidIndicator
+                    :paid="customsPaid && isCustoms(component) && price.alias === 'rub'"
+                    label="Таможенная пошлина оплачена"
+                  />
+                </div>
               </td>
             </tr>
           </tfoot>
@@ -234,4 +247,5 @@ function prices(component) {
 .cost-table :deep(th:first-child) { width:34%; }
 .cost-table .service-status-column { width:52px; text-align:center; }
 .original-price { font-weight:700; }
+.paid-amount { display:flex; align-items:center; }
 </style>

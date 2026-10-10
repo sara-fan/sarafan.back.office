@@ -65,6 +65,7 @@ export function validateOrderDetails(value, ops, number) {
     || !value.customer || !Object.keys(CUSTOMER_FIELDS).every(key => key === 'passportIssueDate'
       ? value.customer[key] === null || dateIsValid(value.customer[key]) : text(value.customer[key], 2000))
     || typeof value.customer.phone !== 'string' || !value.customer.phone
+    || typeof value.customsPaid !== 'boolean' || typeof value.canMarkCustomsPaid !== 'boolean'
     || !deliveryIsValid(value.delivery)
     || !text(value.imageUrl, 2048)
     || !(value.savedLimitSourceEffectiveDate === null || dateIsValid(value.savedLimitSourceEffectiveDate))

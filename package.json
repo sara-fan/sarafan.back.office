@@ -1,6 +1,6 @@
 {
   "name": "sarafan-back-office",
-  "version": "0.3.5",
+  "version": "0.3.6",
   "private": true,
   "type": "module",
   "engines": {
@@ -17,7 +17,7 @@
   },
   "dependencies": {
     "@fortawesome/fontawesome-free": "6.7.2",
-    "@sara-fan/ui-shared": "https://github.com/sara-fan/sarafan.ui.shared/releases/download/v0.1.0/sara-fan-ui-shared-0.1.0.tgz",
+    "@sara-fan/ui-shared": "https://github.com/sara-fan/sarafan.ui.shared/releases/download/v0.1.1-customs-pilot.1/sara-fan-ui-shared-0.1.1.tgz",
     "vue": "3.5.41",
     "vue-router": "4.6.4",
     "vuetify": "4.1.11"

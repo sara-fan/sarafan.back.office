@@ -353,3 +353,19 @@ it('forwards review rejection through the staff boundary and retains the session
   expect(session.user.value).toEqual(identity);
   expect(() => session.orderRequest('/orders/12345678-1/review/other', options)).toThrow();
 });
+
+it('forwards customs paid through the real session and retains identity on a payment conflict', async () => {
+  const fetch = vi.fn().mockResolvedValueOnce(auth()).mockResolvedValueOnce(response(200, { customsPaid:true }))
+    .mockResolvedValueOnce(problemResponse(409, 'customs-payment-unavailable'))
+  vi.stubGlobal('fetch', fetch)
+  const session = createSession()
+  await session.login('admin@example.test', 'password')
+  const options = { method:'POST', body:JSON.stringify({ expectedUpdatedAt:'2026-10-09T10:00:00.123456Z' }) }
+  await expect(session.orderRequest('/orders/12345678-1/customs/paid', options)).resolves.toEqual({ customsPaid:true })
+  expect(fetch.mock.calls.at(-1)[0]).toBe('/api/v1/backoffice/orders/12345678-1/customs/paid')
+  expect(fetch.mock.calls.at(-1)[1]).toMatchObject(options)
+  await expect(session.orderRequest('/orders/12345678-1/customs/paid', options)).rejects.toMatchObject({ code:'customs_payment_unavailable' })
+  expect(session.user.value).toEqual(identity)
+  for (const path of ['/orders/12345678-0/customs/paid', '/orders/12345678-1/customs/other', '/orders/12345678-1/customs/paid/again'])
+    expect(() => session.orderRequest(path, options)).toThrow()
+})

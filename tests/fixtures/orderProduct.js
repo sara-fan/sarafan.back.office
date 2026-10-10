@@ -20,7 +20,7 @@ export const product = { productName:'Чайник', storeName:'Магазин',
 export const details = {
   orderNumber:'12345678-1', status:0, sourceUrl:'https://shop.example/item',
   createdAt:'2026-09-15T10:00:00.123456Z', updatedAt:'2026-09-15T11:00:00.654321Z',
-  product, limitCheck:limit, canEditProduct:true, delivery:null,
+  product, limitCheck:limit, canEditProduct:true, delivery:null, customsPaid:false, canMarkCustomsPaid:false,
   savedLimitSourceEffectiveDate:'2026-09-14',
   imageUrl:'https://shop.example/item.png', dimensions:{ lengthCm:1, widthCm:2, heightCm:3 }, characteristics:{ Материал:'Сталь' },
   customer:{ lastName:'Иванов', firstName:'Иван', patronymic:null, phone:'+79991234567', email:null,

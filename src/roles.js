@@ -11,6 +11,7 @@ export const ROLES = Object.freeze({
 const permissions = Object.freeze({
   access: Object.keys(ROLES),
   manualQuotes: Object.keys(ROLES),
+  markCustomsPaid: Object.keys(ROLES),
   viewStores: Object.keys(ROLES),
   viewServiceCatalogue: Object.keys(ROLES),
   manageServiceCatalogue: ['administrator'],

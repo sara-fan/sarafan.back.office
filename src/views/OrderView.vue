@@ -23,6 +23,7 @@ import { CUSTOMER_FIELDS, PRODUCT_FIELDS, productExceedsLimit, priceCents, produ
 import { can } from '../roles.js'
 import { useSession } from '../stores/session.js'
 
+const paymentsOpen = ref(false)
 const rejectionOpen = ref(false), rejectionReason = ref(''), rejectionRoot = ref(null)
 const focusRoot = ref(null)
 const costSummary = ref(null), continuing = ref(false)
@@ -48,6 +49,19 @@ const visibleReviewReason = computed(() => statusMetadata.value && statusMetadat
 const canRejectReview = computed(() => statusMetadata.value?.routeAlias === 'under_review'
   && can(session.user.value, 'manageOrderPricing'))
 const pricingEditable = computed(() => canRejectReview.value && pricing.value?.canEdit && pricingOps.value?.canManage)
+const customsComponent = computed(() => pricing.value?.calculation.components.find(item =>
+  pricingOps.value?.catalogue.services.some(service => service.value === item.service && service.routeAlias === 'customs-payments')))
+const canMarkDutyPaid = computed(() => !!statusMetadata.value && !!details.value?.canMarkCustomsPaid && !details.value.customsPaid
+  && can(session.user.value, 'markCustomsPaid') && customsComponent.value?.state === 0 && customsComponent.value?.amountRub > 0)
+const dutyUnavailableReason = computed(() => {
+  if (busy.value) return 'Дождитесь завершения текущего действия.'
+  if (locked.value) return 'Обновите данные заказа перед отметкой оплаты.'
+  if (dirty.value) return 'Сохраните или отмените несохранённые изменения.'
+  if (details.value?.customsPaid) return 'Пошлина уже отмечена как оплаченная.'
+  if (customsComponent.value?.state !== 0) return 'Сумма таможенной пошлины неизвестна.'
+  if (customsComponent.value.amountRub <= 0) return 'Таможенная пошлина не ожидается.'
+  return canMarkDutyPaid.value ? '' : 'Отметка оплаты недоступна для этого заказа.'
+})
 const canConfirmPrice = computed(() => pricingEditable.value && pricing.value?.canConfirm && !dirty.value && !locked.value)
 const form = ref(null)
 const baseline = ref('')
@@ -143,7 +157,34 @@ function apply(value) {
   locked.value = false
 }
 
+async function markDutyPaid() {
+  paymentsOpen.value = false
+  if (busy.value || dirty.value || locked.value || !canMarkDutyPaid.value) return
+  const current = ++version
+  busy.value = true
+  problem.value = null
+  try {
+    const result = await session.orderRequest(`/orders/${number.value}/customs/paid`, {
+      method:'POST', headers:{ 'Content-Type':'application/json' },
+      body:JSON.stringify({ expectedUpdatedAt:details.value.updatedAt })
+    })
+    if (current !== version) return
+    const paid = validateOrderDetails(result, ops.value, number.value)
+    if (paid.customsPaid !== true || paid.canMarkCustomsPaid !== false) {
+      locked.value = true
+      throw createInternalProblem('protocolError')
+    }
+    details.value = paid
+    pricing.value = { ...pricing.value, updatedAt:paid.updatedAt }
+  } catch (value) {
+    if (current !== version) return
+    problem.value = normalizeProblem(value)
+    if ([CORE_PROBLEM_TYPES.orderUpdateConflict, CORE_PROBLEM_TYPES.customsPaymentUnavailable].includes(problem.value.type)) locked.value = true
+  } finally { if (current === version) busy.value = false }
+}
+
 async function load() {
+  paymentsOpen.value = false
   rejectionOpen.value = false
   const current = ++version
   busy.value = true
@@ -291,6 +332,7 @@ function beforeUnload(event) {
   event.returnValue = ''
 }
 function clear() {
+  paymentsOpen.value = false
   rejectionOpen.value = false; rejectionReason.value = ""
   version += 1
   details.value = null
@@ -342,6 +384,54 @@ const focusAfter = useValidationFocus(focusRoot, { context:() => [session.user.v
         @cancel="back"
       >
         <template #leading>
+          <div
+            v-if="can(session.user.value, 'markCustomsPaid')"
+            class="header-actions"
+          >
+            <ActionButton
+              id="order-payments"
+              icon="$payments"
+              tooltip-text="Платежи"
+              aria-haspopup="menu"
+              :aria-expanded="paymentsOpen"
+              :disabled="busy || !details"
+              @click="paymentsOpen = !paymentsOpen"
+            />
+            <v-menu
+              v-model="paymentsOpen"
+              activator="#order-payments"
+              :open-on-click="false"
+              location="bottom end"
+            >
+              <v-list
+                density="compact"
+                aria-label="Платежи"
+              >
+                <v-tooltip
+                  :text="dutyUnavailableReason"
+                  :disabled="!dutyUnavailableReason"
+                  location="top"
+                >
+                  <template #activator="{ props:activator }">
+                    <div
+                      v-bind="dutyUnavailableReason ? activator : {}"
+                      class="duty-payment-activator"
+                      :tabindex="dutyUnavailableReason ? 0 : undefined"
+                      :role="dutyUnavailableReason ? 'button' : undefined"
+                      :aria-disabled="dutyUnavailableReason ? 'true' : undefined"
+                      :aria-label="dutyUnavailableReason ? `Таможенная пошлина оплачена. ${dutyUnavailableReason}` : undefined"
+                    >
+                      <v-list-item
+                        title="Таможенная пошлина оплачена"
+                        :disabled="!!dutyUnavailableReason"
+                        @click="markDutyPaid"
+                      />
+                    </div>
+                  </template>
+                </v-tooltip>
+              </v-list>
+            </v-menu>
+          </div>
           <div
             v-if="canRejectReview"
             class="header-actions"
@@ -563,6 +653,7 @@ const focusAfter = useValidationFocus(focusRoot, { context:() => [session.user.v
           ref="costSummary"
           v-model="pricingExpanded"
           :pricing="pricing"
+          :customs-paid="details.customsPaid"
           :ops="pricingOps"
           :loading="busy"
           :draft="pricingDraft"

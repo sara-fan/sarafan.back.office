@@ -19,6 +19,8 @@ const changes = computed(() => {
     .map(([key, name]) => ({ name, before:display(props.detail.productBefore?.[key]), after:display(props.detail.productAfter?.[key]) }))
   if (props.detail.statusBefore !== null || props.detail.statusAfter !== null) result.push({ name:'Статус', before:status(props.detail.statusBefore), after:status(props.detail.statusAfter) })
   if (props.detail.sourceUrl !== null) result.push({ name:'Страница товара', before:'—', after:props.detail.sourceUrl })
+  if (props.detail.customsPaidAfter != null) result.push({ name:'Таможенная пошлина оплачена',
+    before:'Нет', after:'Да' })
   return result
 })
 const priceRows = computed(() => priceHistoryRows(props.detail, props.pricingOps))
