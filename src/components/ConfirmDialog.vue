@@ -34,6 +34,7 @@ defineEmits(['confirm','cancel','secondary'])
       <p id="confirm-message">
         {{ message }}
       </p>
+      <slot />
       <div class="form-actions">
         <ActionButton
           :disabled="busy"

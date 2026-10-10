@@ -369,3 +369,16 @@ it('forwards customs paid through the real session and retains identity on a pay
   for (const path of ['/orders/12345678-0/customs/paid', '/orders/12345678-1/customs/other', '/orders/12345678-1/customs/paid/again'])
     expect(() => session.orderRequest(path, options)).toThrow()
 })
+
+it('forwards main payment confirmation with the current staff token and retains conflicts', async () => {
+  const fetch = vi.fn().mockResolvedValueOnce(auth())
+    .mockResolvedValueOnce(response(200, { status:300, canMarkOrderPaid:false }))
+    .mockResolvedValueOnce(problemResponse(409, 'order-payment-unavailable'))
+  vi.stubGlobal('fetch', fetch)
+  const session = createSession(); await session.login('admin@example.test', 'password')
+  const options = { method:'POST', headers:{ 'Content-Type':'application/json' }, body:'{"expectedUpdatedAt":"2026-10-10T12:00:00Z"}' }
+  await expect(session.orderRequest('/orders/12345678-1/payment/paid', options)).resolves.toMatchObject({ status:300 })
+  expect(fetch.mock.calls[1][1].headers.get('Authorization')).toBe('Bearer staff-token')
+  await expect(session.orderRequest('/orders/12345678-1/payment/paid', options)).rejects.toMatchObject({ code:'order_payment_unavailable' })
+  expect(session.user.value).toEqual(identity)
+})
