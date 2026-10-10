@@ -4,6 +4,7 @@
 
 import { createInternalProblem, PROBLEM_TYPE_ROOT } from './errors/problem.js'
 import { can } from './roles.js'
+import { validateImageFile } from './imageUpload.js'
 import { normalizeStoreAddress } from './storeAddress.js'
 
 export const STORE_FIELDS = ['name', 'description', 'officialUrl', 'logo', 'status', 'displayOrder']
@@ -71,10 +72,7 @@ export function storeForm(value) {
     status:value?.status ?? 0, displayOrder:String(value?.displayOrder ?? 0) }
 }
 export function logoValidation(file, limits) {
-  if (!file) return null
-  const message = !limits.logoContentTypes.includes(file.type) ? 'Выберите файл PNG, JPEG или WebP.'
-    : file.size <= 0 || file.size > limits.logoMaxBytes ? `Размер файла должен быть от 1 до ${limits.logoMaxBytes} байт.` : null
-  return message ? createInternalProblem('invalidInput', { errors:{ logo:[message] } }) : null
+  return validateImageFile(file, { contentTypes:limits.logoContentTypes, maxBytes:limits.logoMaxBytes }, 'logo')
 }
 export function storeValidation(form, ops, file, image = {}) {
   const errors = {}
