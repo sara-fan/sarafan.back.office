@@ -20,6 +20,8 @@ import StoreView from './views/StoreView.vue'
 import ServiceCatalogueView from './views/ServiceCatalogueView.vue'
 import ServiceCatalogueEntryView from './views/ServiceCatalogueEntryView.vue'
 import ServiceCatalogueAuditView from './views/ServiceCatalogueAuditView.vue'
+import PaymentInformationBundlesView from './views/PaymentInformationBundlesView.vue'
+import PaymentInformationBundleView from './views/PaymentInformationBundleView.vue'
 import StatusView from './views/StatusView.vue'
 
 export function createAppRouter(history = createWebHistory(), session = useSession()) {
@@ -34,6 +36,9 @@ export function createAppRouter(history = createWebHistory(), session = useSessi
     { path:'/legal-documents/new', component:LegalDocumentView, meta:{ action:'manageLegalDocuments' } },
     { path:'/legal-documents/audit', component:LegalDocumentAuditView, meta:{ action:'manageLegalDocuments' } },
     { path:'/legal-documents/:id([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})', component:LegalDocumentView, meta:{ action:'manageLegalDocuments' } },
+    { path:'/payment-information-bundles', component:PaymentInformationBundlesView, meta:{ action:'managePaymentInformation' } },
+    { path:'/payment-information-bundles/new', component:PaymentInformationBundleView, meta:{ action:'managePaymentInformation' } },
+    { path:'/payment-information-bundles/:id([1-9]\\d*)', component:PaymentInformationBundleView, meta:{ action:'managePaymentInformation' } },
     { path:'/privacy-requests', component:PrivacyRequestsView, meta:{ action:'manageConsentWithdrawalRequests' } },
     { path:'/orders', component:OrdersView, meta:{ action:'manualQuotes' } },
     { path:'/stores', component:StoresView, meta:{ action:'viewStores' } },

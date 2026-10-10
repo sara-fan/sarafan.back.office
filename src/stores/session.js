@@ -277,6 +277,11 @@ export function createSession() {
       if (!/^\/stores(?:\/ops|\/[1-9]\d*(?:\/logo)?)?$/u.test(pathname)) throw createInternalProblem('invalidInput')
       return request(path, options, { supplementary:true, responseType })
     },
+    paymentInformationRequest: (path, options = {}, responseType = 'json') => {
+      const pathname = typeof path === 'string' ? path.split('?')[0] : ''
+      if (!/^\/payment-information-bundles(?:\/ops|\/[1-9]\d*(?:\/(?:qr|copy|enable|disable))?)?$/u.test(pathname)) throw createInternalProblem('invalidInput')
+      return request(path, options, { supplementary:true, responseType })
+    },
     consentRequest: (path, options = {}, responseType = 'json') => {
       const pathname = typeof path === 'string' ? path.split('?')[0] : ''
       if (!CONSENT_REQUEST_PATH_PATTERN.test(pathname)) throw createInternalProblem('invalidInput')

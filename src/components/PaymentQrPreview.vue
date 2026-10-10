@@ -12,19 +12,18 @@ defineProps({ url:{ type:String, default:null }, file:{ type:Object, default:nul
 const emit = defineEmits(['invalid-file'])
 const session = useSession()
 function load(url) {
-  if (!/^\/api\/v1\/backoffice\/stores\/[1-9]\d*\/logo\?v=[0-9a-f]{64}$/u.test(url)) throw createInternalProblem('protocolError')
-  return session.storeRequest(url.slice('/api/v1/backoffice'.length), {}, 'blob')
+  if (!/^\/api\/v1\/backoffice\/payment-information-bundles\/[1-9]\d*\/qr\?v=[0-9a-f]{64}$/u.test(url)) throw createInternalProblem('protocolError')
+  return session.paymentInformationRequest(url.slice('/api/v1/backoffice'.length), {}, 'blob')
 }
 </script>
 <template>
   <StaffImagePreview
-    class="store-logo"
     :url="url"
     :file="file"
     :revision="revision"
     :identity="storeIdentity(session.user.value)"
     :load="load"
-    alt="Изображение магазина"
+    alt="QR СБП получателя"
     @invalid-file="emit('invalid-file', $event)"
   />
 </template>
