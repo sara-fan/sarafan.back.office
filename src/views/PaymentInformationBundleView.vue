@@ -11,7 +11,7 @@ import FormField from '../components/FormField.vue'
 import StaffFileInput from '../components/StaffFileInput.vue'
 import PageAlertRegion from '../components/PageAlertRegion.vue'
 import PaymentQrPreview from '../components/PaymentQrPreview.vue'
-import { associatedFieldErrors, createInternalProblem, formPageProblem, INTERNAL_PROBLEM_TYPES, normalizeProblem } from '../errors/problem.js'
+import { createInternalProblem, formPageProblem, INTERNAL_PROBLEM_TYPES, normalizeProblem } from '../errors/problem.js'
 import { can } from '../roles.js'
 import { storeIdentity } from '../storeCatalogue.js'
 import { useSession } from '../stores/session.js'
@@ -29,7 +29,6 @@ const editable = computed(() => !committed.value && can(session.user.value, 'man
 const dirty = computed(() => !!form.value && (file.value !== null || JSON.stringify(form.value) !== baseline.value))
 const { confirmation, confirmDiscard, finish } = useDiscardChanges(dirty)
 const pageProblem = computed(() => formPageProblem(problem.value, form.value ? PAYMENT_FIELDS : []))
-const errors = field => associatedFieldErrors(problem.value, field)
 const fields = [
   ['recipientName', 'Получатель'], ['inn', 'ИНН'], ['kpp', 'КПП'], ['settlementAccount', 'Расчётный счёт'],
   ['bankName', 'Банк'], ['bik', 'БИК'], ['correspondentAccount', 'Корреспондентский счёт'], ['paymentLink', 'Платёжная ссылка']
@@ -117,7 +116,7 @@ onUnmounted(clear)
   <section class="settings table-wide">
     <header class="header-with-actions">
       <h1 class="primary-heading">
-        {{ creating ? 'Новые платёжные реквизитов' : 'Редактирование платёжных реквизитов' }}
+        {{ creating ? 'Новые платёжные реквизиты' : 'Редактирование платёжных реквизитов' }}
       </h1>
       <EditorHeaderActions
         form="payment-bundle-form"
@@ -151,7 +150,7 @@ onUnmounted(clear)
       Черновик сохранён.
     </p>
     <p v-if="form && !editable && !committed">
-      Используемые реквизиты нельзя редактироать.
+      Используемые реквизиты нельзя редактировать.
     </p>
     <form
       v-if="form"
@@ -197,47 +196,37 @@ onUnmounted(clear)
           :inputmode="['inn', 'kpp', 'settlementAccount', 'bik', 'correspondentAccount'].includes(key) ? 'numeric' : undefined"
           :hint="key === 'kpp' && form.recipientType === 1 ? 'Для ИП КПП не указывается.' : ''"
         />
-        <div class="form-field">
-          <label for="qr">QR СБП получателя</label>
-          <div class="staff-form-control qr-control">
-            <StaffFileInput
-              v-if="editable"
-              name="qr"
-              :model-value="file"
-              :disabled="busy || locked"
-              :clearable="false"
-              tooltip="Выбрать QR СБП"
-              :accept="ops.limits.qrContentTypes.join(',')"
-              :aria-invalid="errors('qr').length > 0"
-              aria-describedby="qr-hint qr-error"
-              @update:model-value="selectQr"
-            />
-            <PaymentQrPreview
-              :url="details?.qrUrl"
-              :file="file"
-              :revision="revision"
-              @invalid-file="previewFailed"
-            />
-          </div>
-          <p
-            id="qr-hint"
-            class="field-hint"
-          >
-            Статический PNG, JPEG или WebP, до {{ ops.limits.qrMaxBytes }} байт.
-            Не более {{ ops.limits.qrMaxDimension }} пикселей по стороне и {{ ops.limits.qrMaxPixels }} пикселей всего.
-            Распакованные метаданные PNG — до {{ ops.limits.qrMaxMetadataBytes }} байт.
-            Новый файл заменит QR при сохранении; без нового файла сохранённый QR остаётся.
-          </p>
-          <div
-            id="qr-error"
-            class="field-error"
-          >
-            <span
-              v-for="error in errors('qr')"
-              :key="error"
-            >{{ error }}</span>
-          </div>
-        </div>
+        <FormField
+          name="qr"
+          label="QR СБП получателя"
+          :problem="problem"
+          :hint="`Статический PNG, JPEG или WebP, до ${ops.limits.qrMaxBytes} байт. ` +
+            `Не более ${ops.limits.qrMaxDimension} пикселей по стороне и ${ops.limits.qrMaxPixels} пикселей всего. ` +
+            `Распакованные метаданные PNG — до ${ops.limits.qrMaxMetadataBytes} байт. ` +
+            'Новый файл заменит QR при сохранении; без нового файла сохранённый QR остаётся.'"
+        >
+          <template #control="{ controlAttrs }">
+            <div class="staff-form-control qr-control">
+              <StaffFileInput
+                v-if="editable"
+                v-bind="controlAttrs"
+                name="qr"
+                :model-value="file"
+                :disabled="busy || locked"
+                :clearable="false"
+                tooltip="Выбрать QR СБП"
+                :accept="ops.limits.qrContentTypes.join(',')"
+                @update:model-value="selectQr"
+              />
+              <PaymentQrPreview
+                :url="details?.qrUrl"
+                :file="file"
+                :revision="revision"
+                @invalid-file="previewFailed"
+              />
+            </div>
+          </template>
+        </FormField>
       </fieldset>
     </form>
     <ConfirmDialog
