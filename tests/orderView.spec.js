@@ -69,6 +69,33 @@ describe('staff order card', () => {
     expect(vm().canMarkDutyPaid).toBe(false)
     expect(wrapper.get('[role="img"][aria-label="Таможенная пошлина оплачена"]').exists()).toBe(true)
   })
+  it.each([[false, false], [false, true], [true, true]])(
+    'rejects a successful duty response with paid=%s and canMark=%s before applying state', async (customsPaid, canMarkCustomsPaid) => {
+      dutyReply()
+      await render()
+      const originalDetails = vm().details
+      const originalPricing = vm().pricing
+      h.session.orderRequest.mockResolvedValueOnce({ ...details, customsPaid, canMarkCustomsPaid,
+        updatedAt:'2026-09-15T11:00:01.654321Z' })
+      await vm().markDutyPaid(); await flushPromises()
+      expect(vm().problem.code).toBe('ui_protocol_error')
+      expect(vm().details).toBe(originalDetails)
+      expect(vm().pricing).toBe(originalPricing)
+      expect(vm().details.customsPaid).toBe(false)
+      expect(vm().busy).toBe(false)
+      expect(vm().locked).toBe(true)
+      expect(wrapper.findAll('[role="alert"]')).toHaveLength(1)
+      expect(wrapper.find('[role="img"][aria-label="Таможенная пошлина оплачена"]').exists()).toBe(false)
+      const calls = h.session.orderRequest.mock.calls.length
+      await vm().markDutyPaid()
+      expect(h.session.orderRequest).toHaveBeenCalledTimes(calls)
+      dutyReply(120, customsPaid)
+      await vm().load(); await flushPromises()
+      expect(vm().locked).toBe(false)
+      expect(vm().problem).toBeNull()
+      expect(vm().details.customsPaid).toBe(customsPaid)
+      expect(vm().canMarkDutyPaid).toBe(!customsPaid)
+    })
   it.each([[null, false, 'неизвестна'], [0, false, 'не ожидается'], [120, true, 'уже отмечена']])('disables duty for amount %s and paid=%s', async (amount, paid, reason) => {
     dutyReply(amount, paid)
     await render()

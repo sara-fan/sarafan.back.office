@@ -169,8 +169,13 @@ async function markDutyPaid() {
       body:JSON.stringify({ expectedUpdatedAt:details.value.updatedAt })
     })
     if (current !== version) return
-    details.value = validateOrderDetails(result, ops.value, number.value)
-    pricing.value = { ...pricing.value, updatedAt:result.updatedAt }
+    const paid = validateOrderDetails(result, ops.value, number.value)
+    if (paid.customsPaid !== true || paid.canMarkCustomsPaid !== false) {
+      locked.value = true
+      throw createInternalProblem('protocolError')
+    }
+    details.value = paid
+    pricing.value = { ...pricing.value, updatedAt:paid.updatedAt }
   } catch (value) {
     if (current !== version) return
     problem.value = normalizeProblem(value)
