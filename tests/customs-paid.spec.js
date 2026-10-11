@@ -3,6 +3,7 @@
 // This file is a part of the Sarafan application
 
 import { mount } from '@vue/test-utils'
+import { PaidIndicator } from '../src/paidIndicator.js'
 import { expect, it } from 'vitest'
 import OrderCostSummary from '../src/components/OrderCostSummary.vue'
 import InlineEditableField from '../src/components/InlineEditableField.vue'
@@ -50,3 +51,18 @@ it('keeps unfamiliar states readable and normalizes their payment capability', (
   const result = validateOrderDetails(unknown, ops, details.orderNumber)
   expect(result.canMarkOrderPaid).toBe(false); expect(result.canEditProduct).toBe(false)
 })
+
+it.each(['Основной платёж подтверждён', 'Доставка по России оплачена', 'Таможенная пошлина оплачена'])(
+  'uses the fixed Vuetify paid tooltip for %s', async label => {
+    const wrapper = mount(PaidIndicator, { props:{ paid:true, label },
+      global:{ plugins:[createSarafanVuetify()] } })
+    const mark = wrapper.get('.paid-indicator')
+    expect(wrapper.getComponent({ name:'VTooltip' }).props('text')).toBe('Оплачено')
+    expect(mark.attributes('aria-label')).toBe(label)
+    expect(mark.attributes('title')).toBeUndefined()
+    expect(mark.attributes('tabindex')).toBe('0')
+    expect(wrapper.get('svg').attributes()).toMatchObject({ width:'1em', height:'1em' })
+    await wrapper.setProps({ paid:false })
+    expect(wrapper.find('.paid-indicator').exists()).toBe(false)
+    wrapper.unmount()
+  })
