@@ -319,6 +319,16 @@ describe('extensible history metadata and retained evidence', () => {
     expect(rendered.find('script').exists()).toBe(false);
     rendered.unmount();
   });
+  it.each([[1100, 300, 350], [1200, 350, 400]])('validates exact stage evidence for %s', (kind, statusBefore, statusAfter) => {
+    const event = { ...row, kind, areas:8 }
+    const value = { ...detail, event, version:3, statusBefore, statusAfter }
+    expect(validateHistoryDetail(value, event, extension([kind]), orderOps, pricingOps)).toBe(value)
+    for (const patch of [{ statusBefore:0 }, { statusAfter:300 }, { version:1 }, { reviewReason:'invalid' }, { cancellationReason:'invalid' }]) {
+      expect(() => validateHistoryDetail({ ...value, ...patch }, event, extension([kind]), orderOps, pricingOps)).toThrow()
+    }
+    const wrongArea = { ...event, areas:4 }
+    expect(() => validateHistoryDetail({ ...value, event:wrongArea }, wrongArea, extension([kind]), orderOps, pricingOps)).toThrow()
+  })
   it.each([[600, 1], [600, 2], [700, 1], [700, 4], [800, 1], [800, 3]])('rejects kind %s with wrong evidence version %s', (kind, version) => {
     const event = { ...row, kind };
     expect(() => validateHistoryDetail({ ...detail, event, version, statusBefore:999, statusAfter:1001 }, event, extension([600, 700, 800]), orderOps, pricingOps)).toThrow();

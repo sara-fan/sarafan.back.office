@@ -47,12 +47,18 @@ describe('staff order card', () => {
       return normal(path)
     })
   }
-  it('uses a separate Payments ActionButton group and records duty with the exact version', async () => {
+  it('groups stage, payment and history actions and records duty with the exact version', async () => {
     dutyReply()
     await render()
     const button = wrapper.get('#order-payments')
     expect(button.attributes('aria-label')).toBe('Платежи')
     expect(button.find('.fa-file-invoice-dollar').exists()).toBe(true)
+    const group = button.element.closest('.header-actions')
+    expect(wrapper.findAll('header .header-actions')).toHaveLength(2)
+    expect(group.querySelector('.fa-truck-fast')).not.toBeNull()
+    expect(group.querySelector('.fa-box-open')).not.toBeNull()
+    expect(group.querySelector('.fa-clock-rotate-left')).not.toBeNull()
+    expect(group.querySelector('.fa-rotate-right')).toBeNull()
     await button.trigger('click'); await flushPromises()
     const items = wrapper.findAllComponents({ name:'VListItem' })
     expect(items).toHaveLength(2)
@@ -100,7 +106,21 @@ describe('staff order card', () => {
   it.each([[null, false, 'неизвестна'], [0, false, 'не ожидается'], [120, true, 'уже отмечена']])('disables duty for amount %s and paid=%s', async (amount, paid, reason) => {
     dutyReply(amount, paid)
     await render()
-    await wrapper.get('#order-payments').trigger('click'); await flushPromises()
+    const payments = wrapper.get('#order-payments')
+    expect(payments.element.disabled).toBe(true)
+    const activator = new DOMWrapper(payments.element.parentElement)
+    expect(activator.attributes('tabindex')).toBe('0')
+    expect(activator.attributes('aria-label')).toBe('Платежи')
+    activator.element.focus()
+    expect(document.activeElement).toBe(activator.element)
+    await payments.trigger('click'); await flushPromises()
+    expect(vm().paymentsOpen).toBe(false)
+    // The menu is available when the main item alone is enabled.
+    vm().ops = { ...ops, statuses:[...ops.statuses, { value:100, name:'Расчёт готов', routeAlias:'quote_ready' }] }
+    vm().details = { ...vm().details, status:100, canMarkOrderPaid:true, mainPaymentRub:1100 }
+    await flushPromises()
+    expect(payments.element.disabled).toBe(false)
+    await payments.trigger('click'); await flushPromises()
     expect(wrapper.findAllComponents({ name:'VListItem' })[1].props('disabled')).toBe(true)
     const explanation = new DOMWrapper(document.querySelectorAll('.duty-payment-activator')[1])
     expect(explanation.attributes('tabindex')).toBe('0')
@@ -118,6 +138,8 @@ describe('staff order card', () => {
     if (guard === 'dirty') await wrapper.get('#size').setValue('XL')
     else vm()[guard] = true
     await flushPromises()
+    expect(wrapper.get('#order-payments').element.disabled).toBe(true)
+    expect(wrapper.get('#order-payments').attributes('aria-label')).toBe('Платежи')
     const explanation = new DOMWrapper(document.querySelectorAll('.duty-payment-activator')[1])
     expect(explanation.attributes('tabindex')).toBe('0')
     expect(explanation.attributes('aria-label')).toContain(guard === 'busy' ? 'завершения' : guard === 'locked' ? 'Обновите' : 'несохранённые')
@@ -127,8 +149,10 @@ describe('staff order card', () => {
   it('explains a server capability denial even for a known positive amount', async () => {
     dutyReply()
     await render()
-    vm().details = { ...vm().details, canMarkCustomsPaid:false }
     await wrapper.get('#order-payments').trigger('click'); await flushPromises()
+    vm().details = { ...vm().details, canMarkCustomsPaid:false }
+    await flushPromises()
+    expect(wrapper.get('#order-payments').element.disabled).toBe(true)
     expect(wrapper.findAllComponents({ name:'VListItem' })[1].props('disabled')).toBe(true)
     expect(document.querySelectorAll('.duty-payment-activator')[1].getAttribute('aria-label')).toContain('недоступна для этого заказа')
     await vm().markDutyPaid()
@@ -258,7 +282,7 @@ describe('staff order card', () => {
     expect(wrapper.get('tfoot').text()).toContain('112,48')
     expect(wrapper.get('.total-line').text()).toContain('Общая цена, $40,00')
     expect(wrapper.findAll('header .header-actions button').map(button => button.attributes('aria-label'))).toEqual([
-      'Платежи', 'История заказа', 'Обновить данные', 'Сохранить изменения', 'Отменить'
+      'Платежи', 'Доставка', 'Получено', 'История', 'Обновить данные', 'Сохранить изменения', 'Отменить'
     ])
     expect(wrapper.find('.merchandise-summary').exists()).toBe(false)
     const result = { ...details, product:{ ...details.product, productName:'Новое название', storeName:'Новый магазин' }, updatedAt:'2026-09-15T12:00:00.123456Z' }
@@ -395,7 +419,7 @@ describe('staff order card', () => {
     expect(vm().editable).toBe(false)
     await flushPromises()
     expect(wrapper.find('button[aria-label="Сохранить изменения"]').exists()).toBe(false)
-    expect(wrapper.findAll('header .header-actions button').map(button => button.attributes('aria-label'))).toEqual(['Платежи', ...(['administrator', 'shift-manager'].includes(role) ? ['Рассчитать и сохранить стоимость', 'Подтвердить сохранённый расчёт', 'Не можем привезти'] : []), 'История заказа', 'Обновить данные', 'Отменить'])
+    expect(wrapper.findAll('header .header-actions button').map(button => button.attributes('aria-label'))).toEqual(['Платежи', 'Доставка', 'Получено', 'История', ...(['administrator', 'shift-manager'].includes(role) ? ['Рассчитать и сохранить стоимость', 'Подтвердить сохранённый расчёт', 'Не можем привезти'] : []), 'Обновить данные', 'Отменить'])
     if (['administrator', 'shift-manager'].includes(role)) {
       const reject = wrapper.get('button[aria-label="Не можем привезти"]')
       expect(reject.classes()).not.toContain('action-button--labelled')
@@ -470,8 +494,8 @@ describe('pricing on the order card', () => {
   it('uses the existing inline editor, validates and normalizes manual amounts, and preserves customer choices', async () => {
     await render()
     expect(wrapper.findAll('header .header-actions').map(group => group.findAll('button').map(button => button.attributes('aria-label')))).toEqual([
-      ['Платежи'], ['Рассчитать и сохранить стоимость', 'Подтвердить сохранённый расчёт', 'Не можем привезти'],
-      ['История заказа'], ['Обновить данные', 'Сохранить изменения', 'Отменить']
+      ['Платежи', 'Доставка', 'Получено', 'История', 'Рассчитать и сохранить стоимость', 'Подтвердить сохранённый расчёт', 'Не можем привезти'],
+      ['Обновить данные', 'Сохранить изменения', 'Отменить']
     ])
     expect(wrapper.findAll('button[aria-label="Рассчитать и сохранить стоимость"]')).toHaveLength(1)
     expect(wrapper.findAll('button[aria-label="Подтвердить сохранённый расчёт"]')).toHaveLength(1)
@@ -1146,7 +1170,7 @@ describe('main payment confirmation', () => {
     const dialog = wrapper.findAllComponents(ConfirmDialog).find(item => item.props('title') === 'Заказ оплачен?')
     expect(dialog.props('message')).toContain('1\u00a0100,00')
     expect(dialog.props('message')).toContain('получена и сверена')
-    h.session.orderRequest.mockResolvedValueOnce({ ...vm().details, status:300, canMarkOrderPaid:false, updatedAt:'2026-09-15T11:00:02Z' })
+    h.session.orderRequest.mockResolvedValueOnce({ ...vm().details, status:300, canMarkOrderPaid:false, mainPaymentPaid:true, updatedAt:'2026-09-15T11:00:02Z' })
     dialog.vm.$emit('confirm'); await flushPromises()
     expect(vm().details.status).toBe(300); expect(vm().details.customsPaid).toBe(true)
     expect(vm().mainPaymentConfirmation).toBe(false)
@@ -1183,5 +1207,98 @@ describe('main payment confirmation', () => {
     h.session.orderRequest.mockResolvedValueOnce({ ...vm().details, ...patch })
     await vm().markPayment(true)
     expect(vm().locked).toBe(true); expect(vm().details.status).toBe(100)
+  })
+})
+
+describe('Pilot manual fulfilment', () => {
+  const stageButton = icon => new DOMWrapper(wrapper.get('header .fa-' + icon).element.closest('button'))
+  async function ready() {
+    await render()
+    vm().ops = { ...ops, statuses:[...ops.statuses, { value:350, name:'Доставляется', routeAlias:'delivering' }, { value:400, name:'Получен', routeAlias:'received' }] }
+    vm().details = { ...details, status:300, canEditProduct:false, mainPaymentPaid:true, nextStage:350 }
+    await flushPromises()
+  }
+  it('keeps both stage buttons visible and enables only the next transition', async () => {
+    await ready()
+    expect(stageButton('truck-fast').element.disabled).toBe(false)
+    expect(stageButton('truck-fast').attributes('aria-label')).toBe('Доставка')
+    expect(stageButton('box-open').element.disabled).toBe(true)
+    expect(stageButton('box-open').attributes('aria-label')).toBe('Получено')
+    const count = h.session.orderRequest.mock.calls.length
+    await vm().advanceStage(400)
+    expect(h.session.orderRequest.mock.calls).toHaveLength(count)
+    const received = { ...vm().details, status:350, nextStage:400, updatedAt:'2026-09-15T11:00:03Z' }
+    h.session.orderRequest.mockResolvedValueOnce(received)
+    await stageButton('truck-fast').trigger('click')
+    await flushPromises()
+    expect(vm().details.status).toBe(350)
+    expect(vm().pricing.calculation).toEqual(pricingDetails.calculation)
+    expect(wrapper.find('table').exists()).toBe(true)
+    expect(stageButton('truck-fast').element.disabled).toBe(true)
+    expect(stageButton('box-open').element.disabled).toBe(false)
+    const deliveredCount = h.session.orderRequest.mock.calls.length
+    await vm().advanceStage(350)
+    expect(h.session.orderRequest.mock.calls).toHaveLength(deliveredCount)
+    expect(JSON.parse(h.session.orderRequest.mock.calls.at(-1)[1].body)).toEqual({ expectedUpdatedAt:details.updatedAt, status:350 })
+    h.session.orderRequest.mockResolvedValueOnce({ ...received, status:400, nextStage:null })
+    await stageButton('box-open').trigger('click'); await flushPromises()
+    expect(vm().nextStage).toBeUndefined()
+    expect(stageButton('truck-fast').element.disabled).toBe(true)
+    expect(stageButton('box-open').element.disabled).toBe(true)
+    expect(JSON.parse(h.session.orderRequest.mock.calls.at(-1)[1].body)).toEqual({ expectedUpdatedAt:received.updatedAt, status:400 })
+    expect(vm().pricing.calculation).toEqual(pricingDetails.calculation)
+    expect(wrapper.find('table').exists()).toBe(true)
+  })
+  it.each(['busy', 'dirty', 'locked', 'role', 'no-stage'])('guards stage changes with %s', async guard => {
+    await ready()
+    if (guard === 'busy') vm().busy = true
+    else if (guard === 'dirty') vm().form.comment = 'draft'
+    else if (guard === 'locked') vm().locked = true
+    else if (guard === 'role') h.session.user.value.roles = []
+    else vm().details.nextStage = null
+    const count = h.session.orderRequest.mock.calls.length
+    await vm().advanceStage()
+    expect(h.session.orderRequest.mock.calls).toHaveLength(count)
+    if (guard !== 'role') {
+      await flushPromises()
+      for (const [icon, title] of [['truck-fast', 'Доставка'], ['box-open', 'Получено']]) {
+        const button = stageButton(icon)
+        expect(button.element.disabled).toBe(true)
+        expect(button.attributes('aria-label')).toBe(title)
+        expect(button.element.parentElement.getAttribute('tabindex')).toBe('0')
+        expect(button.element.parentElement.getAttribute('aria-label')).toBe(title)
+      }
+    }
+  })
+  it('keeps unavailable stage and payment actions disabled before order data arrives', async () => {
+    h.session.orderRequest.mockReturnValue(new Promise(() => {}))
+    await render()
+    expect(stageButton('truck-fast').element.disabled).toBe(true)
+    expect(stageButton('box-open').element.disabled).toBe(true)
+    expect(wrapper.get('#order-payments').element.disabled).toBe(true)
+    const count = h.session.orderRequest.mock.calls.length
+    await vm().advanceStage()
+    expect(h.session.orderRequest.mock.calls).toHaveLength(count)
+  })
+  it.each([CORE_PROBLEM_TYPES.orderUpdateConflict, CORE_PROBLEM_TYPES.orderFulfilmentUnavailable, 'protocol'])('retains current stage and locks conflicts %s', async type => {
+    await ready()
+    h.session.orderRequest.mockRejectedValueOnce(type === 'protocol' ? createInternalProblem('protocolError') : remote(type))
+    await vm().advanceStage(); await flushPromises()
+    expect(vm().details.status).toBe(300)
+    expect(vm().locked).toBe(true)
+    expect(vm().problem).not.toBeNull()
+  })
+  it.each([false, true])('discards obsolete stage results and errors %s', async error => {
+    await ready()
+    const wait = pending()
+    h.session.orderRequest.mockReturnValueOnce(wait.promise)
+    const action = vm().advanceStage()
+    h.session.user.value = { id:2, roles:['operator'] }
+    await flushPromises()
+    if (error) wait.reject(remote(CORE_PROBLEM_TYPES.orderUpdateConflict))
+    else wait.resolve({ ...details, status:350, nextStage:400, mainPaymentPaid:true })
+    await action
+    expect(vm().details).toBeNull()
+    expect(vm().problem).toBeNull()
   })
 })

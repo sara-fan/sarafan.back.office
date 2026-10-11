@@ -3,6 +3,7 @@
 // This file is a part of the Sarafan application
 
 import { createInternalProblem } from './errors/problem.js'
+import { nextFulfilmentStage } from './orderLifecycle.js'
 import { formatMoneyInput } from './moneyFormatting.js'
 
 export const PRODUCT_FIELDS = ['productName', 'storeName', 'sellerPrice', 'quantity', 'color', 'size', 'comment']
@@ -65,6 +66,8 @@ export function validateOrderDetails(value, ops, number) {
     || !value.customer || !Object.keys(CUSTOMER_FIELDS).every(key => key === 'passportIssueDate'
       ? value.customer[key] === null || dateIsValid(value.customer[key]) : text(value.customer[key], 2000))
     || typeof value.customer.phone !== 'string' || !value.customer.phone
+    || typeof value.mainPaymentPaid !== 'boolean'
+    || !(value.nextStage === null || Number.isInteger(value.nextStage) && value.nextStage >= 0)
     || typeof value.customsPaid !== 'boolean' || typeof value.canMarkCustomsPaid !== 'boolean'
     || typeof value.canMarkOrderPaid !== 'boolean' || !(value.mainPaymentRub === null || typeof value.mainPaymentRub === 'number' && Number.isFinite(value.mainPaymentRub) && value.mainPaymentRub >= 0)
     || value.canMarkOrderPaid && ops.statuses.some(item => item.value === value.status)
@@ -83,8 +86,10 @@ export function validateOrderDetails(value, ops, number) {
   }
   const unsupportedEdit = value.canEditProduct && !ops.statuses.some(item => item.value === value.status && item.routeAlias === 'under_review')
   const unsupportedPayment = value.canMarkOrderPaid && !ops.statuses.some(item => item.value === value.status)
-  return unsupportedEdit || unsupportedPayment
-    ? { ...value, canEditProduct:unsupportedEdit ? false : value.canEditProduct,
+  const nextStage = value.nextStage === nextFulfilmentStage(value.status)
+    && ops.statuses.some(item => item.value === value.nextStage) && ops.statuses.some(item => item.value === value.status) ? value.nextStage : null
+  return unsupportedEdit || unsupportedPayment || nextStage !== value.nextStage
+    ? { ...value, nextStage, canEditProduct:unsupportedEdit ? false : value.canEditProduct,
       canMarkOrderPaid:unsupportedPayment ? false : value.canMarkOrderPaid } : value
 }
 

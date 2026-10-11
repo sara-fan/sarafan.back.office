@@ -382,3 +382,17 @@ it('forwards main payment confirmation with the current staff token and retains 
   await expect(session.orderRequest('/orders/12345678-1/payment/paid', options)).rejects.toMatchObject({ code:'order_payment_unavailable' })
   expect(session.user.value).toEqual(identity)
 })
+
+it('forwards fulfilment through the real session with safe route diagnostics and recoverable conflict', async () => {
+  const fetch = vi.fn().mockResolvedValueOnce(auth()).mockResolvedValueOnce(response(200, { status:350 }))
+    .mockResolvedValueOnce(problemResponse(409, 'order-fulfilment-unavailable'))
+  vi.stubGlobal('fetch', fetch)
+  const session = createSession()
+  await session.login('admin@example.test', 'password')
+  const options = { method:'POST', body:JSON.stringify({ expectedUpdatedAt:'2026-10-10T10:00:00Z', status:350 }) }
+  await expect(session.orderRequest('/orders/12345678-1/fulfilment', options)).resolves.toEqual({ status:350 })
+  expect(fetch.mock.calls.at(-1)[1].headers.get('Authorization')).toBe('Bearer staff-token')
+  await expect(session.orderRequest('/orders/12345678-1/fulfilment', options)).rejects.toMatchObject({ code:'order_fulfilment_unavailable' })
+  expect(session.user.value).toEqual(identity)
+  expect(() => session.orderRequest('/orders/12345678-1/fulfilment/extra', options)).toThrow()
+})

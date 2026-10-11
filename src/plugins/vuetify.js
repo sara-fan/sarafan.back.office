@@ -34,6 +34,8 @@ export const sarafanAliases = {
   logout: 'fas fa-right-from-bracket',
   orders: 'fas fa-cart-shopping',
   payments: 'fas fa-file-invoice-dollar',
+  deliverOrder: 'fas fa-truck-fast',
+  receiveOrder: 'fas fa-box-open',
   stores: 'fas fa-store',
   privacyRequests: 'fas fa-clipboard-list',
   print: 'fas fa-print',

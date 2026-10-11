@@ -13,6 +13,7 @@ const permissions = Object.freeze({
   manualQuotes: Object.keys(ROLES),
   markCustomsPaid: Object.keys(ROLES),
   markOrderPaid: Object.keys(ROLES),
+  advanceOrderFulfilment: Object.keys(ROLES),
   viewStores: Object.keys(ROLES),
   viewServiceCatalogue: Object.keys(ROLES),
   manageServiceCatalogue: ['administrator'],

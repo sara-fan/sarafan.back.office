@@ -10,6 +10,8 @@ import ActionButton from '../components/ActionButton.vue'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
 import PaymentMenuItem from '../components/PaymentMenuItem.vue'
 import { recordStaffPayment } from '../staffPayments.js'
+import { recordOrderStage } from '../orderFulfilment.js'
+import { FULFILMENT_TRANSITIONS } from '../orderLifecycle.js'
 import EditorHeaderActions from '../components/EditorHeaderActions.vue'
 import FormField from '../components/FormField.vue'
 import PageAlertRegion from '../components/PageAlertRegion.vue'
@@ -55,23 +57,42 @@ const customsComponent = computed(() => pricing.value?.calculation.components.fi
   pricingOps.value?.catalogue.services.some(service => service.value === item.service && service.routeAlias === 'customs-payments')))
 const canMarkDutyPaid = computed(() => !!statusMetadata.value && !!details.value?.canMarkCustomsPaid && !details.value.customsPaid
   && can(session.user.value, 'markCustomsPaid') && customsComponent.value?.state === 0 && customsComponent.value?.amountRub > 0)
-const dutyUnavailableReason = computed(() => {
+function staffMutationUnavailableReason(lockedExplanation = 'Обновите данные заказа перед отметкой оплаты.') {
   if (busy.value) return 'Дождитесь завершения текущего действия.'
-  if (locked.value) return 'Обновите данные заказа перед отметкой оплаты.'
+  if (locked.value) return lockedExplanation
   if (dirty.value) return 'Сохраните или отмените несохранённые изменения.'
+  return ''
+}
+const dutyUnavailableReason = computed(() => {
+  const blocked = staffMutationUnavailableReason()
+  if (blocked) return blocked
   if (details.value?.customsPaid) return 'Пошлина уже отмечена как оплаченная.'
   if (customsComponent.value?.state !== 0) return 'Сумма таможенной пошлины неизвестна.'
   if (customsComponent.value.amountRub <= 0) return 'Таможенная пошлина не ожидается.'
   return canMarkDutyPaid.value ? '' : 'Отметка оплаты недоступна для этого заказа.'
 })
 const mainUnavailableReason = computed(() => {
-  if (busy.value) return 'Дождитесь завершения текущего действия.'
-  if (locked.value) return 'Обновите данные заказа перед отметкой оплаты.'
-  if (dirty.value) return 'Сохраните или отмените несохранённые изменения.'
+  const blocked = staffMutationUnavailableReason()
+  if (blocked) return blocked
   return statusMetadata.value && details.value?.canMarkOrderPaid && can(session.user.value, 'markOrderPaid')
     ? '' : 'Отметка оплаты недоступна для этого заказа.'
 })
+const paymentsDisabled = computed(() => !!mainUnavailableReason.value && !!dutyUnavailableReason.value)
 const mainConfirmationMessage = computed(() => `Подтвердите, что сумма ${formatMoneyAmount(details.value?.mainPaymentRub ?? 0)} ${rubSymbol.value} получена и сверена.${details.value?.status === 200 ? ' Срок расчёта истёк: требуется внешняя сверка платежа.' : ''}`)
+const nextStage = computed(() => ops.value?.statuses.find(item => item.value === details.value?.nextStage))
+function stageUnavailableReason(target) {
+  return staffMutationUnavailableReason('Обновите данные заказа перед изменением этапа.')
+    || (nextStage.value && nextStage.value.value === target && can(session.user.value, 'advanceOrderFulfilment')
+      ? '' : 'Изменение этапа недоступно для этого заказа.')
+}
+const stageActions = computed(() => [
+  { target:FULFILMENT_TRANSITIONS[1100].to, icon:'$deliverOrder', title:'Доставка' },
+  { target:FULFILMENT_TRANSITIONS[1200].to, icon:'$receiveOrder', title:'Получено' }
+].map(action => ({ ...action, reason:stageUnavailableReason(action.target) })))
+function advanceStage(target = details.value?.nextStage) {
+  if (stageUnavailableReason(target)) return
+  return applyStaffMutation(() => recordOrderStage(session, number.value, details.value, ops.value))
+}
 const canConfirmPrice = computed(() => pricingEditable.value && pricing.value?.canConfirm && !dirty.value && !locked.value)
 const form = ref(null)
 const baseline = ref('')
@@ -174,23 +195,27 @@ function openMainPayment() {
   mainPaymentConfirmation.value = true
 }
 async function markDutyPaid() { return markPayment(false) }
-async function markPayment(mainPayment) {
+function markPayment(mainPayment) {
   paymentsOpen.value = false
   if (mainPayment ? !!mainUnavailableReason.value : !!dutyUnavailableReason.value) return
+  return applyStaffMutation(() => recordStaffPayment(session, number.value, details.value, ops.value, mainPayment),
+    () => { if (mainPayment) mainPaymentConfirmation.value = false })
+}
+async function applyStaffMutation(perform, onSuccess = () => {}) {
   const current = ++version
   busy.value = true
   problem.value = null
   try {
-    const paid = await recordStaffPayment(session, number.value, details.value, ops.value, mainPayment)
+    const updated = await perform()
     if (current !== version) return
-    details.value = paid
-    pricing.value = { ...pricing.value, updatedAt:paid.updatedAt }
-    if (mainPayment) mainPaymentConfirmation.value = false
+    details.value = updated
+    if (pricing.value) pricing.value = { ...pricing.value, updatedAt:updated.updatedAt }
+    onSuccess()
   } catch (value) {
     if (current !== version) return
     problem.value = normalizeProblem(value)
     if ([CORE_PROBLEM_TYPES.orderUpdateConflict, CORE_PROBLEM_TYPES.customsPaymentUnavailable,
-      CORE_PROBLEM_TYPES.orderPaymentUnavailable].includes(problem.value.type)
+      CORE_PROBLEM_TYPES.orderPaymentUnavailable, CORE_PROBLEM_TYPES.orderFulfilmentUnavailable].includes(problem.value.type)
       || problem.value.type.endsWith('/protocol-error')) locked.value = true
   } finally { if (current === version) busy.value = false }
 }
@@ -397,18 +422,15 @@ const focusAfter = useValidationFocus(focusRoot, { context:() => [session.user.v
         @refresh="refresh"
         @cancel="back"
       >
-        <template #leading>
-          <div
-            v-if="can(session.user.value, 'markCustomsPaid')"
-            class="header-actions"
-          >
+        <template #before>
+          <template v-if="can(session.user.value, 'markCustomsPaid')">
             <ActionButton
               id="order-payments"
               icon="$payments"
               tooltip-text="Платежи"
               aria-haspopup="menu"
               :aria-expanded="paymentsOpen"
-              :disabled="busy || !details"
+              :disabled="paymentsDisabled"
               @click="paymentsOpen = !paymentsOpen"
             />
             <v-menu
@@ -434,11 +456,24 @@ const focusAfter = useValidationFocus(focusRoot, { context:() => [session.user.v
                 />
               </v-list>
             </v-menu>
-          </div>
-          <div
-            v-if="canRejectReview"
-            class="header-actions"
-          >
+          </template>
+          <template v-if="can(session.user.value, 'advanceOrderFulfilment')">
+            <ActionButton
+              v-for="action in stageActions"
+              :key="action.target"
+              :icon="action.icon"
+              :tooltip-text="action.title"
+              :disabled="!!action.reason"
+              @click="advanceStage(action.target)"
+            />
+          </template>
+          <ActionButton
+            icon="$audit"
+            tooltip-text="История"
+            :disabled="busy || continuing || !details"
+            @click="openHistory"
+          />
+          <template v-if="canRejectReview">
             <ActionButton
               v-if="pricingEditable"
               icon="$orderPricing"
@@ -459,15 +494,7 @@ const focusAfter = useValidationFocus(focusRoot, { context:() => [session.user.v
               :disabled="busy || dirty || locked"
               @click="rejectionOpen = true; rejectionReason = ''; problem = null"
             />
-          </div>
-        </template>
-        <template #before>
-          <ActionButton
-            icon="$audit"
-            tooltip-text="История заказа"
-            :disabled="busy || continuing || !details"
-            @click="openHistory"
-          />
+          </template>
         </template>
       </EditorHeaderActions>
     </header>
@@ -656,6 +683,7 @@ const focusAfter = useValidationFocus(focusRoot, { context:() => [session.user.v
           ref="costSummary"
           v-model="pricingExpanded"
           :pricing="pricing"
+          :main-payment-paid="details.mainPaymentPaid"
           :customs-paid="details.customsPaid"
           :ops="pricingOps"
           :loading="busy"

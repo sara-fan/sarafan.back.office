@@ -13,7 +13,7 @@ import InlineEditableField from './InlineEditableField.vue'
 import PriceTotalContext from './PriceTotalContext.vue'
 import { manualPricingTariffs, pricingPayload, optionalServices } from '../orderPricing.js'
 
-const props = defineProps({ pricing:{ type:Object, default:null }, ops:{ type:Object, default:null }, loading:Boolean, draft:{ type:Object, default:null }, editable:Boolean, disabled:Boolean, customsPaid:Boolean, problem:{ type:Object, default:null } })
+const props = defineProps({ pricing:{ type:Object, default:null }, ops:{ type:Object, default:null }, loading:Boolean, draft:{ type:Object, default:null }, editable:Boolean, disabled:Boolean, mainPaymentPaid:Boolean, customsPaid:Boolean, problem:{ type:Object, default:null } })
 const expanded = defineModel({ type:Boolean, default:true })
 const errors = computed(() => associatedFieldErrors(props.problem, 'manualAmounts'))
 const emit = defineEmits(['editing-change', 'amount-change'])
@@ -43,6 +43,8 @@ function validateAmount(value, service) {
 const currency = alias => props.ops.catalogue.currencies.find(item => item.routeAlias === alias)
 const money = amount => amount === null ? '—' : formatMoneyAmount(amount)
 const service = value => props.ops.catalogue.services.find(item => item.value === value)
+const isDelivery = component => service(component.service).routeAlias === 'domestic-delivery'
+const paid = component => isCustoms(component) ? props.customsPaid : isDelivery(component) && component.amountRub !== null && props.mainPaymentPaid
 const isCustoms = component => service(component.service).routeAlias === 'customs-payments'
 const state = component => isCustoms(component) && component.state === 0 && component.amountRub === 0
   ? 'Не ожидаются' : props.ops.componentStates.find(item => item.value === component.state).name
@@ -150,8 +152,8 @@ function prices(component) {
                     :text="money(price.amount)"
                   />
                   <PaidIndicator
-                    :paid="customsPaid && isCustoms(component) && price.alias === 'rub'"
-                    label="Таможенная пошлина оплачена"
+                    :paid="paid(component) && price.alias === 'rub'"
+                    :label="isCustoms(component) ? 'Таможенная пошлина оплачена' : 'Доставка по России оплачена'"
                   />
                 </div>
               </td>
@@ -170,7 +172,13 @@ function prices(component) {
                 />
               </th>
               <td>{{ money(toUsd(pricing.calculation.totalRub)) }}</td>
-              <td>{{ money(pricing.calculation.totalRub) }}</td>
+              <td>
+                {{ money(pricing.calculation.totalRub) }}
+                <PaidIndicator
+                  :paid="mainPaymentPaid"
+                  label="Основной платёж подтверждён"
+                />
+              </td>
             </tr>
             <tr
               v-for="component in excludedComponents"
@@ -213,8 +221,8 @@ function prices(component) {
                     :text="money(price.amount)"
                   />
                   <PaidIndicator
-                    :paid="customsPaid && isCustoms(component) && price.alias === 'rub'"
-                    label="Таможенная пошлина оплачена"
+                    :paid="paid(component) && price.alias === 'rub'"
+                    :label="isCustoms(component) ? 'Таможенная пошлина оплачена' : 'Доставка по России оплачена'"
                   />
                 </div>
               </td>
