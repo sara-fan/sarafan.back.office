@@ -5,6 +5,7 @@
 import { createInternalProblem } from './errors/problem.js'
 import { dateIsValid, timestampIsValid, productIsValid, orderNumberIsValid } from './orderProduct.js'
 import { validateCalculation } from './orderPricing.js'
+import { FULFILMENT_TRANSITIONS } from './orderLifecycle.js'
 
 export const HISTORY_SORT_KEYS = ['timestamp', 'event', 'actor']
 export const historyDefaults = { page:1, pageSize:25, sortBy:[{ key:'timestamp', order:'desc' }], filters:{ orderNumber:'', search:'', area:null, actorType:null, from:'', to:'' } }
@@ -35,6 +36,7 @@ export function historyItemIsValid(value, ops) {
     && typeof value.actorName === 'string' && !!value.actorName.trim()
 }
 export function validateHistoryDetail(value, row, ops, orderOps, pricingOps) {
+  const transition = FULFILMENT_TRANSITIONS[value?.event?.kind]
   if (!value || ![1, 2, 3, 4, 5].includes(value.version) || typeof value.missingCreationDetails !== 'boolean'
     || !historyItemIsValid(value.event, ops) || Object.keys(row).some(key => value.event[key] !== row[key])
     || ![value.productBefore, value.productAfter].every(product => product === null || productIsValid(product, orderOps.currencies, orderOps.productLimits))
@@ -43,12 +45,13 @@ export function validateHistoryDetail(value, row, ops, orderOps, pricingOps) {
     || ![value.validUntilBefore, value.validUntilAfter].every(time => time === null || timestampIsValid(time))
     || value.version === 2 && value.event.kind !== 500
     || value.version >= 2 && ![value.statusBefore, value.statusAfter].every(Number.isInteger)
-    || value.version === 3 && ![600, 700, 1000].includes(value.event.kind)
-    || [600, 700, 1000].includes(value.event.kind) && value.version !== 3
+    || value.version === 3 && ![600, 700, 1000, 1100, 1200].includes(value.event.kind)
+    || [600, 700, 1000, 1100, 1200].includes(value.event.kind) && value.version !== 3
     || value.event.kind === 800 && value.version !== 4
     || value.event.kind === 600 && (typeof value.reviewReason !== "string" || !value.reviewReason.trim() || value.reviewReason.length > 2000)
-    || [700, 1000].includes(value.event.kind) && value.reviewReason != null
+    || [700, 1000, 1100, 1200].includes(value.event.kind) && value.reviewReason != null
     || value.event.kind === 1000 && (value.event.areas !== 8 || ![100, 200].includes(value.statusBefore) || value.statusAfter !== 300)
+    || transition && (value.event.areas !== 8 || value.statusBefore !== transition.from || value.statusAfter !== transition.to || value.cancellationReason != null)
     || value.version === 4 && (value.event.kind !== 800
       || typeof value.checkoutDeliveryName !== 'string' || !value.checkoutDeliveryName.trim() || value.checkoutDeliveryName.length > 500)
     || value.version !== 4 && value.checkoutDeliveryName != null

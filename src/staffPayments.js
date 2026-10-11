@@ -11,7 +11,7 @@ export async function recordStaffPayment(session, number, details, ops, mainPaym
     body:JSON.stringify({ expectedUpdatedAt:details.updatedAt })
   })
   const paid = validateOrderDetails(result, ops, number)
-  if (mainPayment ? paid.status !== 300 || paid.canMarkOrderPaid !== false
+  if (mainPayment ? paid.status !== 300 || paid.canMarkOrderPaid !== false || paid.mainPaymentPaid !== true
     : paid.customsPaid !== true || paid.canMarkCustomsPaid !== false) throw createInternalProblem('protocolError')
   return paid
 }

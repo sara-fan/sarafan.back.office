@@ -8,8 +8,9 @@ const valid = () => ({ firstName:' Иван ', lastName:'Иванов', patronym
 describe('staff forms and permissions',()=>{
   it('explicitly grants the four known roles and rejects unknown roles/actions',()=>{
     for(const code of Object.keys(ROLES)) {
-      const u={roles:[code]}; expect(can(u,'access')).toBe(true); expect(can(u,'manualQuotes')).toBe(true); expect(can(u,'manageUsers')).toBe(code==='administrator'); expect(can(u,'manageConsentWithdrawalRequests')).toBe(['administrator','shift-manager','senior-operator'].includes(code)); expect(roleLabel(code)).toBe(ROLES[code]); expect(landing(u)).toBe(code==='administrator'?'/users':'/orders')
+      const u={roles:[code]}; expect(can(u,'access')).toBe(true); expect(can(u,'manualQuotes')).toBe(true); expect(can(u,'advanceOrderFulfilment')).toBe(true); expect(can(u,'manageUsers')).toBe(code==='administrator'); expect(can(u,'manageConsentWithdrawalRequests')).toBe(['administrator','shift-manager','senior-operator'].includes(code)); expect(roleLabel(code)).toBe(ROLES[code]); expect(landing(u)).toBe(code==='administrator'?'/users':'/orders')
     }
+    expect(can({roles:['unknown']},'advanceOrderFulfilment')).toBe(false)
     expect(landing({ roles: [] })).toBe('/forbidden')
     expect(can(null,'access')).toBe(false); expect(can({roles:'administrator'},'access')).toBe(false); expect(can({roles:['unknown']},'access')).toBe(false); expect(can({roles:['administrator']},'unknown')).toBe(false)
     expect(roleLabel('shift-manager')).toBe('Старший смены')
