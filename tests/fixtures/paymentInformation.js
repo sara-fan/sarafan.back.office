@@ -4,7 +4,7 @@
 
 export const paymentOps = {
   canManage:true, recipientTypes:[{ value:0, name:'Юридическое лицо', routeAlias:'legal-entity' }, { value:1, name:'ИП', routeAlias:'individual-entrepreneur' }],
-  states:[{ value:'draft', name:'Черновик' }, { value:'enabled', name:'Включён' }, { value:'disabled', name:'Отключён' }],
+  states:[{ value:'draft', name:'Черновик' }, { value:'enabled', name:'Используются' }, { value:'disabled', name:'Не используются' }],
   limits:{ nameMaxLength:200, linkMaxLength:2048, qrMaxBytes:2097152, qrContentTypes:['image/png', 'image/jpeg', 'image/webp'], qrMaxDimension:4096, qrMaxPixels:4194304, qrMaxMetadataBytes:1048576 }
 }
 export const paymentBundle = {
