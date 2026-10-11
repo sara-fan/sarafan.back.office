@@ -517,7 +517,7 @@ const focusAfter = useValidationFocus(focusRoot, { context:() => [session.user.v
           :ops="ops"
         >
           <span
-            v-if="pricing?.confirmed && !pricing.expired"
+            v-if="pricing?.confirmed && !pricing.expired && !details.mainPaymentPaid"
             class="order-validity"
           >действует до {{ moscowTime(pricing.validUntil) }}</span>
         </OrderStatusBadge>

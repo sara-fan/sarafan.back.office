@@ -546,6 +546,15 @@ describe('pricing on the order card', () => {
     expect(JSON.parse(h.session.orderRequest.mock.calls[3][1].body)).toEqual({ expectedUpdatedAt:pricingDetails.updatedAt })
     expect(vm().details.updatedAt).toBe(frozen.updatedAt)
     expect(wrapper.get('.order-state .order-validity').text()).toContain('действует до')
+    const unpaid = vm().details
+    for (const status of [300, 350, 400]) {
+      vm().details = { ...unpaid, status, mainPaymentPaid:true }
+      await flushPromises()
+      expect(wrapper.find('.order-state .order-validity').exists()).toBe(false)
+    }
+    vm().details = { ...unpaid, customsPaid:true }
+    await flushPromises()
+    expect(wrapper.get('.order-state .order-validity').text()).toContain('действует до')
     expect(wrapper.get('.order-dates').text()).toContain('обновлён:')
     expect(wrapper.text()).not.toContain('Финансовые значения сохранены')
     expect(wrapper.find('button#manualAmount300').exists()).toBe(false)
