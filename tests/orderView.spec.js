@@ -915,6 +915,40 @@ describe('review reconciliation actions', () => {
 })
 
 describe('customer and order delivery information', () => {
+  it('refreshes current profile details without replacing the saved order delivery', async () => {
+    const delivery = { routeAlias:'courier', name:'Курьерская доставка', destination:'101000, Москва, Сохранённый адрес' }
+    const normal = h.session.orderRequest.getMockImplementation()
+    let customer = { ...details.customer }
+    h.session.orderRequest.mockImplementation(path => path === '/orders/12345678-1'
+      ? Promise.resolve({ ...details, customer, delivery }) : normal(path))
+    await render()
+    customer = { ...customer, firstName:'Мария', lastName:'Петрова', email:'new@example.com', inn:'123456789012',
+      passportSeries:'1234', passportNumber:'654321', passportIssueDate:'2010-02-03', passportIssuedBy:'Новый орган',
+      postalCode:'999999', city:'Город профиля', address:'Новый адрес профиля', hasPhoto:true }
+    vm().refresh(); await flushPromises()
+    const buyer = wrapper.get('[data-information="customer"]')
+    for (const value of ['Мария', 'Петрова', 'new@example.com', '123456789012', '1234', '654321', '03.02.2010', 'Новый орган'])
+      expect(buyer.text()).toContain(value)
+    expect(buyer.text()).not.toContain('Иванов')
+    expect(wrapper.get('[data-information="delivery"]').text()).toContain(delivery.destination)
+    expect(wrapper.text()).not.toContain('Новый адрес профиля')
+    expect(wrapper.text()).not.toContain('Город профиля')
+    expect(buyer.findAll('input, textarea')).toHaveLength(0)
+    expect(h.session.orderRequest.mock.calls.every(([path]) => path.startsWith('/orders/'))).toBe(true)
+  })
+  it('keeps saved delivery and staff actions available after optional profile details are cleared', async () => {
+    const customer = Object.fromEntries(Object.keys(details.customer).map(key => [key, key === 'phone' ? details.customer.phone : null]))
+    const delivery = { routeAlias:'courier', name:'Курьерская доставка', destination:'101000, Москва, Сохранённый адрес' }
+    h.session.orderRequest.mockResolvedValueOnce({ ...details, customer, delivery })
+    await render()
+    const buyer = wrapper.get('[data-information="customer"]')
+    expect(buyer.text()).toContain(details.customer.phone)
+    expect(buyer.text()).toContain('Не указано')
+    expect(buyer.text()).not.toContain('Иванов')
+    expect(wrapper.get('[data-information="delivery"]').text()).toContain(delivery.destination)
+    expect(vm().editable).toBe(true)
+    expect(vm().problem).toBeNull()
+  })
   it('shows unselected delivery separately from customer/passport data without using a profile address', async () => {
     h.session.orderRequest.mockResolvedValueOnce({ ...details, customer:{ ...details.customer,
       postalCode:'999999', city:'Город профиля', address:'Адрес профиля', passportNumber:'654321', passportIssueDate:'2010-02-03' } })
