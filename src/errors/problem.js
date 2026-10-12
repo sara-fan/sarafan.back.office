@@ -9,6 +9,8 @@ import { uiLogger } from '../observability/logger.js'
 export { PROBLEM_TYPE_ROOT, ProblemError } from '@sara-fan/ui-shared/problems'
 
 export const CORE_PROBLEM_TYPES = Object.freeze({
+  logibooksUpdateConflict: PROBLEM_TYPE_ROOT + 'logibooks-update-conflict',
+  logibooksPreviewChanged: PROBLEM_TYPE_ROOT + 'logibooks-preview-changed',
   orderFulfilmentUnavailable: PROBLEM_TYPE_ROOT + 'order-fulfilment-unavailable',
   orderPaymentUnavailable: `${PROBLEM_TYPE_ROOT}order-payment-unavailable`,
   customsPaymentUnavailable: `${PROBLEM_TYPE_ROOT}customs-payment-unavailable`,
@@ -84,7 +86,7 @@ export function formPageProblem(value, fields, options = {}) {
   if (!value || !fields.length) return value
   const presented = new Set(fields.map(field => field.toLowerCase()))
   const shown = fields.flatMap(field => associatedFieldErrors(value, field, options))
-  if (!shown.length) return value
+  if (!shown.length && !Object.keys(value.errors ?? {}).length) return value
   const remaining = Object.entries(value.errors ?? {}).filter(([name, messages]) =>
     !validationFields({ errors:{ [name]:messages } }, { aliases:options.aliases })
       .some(field => presented.has(field.toLowerCase())))

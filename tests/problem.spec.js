@@ -112,7 +112,7 @@ describe('shared problem model', () => {
     })
     expect(problemFieldErrors(validation, 'phone')).toEqual(['Введите номер телефона'])
     expect(formPageProblem(validation, ['phone'])).toBeNull()
-    expect(formPageProblem(validation, ['email'])).toBe(validation)
+    expect(formPageProblem(validation, ['email']).errors).toEqual(validation.errors)
     expect(formPageProblem(createInternalProblem('unexpectedError'), ['phone'])).not.toBeNull()
     expect(suppressProblem(validation, { operation: 'validation.local', logger })).toBe(validation)
     expect(suppressProblem(new Error('hidden'), {

@@ -2,6 +2,10 @@
 // All rights reserved.
 // This file is a part of the Sarafan application
 
+import { UUID_PATH_PATTERN } from './api/client.js'
+
+const LOGIBOOKS_PREVIEW_RETURN = new RegExp('^/logibooks-registers/new\\?operationId=' + UUID_PATH_PATTERN + '$', 'iu')
+
 export const ROLES = Object.freeze({
   administrator: 'Администратор',
   'shift-manager': 'Старший смены',
@@ -19,6 +23,7 @@ const permissions = Object.freeze({
   manageServiceCatalogue: ['administrator'],
   managePaymentInformation: ['administrator'],
   manageOrderPricing: ['administrator', 'shift-manager'],
+  manageLogibooksRegisters: ['administrator', 'shift-manager'],
   createStore: ['administrator'],
   editStore: ['administrator', 'shift-manager'],
   deleteStore: ['administrator'],
@@ -43,6 +48,15 @@ export function profileRoute(user) {
 export function fullName(user) {
   return [user?.lastName, user?.firstName, user?.patronymic].filter(Boolean).join(' ')
 }
+export function loginReturnPath(route) {
+  if (route.path === '/login') return typeof route.query?.return === 'string' ? route.query.return : undefined
+  const path = route.path, operationId = route.query?.operationId
+  if (path === '/logibooks-registers/new' && typeof operationId === 'string') {
+    const candidate = path + '?operationId=' + operationId
+    if (LOGIBOOKS_PREVIEW_RETURN.test(candidate)) return candidate
+  }
+  return path
+}
 export function safeReturn(value, user) {
   if (typeof value !== 'string') return landing(user)
   if (value === '/home') return landing(user)
@@ -52,6 +66,8 @@ export function safeReturn(value, user) {
   if (can(user, 'manageServiceCatalogue') && value === '/service-catalogue/new') return value
   if (can(user, 'viewServiceCatalogue') && /^\/service-catalogue(?:\/(?:audit|[1-9]\d*))?$/u.test(value)) return value
   if (can(user, 'managePaymentInformation') && /^\/payment-information-bundles(?:\/(?:new|[1-9]\d*))?$/u.test(value)) return value
+  if (can(user, 'manageLogibooksRegisters') && LOGIBOOKS_PREVIEW_RETURN.test(value)) return value
+  if (can(user, 'manageLogibooksRegisters') && /^\/logibooks-registers(?:\/(?:new|[0-9a-fA-F]{8}-(?:[0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}))?$/u.test(value)) return value
   if (can(user, 'manageUsers') && /^\/users(?:\/(?:new|[1-9]\d*))?$/u.test(value)) return value
   if (can(user, 'manageLegalDocuments') && /^\/legal-documents(?:\/(?:new|audit|[0-9a-fA-F]{8}-(?:[0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}))?$/u.test(value)) return value
   if (can(user, 'manageConsentWithdrawalRequests') && value === '/privacy-requests') return value

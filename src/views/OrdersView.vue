@@ -4,7 +4,7 @@
 // This file is a part of the Sarafan application
 
 import { useListSearchDebounce } from '../listSearch.js'
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import ListText from '../components/ListText.vue'
 import OrderStatusBadge from '../components/OrderStatusBadge.vue'
@@ -26,6 +26,8 @@ import {
   selectionIsKnown
 } from '../orderFormatting.js'
 import { useSession } from '../stores/session.js'
+import { can } from '../roles.js'
+import { storeIdentity } from '../storeCatalogue.js'
 import { isPageResult, PAGE_SIZE_OPTIONS, readViewState, writeViewState } from '../viewState.js'
 
 const router = useRouter()
@@ -64,7 +66,10 @@ const pageSizeItems = PAGE_SIZE_OPTIONS.map(value => ({ value, title:String(valu
 let loadVersion = 0
 const searchDebounce = useListSearchDebounce(() => { loadVersion += 1 }, () => { persistState(); load() })
 
-const headers = [
+const selection = ref(new Map()), selectionNotice = ref('')
+const managesRegisters = computed(() => can(session.user.value, 'manageLogibooksRegisters'))
+const headers = computed(() => [...(managesRegisters.value ? [{ title:'', key:'selection', sortable:false, width:48 }] : []), ...baseHeaders])
+const baseHeaders = [
   { title:'', key:'actions', sortable:false, width:'56px' },
   { title:'Номер', key:'orderNumber' },
   { title:'Статус', key:'status' },
@@ -175,6 +180,7 @@ async function load(options) {
   }
 }
 
+function clearSelection() { selection.value = new Map(); selectionNotice.value = '' }
 function reloadFromFirstPage() {
   clearSearchTimer()
   page.value = 1
@@ -183,6 +189,7 @@ function reloadFromFirstPage() {
 }
 
 function onSearchInput(value) {
+  clearSelection()
   search.value = String(value ?? '').slice(0, ORDER_SEARCH_LIMIT)
   page.value = 1
   persistState()
@@ -201,7 +208,7 @@ async function openOrder(item) {
 }
 
 function orderCellProps({ item, column }) {
-  if (['productName', 'actions'].includes(column.key)) return {}
+  if (['productName', 'actions', 'selection'].includes(column.key)) return {}
   return {
     class:'order-card-cell',
     onClick:() => openOrder(item)
@@ -211,6 +218,7 @@ function orderCellProps({ item, column }) {
 function onStatusChange(value) {
   if (!ops.value || !selectionIsKnown(value, ops.value)) return
   selectedStatus.value = value
+  clearSelection()
   reloadFromFirstPage()
 }
 
@@ -219,6 +227,7 @@ function onCreatedFromChange(value) {
     search:search.value, status:selectedStatus.value, createdFrom:value ?? '', createdTo:createdTo.value
   })
   if (!normalized) return
+  clearSelection()
   createdFrom.value = normalized.createdFrom
   reloadFromFirstPage()
 }
@@ -228,6 +237,7 @@ function onCreatedToChange(value) {
     search:search.value, status:selectedStatus.value, createdFrom:createdFrom.value, createdTo:value ?? ''
   })
   if (!normalized) return
+  clearSelection()
   createdTo.value = normalized.createdTo
   reloadFromFirstPage()
 }
@@ -253,6 +263,35 @@ function onSortChange(value) {
   reloadFromFirstPage()
 }
 
+function selectOrder(item, selected, input = null) {
+  if (busy.value || !managesRegisters.value || !ops.value?.logibooksEnabled || !item.logibooks?.canSelect) return
+  const next = new Map(selection.value)
+  if (selected) next.set(item.orderNumber, { orderNumber:item.orderNumber, expectedUpdatedAt:item.updatedAt })
+  else next.delete(item.orderNumber)
+  if (next.size > ops.value.logibooksMaximumOrders) { if (input) input.checked = selection.value.has(item.orderNumber); selectionNotice.value = 'Не больше ' + ops.value.logibooksMaximumOrders + ' заказов в реестре.'; return }
+  selection.value = next; selectionNotice.value = ''
+}
+function selectPage(event) {
+  if (busy.value || !managesRegisters.value || !ops.value?.logibooksEnabled) return
+  const next = new Map(selection.value)
+  for (const item of rows.value.filter(row => row.logibooks?.canSelect)) {
+    if (event.target.checked) next.set(item.orderNumber, { orderNumber:item.orderNumber, expectedUpdatedAt:item.updatedAt })
+    else next.delete(item.orderNumber)
+  }
+  if (next.size > ops.value.logibooksMaximumOrders) { event.target.checked = false; selectionNotice.value = 'Не больше ' + ops.value.logibooksMaximumOrders + ' заказов в реестре.'; return }
+  selection.value = next; selectionNotice.value = ''
+}
+async function createRegister() {
+  if (busy.value || !managesRegisters.value || !ops.value?.logibooksEnabled || !selection.value.size) return
+  busy.value = true
+  try {
+    const operationId = globalThis.crypto.randomUUID()
+    session.logibooksDraft.value = { operationId, orders:[...selection.value.values()] }
+    await router.push({ path:'/logibooks-registers/new', query:{ operationId } })
+  } catch (value) { problem.value = normalizeProblem(value) }
+  finally { busy.value = false }
+}
+watch(() => storeIdentity(session.user.value), () => { loadVersion++; clearSelection(); rows.value = []; total.value = 0 }, { flush:'sync' })
 onMounted(load)
 onUnmounted(() => {
   loadVersion += 1
@@ -266,23 +305,45 @@ onUnmounted(() => {
       <h1 class="primary-heading">
         Заказы <span class="count">{{ total }}</span>
       </h1>
-      <div class="header-actions">
-        <span
-          v-if="busy"
-          class="header-spinner"
-          role="status"
-          aria-label="Загрузка"
-        />
-        <ActionButton
-          icon="$refresh"
-          tooltip-text="Обновить заказы"
-          :disabled="busy"
-          @click="refreshList"
-        />
+      <div class="header-action-groups">
+        <div
+          v-if="managesRegisters"
+          class="header-actions"
+        >
+          <ActionButton
+            icon="$logibooks"
+            variant="blue"
+            tooltip-text="Создать таможенный реестр"
+            :disabled="busy || !ops?.logibooksEnabled || !selection.size"
+            @click="createRegister"
+          />
+          <span
+            class="count"
+            role="status"
+            :aria-label="'Выбрано заказов: ' + selection.size"
+          >{{ selection.size }}</span>
+        </div>
+        <div class="header-actions">
+          <span
+            v-if="busy"
+            class="header-spinner"
+            role="status"
+            aria-label="Загрузка"
+          />
+          <ActionButton
+            icon="$refresh"
+            tooltip-text="Обновить заказы"
+            :disabled="busy"
+            @click="refreshList"
+          />
+        </div>
       </div>
     </header>
     <hr class="hr">
-    <PageAlertRegion :problem="visibleProblem" />
+    <PageAlertRegion
+      :problem="visibleProblem"
+      :message="selectionNotice"
+    />
     <ListFilterBar
       :search="search"
       search-id="order-search"
@@ -355,6 +416,25 @@ onUnmounted(() => {
         @update:items-per-page="onItemsPerPageChange"
         @update:sort-by="onSortChange"
       >
+        <template #[`header.selection`]>
+          <input
+            type="checkbox"
+            aria-label="Выбрать доступные заказы на странице"
+            :disabled="busy || !ops?.logibooksEnabled"
+            :checked="rows.some(row => row.logibooks?.canSelect) && rows.filter(row => row.logibooks?.canSelect).every(row => selection.has(row.orderNumber))"
+            @change="selectPage"
+          >
+        </template>
+        <template #[`item.selection`]="{ item }">
+          <input
+            type="checkbox"
+            :aria-label="'Выбрать заказ ' + item.orderNumber + (item.logibooks?.reason ? '. ' + item.logibooks.reason : '')"
+            :title="item.logibooks?.reason ?? ''"
+            :checked="selection.has(item.orderNumber)"
+            :disabled="busy || !ops?.logibooksEnabled || !item.logibooks?.canSelect"
+            @change="selectOrder(item, $event.target.checked, $event.target)"
+          >
+        </template>
         <template #[`item.orderNumber`]="{ item }">
           <ListText :text="item.orderNumber" />
         </template>

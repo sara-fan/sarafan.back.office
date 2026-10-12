@@ -2,6 +2,7 @@
 // All rights reserved.
 // This file is a part of the Sarafan application
 
+import { eligibilityIsValid, logibooksLimitIsValid } from './logibooks.js'
 import { validateProductLimits } from './orderProduct.js'
 import { createInternalProblem } from './errors/problem.js'
 import { formatMoneyAmount } from './moneyFormatting.js'
@@ -80,7 +81,11 @@ export function validateOrderOps(value) {
     || groups[1].routeAlias !== 'in_progress' || groups[1].name !== 'Выполняется') {
     throw createInternalProblem('protocolError')
   }
-  return { statuses:statuses.result, currencies:currencies.result, statusGroups:groups, productLimits:validateProductLimits(value.productLimits, currencies.result) }
+  if (value.logibooksEnabled !== undefined && typeof value.logibooksEnabled !== 'boolean'
+    || (value.logibooksEnabled === true || value.logibooksMaximumOrders !== undefined) && !logibooksLimitIsValid(value.logibooksMaximumOrders))
+    throw createInternalProblem('protocolError')
+  return { statuses:statuses.result, currencies:currencies.result, statusGroups:groups, productLimits:validateProductLimits(value.productLimits, currencies.result),
+    ...(value.logibooksEnabled === undefined ? {} : { logibooksEnabled:value.logibooksEnabled, logibooksMaximumOrders:value.logibooksMaximumOrders }) }
 }
 
 export function orderStatusItems(ops) {
@@ -130,7 +135,7 @@ export function orderRowIsValid(row, ops) {
       && price.amount > 0 && currencyValues.has(price.currency)))
     && typeof row.createdAt === 'string' && TIMESTAMP_PATTERN.test(row.createdAt) && validDate(row.createdAt.slice(0, 10)) && Number.isFinite(created.getTime())
     && typeof row.updatedAt === 'string' && TIMESTAMP_PATTERN.test(row.updatedAt) && validDate(row.updatedAt.slice(0, 10)) && Number.isFinite(updated.getTime())
-    && updated >= created
+    && updated >= created && (row.logibooks === undefined || eligibilityIsValid(row))
 }
 
 export function formatOrderMoney(price, ops) {

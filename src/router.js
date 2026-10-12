@@ -3,7 +3,7 @@
 // This file is a part of the Sarafan application
 
 import { createRouter, createWebHistory } from 'vue-router'
-import { can, landing, profileRoute } from './roles.js'
+import { can, landing, loginReturnPath, profileRoute } from './roles.js'
 import { useSession } from './stores/session.js'
 import LoginView from './views/LoginView.vue'
 import UsersView from './views/UsersView.vue'
@@ -15,6 +15,9 @@ import PrivacyRequestsView from './views/PrivacyRequestsView.vue'
 import OrderHistoryView from './views/OrderHistoryView.vue'
 import OrderView from './views/OrderView.vue'
 import OrdersView from './views/OrdersView.vue'
+import LogibooksRegistersView from './views/LogibooksRegistersView.vue'
+import LogibooksRegisterPreviewView from './views/LogibooksRegisterPreviewView.vue'
+import LogibooksRegisterView from './views/LogibooksRegisterView.vue'
 import StoresView from './views/StoresView.vue'
 import StoreView from './views/StoreView.vue'
 import ServiceCatalogueView from './views/ServiceCatalogueView.vue'
@@ -40,6 +43,9 @@ export function createAppRouter(history = createWebHistory(), session = useSessi
     { path:'/payment-information-bundles/new', component:PaymentInformationBundleView, meta:{ action:'managePaymentInformation' } },
     { path:'/payment-information-bundles/:id([1-9]\\d*)', component:PaymentInformationBundleView, meta:{ action:'managePaymentInformation' } },
     { path:'/privacy-requests', component:PrivacyRequestsView, meta:{ action:'manageConsentWithdrawalRequests' } },
+    { path:'/logibooks-registers', component:LogibooksRegistersView, meta:{ action:'manageLogibooksRegisters' } },
+    { path:'/logibooks-registers/new', component:LogibooksRegisterPreviewView, meta:{ action:'manageLogibooksRegisters' } },
+    { path:'/logibooks-registers/:id([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})', component:LogibooksRegisterView, meta:{ action:'manageLogibooksRegisters' } },
     { path:'/orders', component:OrdersView, meta:{ action:'manualQuotes' } },
     { path:'/stores', component:StoresView, meta:{ action:'viewStores' } },
     { path:'/stores/new', component:StoreView, meta:{ action:'createStore' } },
@@ -58,7 +64,7 @@ export function createAppRouter(history = createWebHistory(), session = useSessi
   router.beforeEach(async to => {
     await session.ensureReady()
     if (session.restoreProblem.value) return true
-    if (!session.user.value && !to.meta.public) return { path:'/login', query:{ return:to.path } }
+    if (!session.user.value && !to.meta.public) return { path:'/login', query:{ return:loginReturnPath(to) } }
     if (session.user.value && to.path === '/login') return landing(session.user.value)
     if (session.user.value && to.meta.entry) return landing(session.user.value)
     if (session.user.value && to.path === '/profile') {

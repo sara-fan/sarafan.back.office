@@ -13,6 +13,7 @@ import { serviceCatalogueIdentity, validateServiceCatalogueOps } from '../servic
 const BASE = '/api/v1/backoffice'
 const json = (method, body) => ({ method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
 const CONSENT_REQUEST_PATH_PATTERN = new RegExp(`^/(legal-documents(?:/(?:ops|preview|audit|${UUID_PATH_PATTERN}(?:/source)?))?|consents/withdrawal-requests(?:/processed)?)$`, 'iu')
+const LOGIBOOKS_REQUEST_PATH_PATTERN = new RegExp(`^/logibooks-registers(?:/(?:ops|preview|${UUID_PATH_PATTERN}(?:/(?:rows|reconcile|details))?))?$`, 'iu')
 const ORDER_REQUEST_PATH_PATTERN = /^\/orders(?:\/ops|\/pricing\/ops|\/\d{8}-[1-9]\d*(?:\/(?:customs|payment)\/paid|\/review\/reject|\/fulfilment|\/product|\/history(?:\/(?:ops|[0-3]-[1-9]\d*))?|\/pricing(?:\/confirm)?)?)?$/u
 const SERVICE_CATALOGUE_REQUEST_PATH_PATTERN = /^\/service-catalogue(?:\/ops|\/audit|\/[1-9]\d*)?$/u
 
@@ -30,6 +31,7 @@ function serviceUnavailableProblem(problem) {
 
 export function createSession() {
   const viewStateMemory = new Map()
+  const logibooksDraft = ref(null)
   const user = ref(null)
   const ready = ref(false)
   const restoring = ref(false)
@@ -88,6 +90,7 @@ export function createSession() {
     clearRefreshCooldown()
     token = ''
     viewStateMemory.clear()
+    logibooksDraft.value = null
     user.value = null
     notice.value = message
     loginProblem.value = problem
@@ -109,7 +112,7 @@ export function createSession() {
       throw createInternalProblem('protocolError')
     }
     if (user.value?.id !== session.user.id) viewStateMemory.clear()
-    if (serviceCatalogueIdentity(user.value) !== serviceCatalogueIdentity(session.user)) clearServiceCatalogueOps()
+    if (serviceCatalogueIdentity(user.value) !== serviceCatalogueIdentity(session.user)) { clearServiceCatalogueOps(); logibooksDraft.value = null }
     token = session.accessToken
     clearRefreshCooldown()
     user.value = session.user
@@ -271,7 +274,12 @@ export function createSession() {
   }
   return {
     user:readonly(user), ready:readonly(ready), restoring:readonly(restoring), restoreProblem:readonly(restoreProblem), refreshCooldownSeconds:readonly(refreshCooldownSeconds), notice:readonly(notice), loginProblem:readonly(loginProblem), legalDocumentOps:readonly(legalDocumentOps), orderOps:readonly(orderOps), serviceCatalogueOps:readonly(serviceCatalogueOps),
-    viewStateMemory, ensureReady, restoreSession, login, logout, saveUser, saveProfile, getLegalDocumentOps, getOrderOps, getServiceCatalogueOps,
+    viewStateMemory, logibooksDraft, ensureReady, restoreSession, login, logout, saveUser, saveProfile, getLegalDocumentOps, getOrderOps, getServiceCatalogueOps,
+    logibooksRequest: (path, options = {}) => {
+      const pathname = typeof path === 'string' ? path.split('?')[0] : ''
+      if (!LOGIBOOKS_REQUEST_PATH_PATTERN.test(pathname)) throw createInternalProblem('invalidInput')
+      return request(path, options, { supplementary:true })
+    },
     storeRequest: (path, options = {}, responseType = 'json') => {
       const pathname = typeof path === 'string' ? path.split('?')[0] : ''
       if (!/^\/stores(?:\/ops|\/[1-9]\d*(?:\/logo)?)?$/u.test(pathname)) throw createInternalProblem('invalidInput')

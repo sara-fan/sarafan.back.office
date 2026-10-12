@@ -4,6 +4,9 @@
 // This file is a part of the Sarafan application
 
 import { computed } from 'vue'
+import { can } from '../roles.js'
+import { useSession } from '../stores/session.js'
+const session = useSession()
 import { orderStatusName } from '../orderFormatting.js'
 import { formatMoneyAmount } from '../moneyFormatting.js'
 import { priceHistoryRows } from '../orderPriceHistory.js'
@@ -38,6 +41,16 @@ const priceRows = computed(() => priceHistoryRows(props.detail, props.pricingOps
     </p>
     <p v-if="detail.reviewReason">
       <strong>Причина:</strong> {{ detail.reviewReason }}
+    </p>
+    <p v-if="detail.logibooks">
+      Таможенный реестр: {{ detail.logibooks.registerId }}; посылка: {{ detail.logibooks.parcelId }}.
+      <RouterLink
+        v-if="can(session.user.value, 'manageLogibooksRegisters')"
+        :to="'/logibooks-registers/' + detail.logibooks.operationId"
+      >
+        Операция
+      </RouterLink>
+      <span v-if="detail.logibooks.reconcilerName">Сверка: {{ detail.logibooks.reconcilerName }}.</span>
     </p>
     <p v-if="detail.checkoutDeliveryName">
       Данные получателя сохранены. Способ доставки: {{ detail.checkoutDeliveryName }}.

@@ -33,6 +33,7 @@ export const sarafanAliases = {
   login: 'fas fa-right-to-bracket',
   logout: 'fas fa-right-from-bracket',
   orders: 'fas fa-cart-shopping',
+  logibooks: 'fas fa-file-export',
   payments: 'fas fa-file-invoice-dollar',
   deliverOrder: 'fas fa-truck-fast',
   receiveOrder: 'fas fa-box-open',
