@@ -319,6 +319,38 @@ describe('register operation history', () => {
 })
 
 describe('register results', () => {
+  it.each(['operation', 'rows'])('prioritizes current %s failures, then retained failure over blocked-storage notices', async source => {
+    vi.useFakeTimers()
+    vi.spyOn(globalThis.Storage.prototype, 'getItem').mockImplementation(() => { throw new Error('storage') })
+    vi.spyOn(globalThis.Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('storage') })
+    const failure = { type:'https://sarafan.sw.consulting/problems/logibooks-unknown', code:'logibooks_unknown', status:502,
+      title:'Результат неизвестен', detail:'Проверьте результат в таможенном реестре.', instance:'/test' }
+    current = { ...current, state:'Unknown', phase:'Dispatching', attemptId, failure }
+    await render(RegisterView)
+    const retained = vm().operation.failure, notice = vm().preferenceProblem
+    expect(notice).toBeTruthy()
+    expect(vm().canReconcile).toBe(true)
+    expect(vm().rows).toHaveLength(1)
+    expect(vm().visibleProblem).toBe(retained)
+    expect(wrapper.get('[role="alert"]').text()).toContain(failure.detail)
+    expect(wrapper.get('[role="alert"]').text()).not.toContain(notice.detail)
+
+    h.session.logibooksRequest.mockRejectedValueOnce(new Error('private read failure'))
+    const refresh = source === 'operation' ? () => vm().load() : () => vm().loadRows()
+    await refresh()
+    const readProblem = source === 'operation' ? vm().problem : vm().rowTask.problem.value
+    expect(readProblem).toBeTruthy()
+    expect(vm().visibleProblem).toBe(readProblem)
+    expect(wrapper.get('[role="alert"]').text()).not.toContain('private read failure')
+    await refresh()
+    expect(vm().visibleProblem).toBe(retained)
+    expect(wrapper.get('[role="alert"]').text()).toContain(failure.detail)
+
+    current = { ...current, version:attemptId, failure:null }
+    await vm().load()
+    expect(vm().visibleProblem).toBe(notice)
+    expect(wrapper.get('[role="alert"]').text()).toContain(notice.detail)
+  })
   it.each([['administrator', false], ['operator', true]])('keeps reconciliation unavailable for role %s with canManage=%s', async (role, canManage) => {
     h.session.user.value = { id:1, roles:[role] }; current = { ...current, state:'Unknown', phase:'Dispatching', attemptId }
     const request = h.session.logibooksRequest.getMockImplementation()

@@ -30,7 +30,7 @@ function reset() { generation++; rowsLoaded.value = false; stop(); operation.val
 const task = useStaffRequest(session, reset), rowTask = useStaffRequest(session, reset)
 const { busy, problem } = task
 const busyRows = rowTask.busy
-const visibleProblem = computed(() => problem.value ?? rowTask.problem.value ?? preferenceProblem.value ?? operation.value?.failure)
+const visibleProblem = computed(() => problem.value ?? rowTask.problem.value ?? operation.value?.failure ?? preferenceProblem.value)
 const canReconcile = computed(() => canManageLogibooksRegisters(session.user.value, ops.value)
   && canReconcileLogibooksRegister(operation.value))
 function persist() { if (!writeViewState({ ...preferences(), state:state.value })) preferenceProblem.value = createInternalProblem('viewPreferencesUnavailable') }
