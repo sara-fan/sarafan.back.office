@@ -380,3 +380,79 @@ describe('orders server table', () => {
     wrapper = null
   })
 })
+
+describe('paid-order register selection', () => {
+  async function selectable(limit = 1000) {
+    h.session.user.value = { id:7, roles:['shift-manager'] }; h.session.logibooksDraft = ref(null)
+    h.session.getOrderOps.mockResolvedValue({ ...ops, logibooksEnabled:true, logibooksMaximumOrders:limit })
+    const items = rows.map((row, index) => ({ ...row, status:300, sellerPrice:{ amount:12.34, currency:840 },
+      logibooks:{ canSelect:index === 0, reason:index === 0 ? null : 'Заказ ожидает результата', operationId:null } }))
+    h.session.orderRequest.mockImplementation(async path => resultFor(path, items))
+    render(); await flushPromises(); return items
+  }
+  it('selects eligible page rows, preserves selection through sort and paging, and opens preview', async () => {
+    const items = await selectable()
+    expect(wrapper.findAll('input[type="checkbox"]')).toHaveLength(3)
+    vm().selectOrder(items[1], true); expect(vm().selection.size).toBe(0)
+    await wrapper.findAll('input[type="checkbox"]')[1].setValue(true)
+    expect(vm().selection.size).toBe(1)
+    const groups = wrapper.findAll('.header-action-groups > .header-actions')
+    expect(groups).toHaveLength(2)
+    expect(groups[0].get('button').attributes('aria-label')).toBe('Создать таможенный реестр')
+    expect(groups[0].get('button').classes()).not.toContain('action-button--labelled')
+    expect(groups[0].get('.count').text()).toBe('1')
+    expect(groups[1].get('button').attributes('aria-label')).toBe('Обновить заказы')
+    vm().onSortChange([{ key:'quantity', order:'asc' }]); await flushPromises(); expect(vm().selection.size).toBe(1)
+    vm().onPageChange(2); await flushPromises(); expect(vm().selection.size).toBe(1)
+    await vm().createRegister()
+    expect(h.session.logibooksDraft.value.orders).toEqual([{ orderNumber:items[0].orderNumber, expectedUpdatedAt:items[0].updatedAt }])
+    expect(h.push.mock.calls.at(-1)[0].path).toBe('/logibooks-registers/new')
+    vm().selectOrder(items[0], false); expect(vm().selection.size).toBe(0)
+    vm().selectPage({ target:{ checked:true } }); expect(vm().selection.size).toBe(1)
+    vm().selectPage({ target:{ checked:false } }); expect(vm().selection.size).toBe(0)
+    vm().selectOrder(items[0], true); vm().onSearchInput('other'); expect(vm().selection.size).toBe(0)
+    h.session.user.value = null; expect(vm().rows).toEqual([])
+  })
+  it('leaves selection unchanged above the limit and presents navigation failures safely', async () => {
+    const items = await selectable(1)
+    vm().selectOrder(items[0], true)
+    vm().selectOrder({ ...items[0], orderNumber:'12345678-3' }, true)
+    expect(vm().selection.size).toBe(1); expect(vm().selectionNotice).toContain('Не больше 1')
+    vm().rows = [items[0], { ...items[0], orderNumber:'12345678-3' }]
+    const event = { target:{ checked:true } }; vm().selectPage(event)
+    expect(event.target.checked).toBe(false); expect(vm().selection.size).toBe(1)
+    h.push.mockRejectedValueOnce(new Error('private'))
+    await vm().createRegister(); expect(vm().problem).toBeTruthy(); expect(wrapper.text()).not.toContain('private')
+    vm().busy = true; vm().selectOrder(items[0], false); vm().selectPage({ target:{ checked:false } }); await vm().createRegister()
+    expect(vm().selection.size).toBe(1)
+    vm().busy = false; vm().ops.logibooksEnabled = false; vm().selectOrder(items[0], false); vm().selectPage({ target:{ checked:false } }); await vm().createRegister()
+    expect(vm().selection.size).toBe(1)
+    vm().ops.logibooksEnabled = true; vm().onStatusChange('status:300'); await flushPromises(); expect(vm().selection.size).toBe(0)
+  })
+  it('validates optional eligibility and metadata and keeps disabled integration unselectable', async () => {
+    for (const metadata of [{ ...rawOps, logibooksEnabled:1 }, { ...rawOps, logibooksMaximumOrders:0 },
+      ...[undefined, null, -1, 1.5, 1001, Number.MAX_SAFE_INTEGER + 1].map(logibooksMaximumOrders => ({
+        ...rawOps, logibooksEnabled:true, logibooksMaximumOrders
+      }))]) expect(() => validateOrderOps(metadata)).toThrow()
+    expect(() => validateOrderOps({ ...rawOps, logibooksEnabled:true })).toThrow()
+    for (const logibooksMaximumOrders of [1, 1000])
+      expect(validateOrderOps({ ...rawOps, logibooksEnabled:true, logibooksMaximumOrders }).logibooksMaximumOrders).toBe(logibooksMaximumOrders)
+    expect(validateOrderOps({ ...rawOps, logibooksEnabled:false }).logibooksEnabled).toBe(false)
+    expect(orderRowIsValid({ ...rows[0], logibooks:{ canSelect:true, reason:null } }, ops)).toBeFalsy()
+    const items = await selectable(); vm().ops.logibooksEnabled = false
+    vm().selectOrder(items[0], true); await vm().createRegister(); expect(vm().selection.size).toBe(0)
+    h.session.user.value = { id:7, roles:['operator'] }; vm().ops.logibooksEnabled = true
+    vm().selectPage({ target:{ checked:true } }); expect(vm().selection.size).toBe(0)
+  })
+
+  it('restores a native checkbox when the limit is exceeded and prevents duplicate navigation', async () => {
+    const items = await selectable(1)
+    vm().rows = [items[0], { ...items[0], orderNumber:'12345678-3' }]; await flushPromises()
+    const boxes = wrapper.findAll('input[type="checkbox"]')
+    await boxes[1].setValue(true); await boxes[2].setValue(true)
+    expect(boxes[2].element.checked).toBe(false); expect(vm().selection.size).toBe(1)
+    const hold = pending(); h.push.mockReset().mockReturnValueOnce(hold.promise)
+    const work = vm().createRegister(); await vm().createRegister()
+    expect(h.push).toHaveBeenCalledTimes(1); hold.resolve(); await work
+  })
+})

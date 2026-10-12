@@ -342,3 +342,26 @@ describe('extensible history metadata and retained evidence', () => {
     expect(() => validateHistoryDetail({ ...detail, event, version:3, reviewReason:'Причина', statusBefore:999, statusAfter:1001 }, event, extension([700]), orderOps, pricingOps)).toThrow();
   });
 });
+
+it('reads version-six registration evidence and preserves unfamiliar order statuses', () => {
+  const metadata = { ...ops, kinds:[...ops.kinds, { value:1300, name:'Создан таможенный реестр', routeAlias:'logibooks' }],
+    areas:[...ops.areas, { value:64, name:'Таможенный реестр', routeAlias:'logibooks' }] }
+  expect(validateHistoryOps(metadata)).toBe(metadata)
+  const event = { ...row, kind:1300, areas:64 }
+  const evidence = { ...detail, event, version:6, productAfter:null, statusBefore:987, statusAfter:987,
+    sourceUrl:null, pricingAfter:null, logibooks:{ operationId:'10000000-0000-4000-8000-000000000001',
+      registerId:10, parcelId:101, source:'adapter', reconcilerId:null, reconcilerName:null, reconciledAt:null } }
+  expect(validateHistoryDetail(evidence, event, metadata, orderOps, pricingOps)).toBe(evidence)
+  const manual = { ...evidence, logibooks:{ ...evidence.logibooks, source:'reconciliation', reconcilerId:1, reconcilerName:'Проверяющий', reconciledAt:row.at } }
+  expect(validateHistoryDetail(manual, event, metadata, orderOps, pricingOps)).toBe(manual)
+  for (const change of [{ version:5 }, { statusAfter:300 }, { logibooks:null }, { logibooks:{ ...evidence.logibooks, source:'unknown' } },
+    { logibooks:{ ...evidence.logibooks, operationId:'bad' } }, { logibooks:{ ...evidence.logibooks, registerId:0 } },
+    { logibooks:{ ...evidence.logibooks, parcelId:0 } }, { logibooks:{ ...manual.logibooks, reconcilerId:null } },
+    { logibooks:{ ...manual.logibooks, reconcilerName:'' } }, { logibooks:{ ...manual.logibooks, reconciledAt:'bad' } }])
+    expect(() => validateHistoryDetail({ ...evidence, ...change }, event, metadata, orderOps, pricingOps)).toThrow()
+  const rendered = mount(OrderHistoryDetails, { props:{ detail:manual, orderOps, pricingOps }, global:{ plugins:[createSarafanVuetify()] } })
+  expect(rendered.text()).toContain('Таможенный реестр: 10'); expect(rendered.text()).toContain('Проверяющий')
+  expect(rendered.findComponent({ name:'RouterLink' }).exists()).toBe(false)
+  h.session.user.value = { id:1, roles:['administrator'] }
+  rendered.unmount()
+})

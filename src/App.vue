@@ -7,7 +7,7 @@ import { ref, watch } from 'vue'
 import { useDisplay } from 'vuetify'
 import { useRouter } from 'vue-router'
 import { version } from '../package.json'
-import { can, fullName, landing, profileRoute } from './roles.js'
+import { can, fullName, landing, loginReturnPath, profileRoute, safeReturn } from './roles.js'
 import { useSession } from './stores/session.js'
 import { suppressProblem } from './errors/problem.js'
 import PageAlertRegion from './components/PageAlertRegion.vue'
@@ -21,11 +21,18 @@ const coreVersion = ref('')
 const exchangeRates = ref([])
 const currencies = ref([])
 async function retry() {
+  const returnPath = loginReturnPath(router.currentRoute.value)
   await session.restoreSession()
-  if (!restoreProblem.value) await router.replace(user.value ? landing(user.value) : '/login')
+  if (!restoreProblem.value) await router.replace(user.value ? safeReturn(returnPath, user.value)
+    : returnPath ? { path:'/login', query:{ return:returnPath } } : '/login')
 }
 async function signOut() { await session.logout(); await router.replace('/login') }
-watch(user, value => { if (!value && ready.value && !restoreProblem.value) router.replace('/login') })
+watch(user, value => {
+  if (!value && ready.value && !restoreProblem.value && router.currentRoute.value.path !== '/login') {
+    const returnPath = loginReturnPath(router.currentRoute.value)
+    router.replace(returnPath ? { path:'/login', query:{ return:returnPath } } : '/login')
+  }
+})
 watch(mdAndUp, value => { drawer.value = value })
 watch(() => router.currentRoute.value.fullPath, () => { if (!mdAndUp.value) drawer.value = false })
 watch(() => user.value?.id, async (id, _previous, onCleanup) => {
@@ -117,6 +124,13 @@ watch(() => user.value?.id, async (id, _previous, onCleanup) => {
             class="drawer-link"
             prepend-icon="$orders"
             title="Заказы"
+          />
+          <v-list-item
+            v-if="can(user, 'manageLogibooksRegisters')"
+            to="/logibooks-registers"
+            class="drawer-link"
+            prepend-icon="$logibooks"
+            title="Таможенные реестры"
           />
           <v-list-item
             v-if="can(user, 'viewStores')"

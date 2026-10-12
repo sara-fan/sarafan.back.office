@@ -117,6 +117,39 @@ describe('staff views',()=>{
     h.session.getStatus.mockResolvedValueOnce(null);h.session.user.value={...identity,id:5};await flushPromises()
     expect(w.text()).toContain('—')
   })
+  it('retains the preview operation on session loss and follows its validated login return', async () => {
+    const operationId = '11111111-1111-1111-1111-111111111111'
+    const target = '/logibooks-registers/new?operationId=' + operationId
+    h.router.currentRoute.value = { path:'/logibooks-registers/new', query:{ operationId, secret:'discarded' } }
+    const app = render(App); h.session.user.value = null; await flushPromises()
+    expect(h.router.replace).toHaveBeenCalledWith({ path:'/login', query:{ return:target } })
+    app.unmount(); h.router.replace.mockClear()
+    h.route = { path:'/login', query:{ return:target } }
+    const login = render(LoginView)
+    await fill(login, 'email', 'staff@example.test'); await fill(login, 'password', 'password')
+    await login.get('form').trigger('submit'); await flushPromises()
+    expect(h.router.replace).toHaveBeenCalledWith(target)
+  })
+  it.each([
+    ['preview', true], ['preview', false], ['operation', true], ['operation', false], ['login', true], ['login', false]
+  ])('preserves %s recovery after session restore retry (signed in=%s)', async (location, restored) => {
+    const operationId = '11111111-1111-1111-1111-111111111111'
+    const target = location === 'operation' ? '/logibooks-registers/' + operationId : '/logibooks-registers/new?operationId=' + operationId
+    h.router.currentRoute.value = location === 'login' ? { path:'/login', query:{ return:target } }
+      : location === 'operation' ? { path:target } : { path:'/logibooks-registers/new', query:{ operationId } }
+    h.session.user.value = null; h.session.restoreProblem.value = failure()
+    h.session.restoreSession.mockImplementationOnce(async () => {
+      h.session.restoreProblem.value = null
+      h.session.user.value = restored ? identity : null
+    })
+    const app = render(App); await button(app, 'Повторить').trigger('click'); await flushPromises()
+    expect(h.router.replace).toHaveBeenCalledWith(restored ? target : { path:'/login', query:{ return:target } })
+  })
+  it('does not overwrite an existing login return when session loss finishes', async () => {
+    h.router.currentRoute.value = { path:'/login', query:{ return:'/logibooks-registers/new?operationId=11111111-1111-1111-1111-111111111111' } }
+    render(App); h.session.user.value = null; await flushPromises()
+    expect(h.router.replace).not.toHaveBeenCalled()
+  })
   it('renders service unavailability as a red login error',async()=>{
     h.route={path:'/login',params:{},query:{}};h.session.loginProblem.value=createInternalProblem('serviceUnavailable')
     const w=render(LoginView);expect(w.get('.page-alert').text()).toBe('Сервис временно недоступен');expect(w.find('.page-notice').exists()).toBe(false)
@@ -249,7 +282,7 @@ describe('staff views',()=>{
     expect(w.find('nav a[href="/users/1"] i').attributes('data-icon')).toBe('$profile')
     expect(w.find('nav a[href="/users/1"]').text()).toContain('Мой профиль')
     expect(w.find('nav a[href="/payment-information-bundles"] i').attributes('data-icon')).toBe('$payments')
-    expect(w.findAll('nav a').slice(0,8).map(link=>link.text())).toEqual(['Заказы','Магазины','Тарифы','Реквизиты','Перс. данные','Правовые документы','Пользователи','Мой профиль'])
+    expect(w.findAll('nav a').slice(0,9).map(link=>link.text())).toEqual(['Заказы','Таможенные реестры','Магазины','Тарифы','Реквизиты','Перс. данные','Правовые документы','Пользователи','Мой профиль'])
 
     const drawer=w.findComponent({name:'VNavigationDrawer'})
     expect(drawer.props('permanent')).toBe(true)
