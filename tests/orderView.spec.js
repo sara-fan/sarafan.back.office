@@ -67,6 +67,9 @@ describe('staff order card', () => {
     expect(items[0].props('disabled')).toBe(false)
     expect(document.querySelectorAll('.duty-payment-activator')[1].hasAttribute('tabindex')).toBe(false)
     await items[0].trigger('click'); await flushPromises()
+    expect(h.session.orderRequest.mock.calls.some(([path]) => path.endsWith('/customs/paid'))).toBe(false)
+    expect(document.body.textContent).toContain('Пошлина оплачена?')
+    await vm().confirmCriticalAction(); await flushPromises()
     const call = h.session.orderRequest.mock.calls.find(([path]) => path.endsWith('/customs/paid'))
     expect(call[1].method).toBe('POST')
     expect(JSON.parse(call[1].body)).toEqual({ expectedUpdatedAt:details.updatedAt })
@@ -84,14 +87,14 @@ describe('staff order card', () => {
       const originalPricing = vm().pricing
       h.session.orderRequest.mockResolvedValueOnce({ ...details, customsPaid, canMarkCustomsPaid,
         updatedAt:'2026-09-15T11:00:01.654321Z' })
-      await vm().markDutyPaid(); await flushPromises()
+      await vm().markDutyPaid(); await vm().confirmCriticalAction(); await flushPromises()
       expect(vm().problem.code).toBe('ui_protocol_error')
       expect(vm().details).toBe(originalDetails)
       expect(vm().pricing).toBe(originalPricing)
       expect(vm().details.customsPaid).toBe(false)
       expect(vm().busy).toBe(false)
       expect(vm().locked).toBe(true)
-      expect(wrapper.findAll('[role="alert"]')).toHaveLength(1)
+      expect(document.querySelectorAll('[role="alertdialog"] [role="alert"]')).toHaveLength(1)
       expect(wrapper.find('[role="img"][aria-label="Таможенная пошлина оплачена"]').exists()).toBe(false)
       const calls = h.session.orderRequest.mock.calls.length
       await vm().markDutyPaid()
@@ -103,6 +106,20 @@ describe('staff order card', () => {
       expect(vm().details.customsPaid).toBe(customsPaid)
       expect(vm().canMarkDutyPaid).toBe(!customsPaid)
     })
+  it('cancels customs confirmation without changing the order', async () => {
+    dutyReply()
+    await render()
+    const count = h.session.orderRequest.mock.calls.length
+    await vm().markDutyPaid(); await flushPromises()
+    const dialog = wrapper.findAllComponents(ConfirmDialog).find(item => item.props('open'))
+    expect(dialog.props('title')).toBe('Пошлина оплачена?')
+    expect(dialog.props('message')).toBe('Подтвердите, что пользователь сообщил о фактической оплате таможенных платежей. Информация будет сохранена в заказе')
+    expect(h.session.orderRequest.mock.calls).toHaveLength(count)
+    dialog.vm.$emit('cancel'); await flushPromises()
+    await vm().confirmCriticalAction()
+    expect(h.session.orderRequest.mock.calls).toHaveLength(count)
+    expect(vm().details.customsPaid).toBe(false)
+  })
   it.each([[null, false, 'неизвестна'], [0, false, 'не ожидается'], [120, true, 'уже отмечена']])('disables duty for amount %s and paid=%s', async (amount, paid, reason) => {
     dutyReply(amount, paid)
     await render()
@@ -162,23 +179,23 @@ describe('staff order card', () => {
     dutyReply()
     await render()
     h.session.orderRequest.mockRejectedValueOnce(remote(type))
-    await vm().markDutyPaid(); await flushPromises()
+    await vm().markDutyPaid(); await vm().confirmCriticalAction(); await flushPromises()
     expect(vm().locked).toBe(true)
     expect(vm().details.customsPaid).toBe(false)
-    expect(wrapper.findAll('[role="alert"]')).toHaveLength(1)
+    expect(document.querySelectorAll('[role="alertdialog"] [role="alert"]')).toHaveLength(1)
   })
   it('retains unpaid state after a failed request and allows retry', async () => {
     dutyReply()
     await render()
     const normal = h.session.orderRequest.getMockImplementation()
     h.session.orderRequest.mockRejectedValueOnce(new Error('private'))
-    await vm().markDutyPaid(); await flushPromises()
+    await vm().markDutyPaid(); await vm().confirmCriticalAction(); await flushPromises()
     expect(vm().details.customsPaid).toBe(false)
     expect(vm().locked).toBe(false)
-    expect(wrapper.findAll('[role="alert"]')).toHaveLength(1)
+    expect(document.querySelectorAll('[role="alertdialog"] [role="alert"]')).toHaveLength(1)
     expect(wrapper.text()).not.toContain('private')
     h.session.orderRequest.mockImplementation(normal)
-    await vm().markDutyPaid()
+    await vm().confirmCriticalAction()
     expect(vm().details.customsPaid).toBe(true)
   })
   it.each([false, true])('ignores obsolete duty completion rejected=%s', async rejected => {
@@ -186,7 +203,8 @@ describe('staff order card', () => {
     await render()
     const wait = pending()
     h.session.orderRequest.mockReturnValueOnce(wait.promise)
-    const action = vm().markDutyPaid()
+    await vm().markDutyPaid()
+    const action = vm().confirmCriticalAction()
     h.session.user.value = null
     if (rejected) wait.reject(new Error('private'))
     else wait.resolve({ ...details, customsPaid:true, canMarkCustomsPaid:false })
@@ -1261,6 +1279,55 @@ describe('Pilot manual fulfilment', () => {
     vm().details = { ...details, status:300, canEditProduct:false, mainPaymentPaid:true, nextStage:350 }
     await flushPromises()
   }
+  it.each([350, 400])('cancels stage %s without writing and discards the pending action on reload', async target => {
+    await ready()
+    if (target === 400) vm().details = { ...vm().details, status:350, nextStage:400 }
+    const count = h.session.orderRequest.mock.calls.length
+    await vm().advanceStage(target); await flushPromises()
+    const dialog = wrapper.findAllComponents(ConfirmDialog).find(item => item.props('open'))
+    expect(dialog.props('action')).toBe('Подтвердить')
+    expect(dialog.props('message')).toBe(target === 350
+      ? 'Подтвердите, что заказ фактически передан в доставку. Этап станет виден пользователю, дата перехода будет сохранена'
+      : 'Подтвердите получение заказа покупателем. Заказ перейдёт в состояние „Завершён“, будет сохранена дата получения')
+    dialog.vm.$emit('cancel'); await flushPromises()
+    await vm().confirmCriticalAction()
+    expect(h.session.orderRequest.mock.calls).toHaveLength(count)
+    await vm().advanceStage(target)
+    await vm().load()
+    expect(vm().criticalConfirmation).toBeNull()
+  })
+  it('rejects a changed version until the order is explicitly reloaded', async () => {
+    await ready()
+    await vm().advanceStage()
+    vm().details = { ...vm().details, updatedAt:'2026-09-15T11:01:00Z' }
+    const count = h.session.orderRequest.mock.calls.length
+    await vm().confirmCriticalAction(); await flushPromises()
+    expect(h.session.orderRequest.mock.calls).toHaveLength(count)
+    expect(vm().locked).toBe(true)
+    expect(vm().problem.code).toBe('ui_order_action_changed')
+    expect(document.querySelector('[role="alertdialog"]').textContent).toContain('Обновите заказ и подтвердите действие повторно.')
+    expect(document.querySelectorAll('[role="alert"]')).toHaveLength(1)
+    await vm().load()
+    expect(vm().criticalConfirmation).toBeNull()
+    expect(vm().problem).toBeNull()
+  })
+  it('rechecks capability and prevents duplicate confirmations while the request is pending', async () => {
+    await ready()
+    await vm().advanceStage()
+    vm().details.nextStage = null
+    const count = h.session.orderRequest.mock.calls.length
+    await vm().confirmCriticalAction()
+    expect(h.session.orderRequest.mock.calls).toHaveLength(count)
+    vm().details.nextStage = 350
+    const wait = pending()
+    h.session.orderRequest.mockReturnValueOnce(wait.promise)
+    const action = vm().confirmCriticalAction()
+    await vm().confirmCriticalAction()
+    expect(h.session.orderRequest.mock.calls).toHaveLength(count + 1)
+    wait.resolve({ ...vm().details, status:350, nextStage:400 })
+    await action
+    expect(vm().criticalConfirmation).toBeNull()
+  })
   it('keeps both stage buttons visible and enables only the next transition', async () => {
     await ready()
     expect(stageButton('truck-fast').element.disabled).toBe(false)
@@ -1273,6 +1340,9 @@ describe('Pilot manual fulfilment', () => {
     const received = { ...vm().details, status:350, nextStage:400, updatedAt:'2026-09-15T11:00:03Z' }
     h.session.orderRequest.mockResolvedValueOnce(received)
     await stageButton('truck-fast').trigger('click')
+    expect(h.session.orderRequest.mock.calls).toHaveLength(count)
+    expect(vm().criticalConfirmation.title).toBe('Перевести в „Доставляется“?')
+    await vm().confirmCriticalAction()
     await flushPromises()
     expect(vm().details.status).toBe(350)
     expect(vm().pricing.calculation).toEqual(pricingDetails.calculation)
@@ -1285,6 +1355,9 @@ describe('Pilot manual fulfilment', () => {
     expect(JSON.parse(h.session.orderRequest.mock.calls.at(-1)[1].body)).toEqual({ expectedUpdatedAt:details.updatedAt, status:350 })
     h.session.orderRequest.mockResolvedValueOnce({ ...received, status:400, nextStage:null })
     await stageButton('box-open').trigger('click'); await flushPromises()
+    expect(h.session.orderRequest.mock.calls).toHaveLength(deliveredCount)
+    expect(vm().criticalConfirmation.title).toBe('Заказ получен?')
+    await vm().confirmCriticalAction(); await flushPromises()
     expect(vm().nextStage).toBeUndefined()
     expect(stageButton('truck-fast').element.disabled).toBe(true)
     expect(stageButton('box-open').element.disabled).toBe(true)
@@ -1326,7 +1399,7 @@ describe('Pilot manual fulfilment', () => {
   it.each([CORE_PROBLEM_TYPES.orderUpdateConflict, CORE_PROBLEM_TYPES.orderFulfilmentUnavailable, 'protocol'])('retains current stage and locks conflicts %s', async type => {
     await ready()
     h.session.orderRequest.mockRejectedValueOnce(type === 'protocol' ? createInternalProblem('protocolError') : remote(type))
-    await vm().advanceStage(); await flushPromises()
+    await vm().advanceStage(); await vm().confirmCriticalAction(); await flushPromises()
     expect(vm().details.status).toBe(300)
     expect(vm().locked).toBe(true)
     expect(vm().problem).not.toBeNull()
@@ -1335,7 +1408,8 @@ describe('Pilot manual fulfilment', () => {
     await ready()
     const wait = pending()
     h.session.orderRequest.mockReturnValueOnce(wait.promise)
-    const action = vm().advanceStage()
+    await vm().advanceStage()
+    const action = vm().confirmCriticalAction()
     h.session.user.value = { id:2, roles:['operator'] }
     await flushPromises()
     if (error) wait.reject(remote(CORE_PROBLEM_TYPES.orderUpdateConflict))

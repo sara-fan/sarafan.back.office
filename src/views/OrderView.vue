@@ -28,6 +28,12 @@ import { can } from '../roles.js'
 import { useSession } from '../stores/session.js'
 
 const paymentsOpen = ref(false), mainPaymentConfirmation = ref(false)
+const criticalConfirmation = ref(null)
+const criticalMessages = {
+  customs:{ title:'Пошлина оплачена?', message:'Подтвердите, что пользователь сообщил о фактической оплате таможенных платежей. Информация будет сохранена в заказе' },
+  delivering:{ title:'Перевести в „Доставляется“?', message:'Подтвердите, что заказ фактически передан в доставку. Этап станет виден пользователю, дата перехода будет сохранена' },
+  received:{ title:'Заказ получен?', message:'Подтвердите получение заказа покупателем. Заказ перейдёт в состояние „Завершён“, будет сохранена дата получения' }
+}
 const rejectionOpen = ref(false), rejectionReason = ref(''), rejectionRoot = ref(null)
 const focusRoot = ref(null)
 const costSummary = ref(null), continuing = ref(false)
@@ -91,7 +97,32 @@ const stageActions = computed(() => [
 ].map(action => ({ ...action, reason:stageUnavailableReason(action.target) })))
 function advanceStage(target = details.value?.nextStage) {
   if (stageUnavailableReason(target)) return
-  return applyStaffMutation(() => recordOrderStage(session, number.value, details.value, ops.value))
+  openCriticalConfirmation(target === FULFILMENT_TRANSITIONS[1100].to ? 'delivering' : 'received', target)
+}
+function openCriticalConfirmation(kind, target = null) {
+  problem.value = null
+  criticalConfirmation.value = { ...criticalMessages[kind], kind, target, orderNumber:number.value,
+    userId:session.user.value?.id, updatedAt:details.value.updatedAt }
+}
+const criticalUnavailableReason = computed(() => {
+  const pending = criticalConfirmation.value
+  return !pending ? 'Действие не выбрано.' : pending.kind === 'customs'
+    ? dutyUnavailableReason.value : stageUnavailableReason(pending.target)
+})
+async function confirmCriticalAction() {
+  const pending = criticalConfirmation.value
+  if (!pending || busy.value) return
+  if (pending.orderNumber !== number.value || pending.userId !== session.user.value?.id) return
+  if (pending.updatedAt !== details.value?.updatedAt) {
+    problem.value = createInternalProblem('orderActionChanged')
+    locked.value = true
+    return
+  }
+  if (criticalUnavailableReason.value) return
+  return applyStaffMutation(() => pending.kind === 'customs'
+    ? recordStaffPayment(session, pending.orderNumber, details.value, ops.value, false)
+    : recordOrderStage(session, pending.orderNumber, details.value, ops.value),
+  () => { criticalConfirmation.value = null })
 }
 const canConfirmPrice = computed(() => pricingEditable.value && pricing.value?.canConfirm && !dirty.value && !locked.value)
 const form = ref(null)
@@ -194,7 +225,11 @@ function openMainPayment() {
   problem.value = null
   mainPaymentConfirmation.value = true
 }
-async function markDutyPaid() { return markPayment(false) }
+function markDutyPaid() {
+  paymentsOpen.value = false
+  if (dutyUnavailableReason.value) return
+  openCriticalConfirmation('customs')
+}
 function markPayment(mainPayment) {
   paymentsOpen.value = false
   if (mainPayment ? !!mainUnavailableReason.value : !!dutyUnavailableReason.value) return
@@ -221,6 +256,7 @@ async function applyStaffMutation(perform, onSuccess = () => {}) {
 }
 
 async function load() {
+  criticalConfirmation.value = null
   mainPaymentConfirmation.value = false
   paymentsOpen.value = false
   rejectionOpen.value = false
@@ -370,6 +406,7 @@ function beforeUnload(event) {
   event.returnValue = ''
 }
 function clear() {
+  criticalConfirmation.value = null
   mainPaymentConfirmation.value = false
   paymentsOpen.value = false
   rejectionOpen.value = false; rejectionReason.value = ""
@@ -499,7 +536,7 @@ const focusAfter = useValidationFocus(focusRoot, { context:() => [session.user.v
       </EditorHeaderActions>
     </header>
     <hr class="hr">
-    <PageAlertRegion :problem="rejectionOpen || mainPaymentConfirmation ? null : pageProblem" />
+    <PageAlertRegion :problem="rejectionOpen || mainPaymentConfirmation || criticalConfirmation ? null : pageProblem" />
     <p
       v-if="busy && !details"
       role="status"
@@ -790,6 +827,26 @@ const focusAfter = useValidationFocus(focusRoot, { context:() => [session.user.v
       @cancel="confirmingPrice = false"
       @confirm="confirmPrice"
     />
+    <ConfirmDialog
+      :open="!!criticalConfirmation"
+      :title="criticalConfirmation?.title"
+      :message="criticalConfirmation?.message ?? ''"
+      action="Подтвердить"
+      :busy="busy"
+      :action-disabled="!!criticalUnavailableReason"
+      @cancel="!busy && (criticalConfirmation = null)"
+      @confirm="confirmCriticalAction"
+    >
+      <PageAlertRegion :problem="problem" />
+      <ActionButton
+        v-if="locked"
+        icon="$refresh"
+        label="Обновить заказ"
+        tooltip-text="Обновить заказ"
+        :disabled="busy"
+        @click="load"
+      />
+    </ConfirmDialog>
     <ConfirmDialog
       :open="mainPaymentConfirmation"
       title="Заказ оплачен?"

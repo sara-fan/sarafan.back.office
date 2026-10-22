@@ -32,6 +32,8 @@ For other comment-capable formats, use the same three lines with that format's n
 
 ## Error handling
 
+- Customs-paid and manual delivery/receipt actions require an explicit ConfirmDialog before writing. Bind confirmation to the order, staff identity and UpdatedAt; recheck capability at confirmation, prevent duplicate submissions, keep errors inside the active dialog and require explicit reload after a conflict. Cancel, navigation, identity changes and reload discard pending confirmation.
+
 - Treat RFC 9457 `type` as the canonical machine-readable identifier for Core API failures. Never branch on localized `title`, `detail`, raw exception text, or HTTP status alone.
 - Accept a Core error as structured only when its media type is `application/problem+json` and it contains a valid Sarafan `type`, matching HTTP/body `status`, Russian `title` and `detail`, `instance`, and `code`. Preserve optional `errors` and `traceId` without flattening them.
 - Do not add compatibility parsing for partial Problem Details, arbitrary JSON, `msg`, legacy envelopes, or bodyless error responses. Normalize malformed or inconsistent server responses to the internal UI protocol problem.

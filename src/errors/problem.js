@@ -32,6 +32,12 @@ const SERVICE_UNAVAILABLE_MESSAGE = 'Сервис временно недост�
 
 export const { INTERNAL_PROBLEM_TYPES, createInternalProblem, normalizeProblem, presentProblem, problemFieldErrors, suppressProblem } = createProblemTools({
   logger: uiLogger, suppressedEvent: EVENTS.operationSuppressed, additions: {
+    orderActionChanged: {
+      suffix: 'order-action-changed',
+      code: 'ui_order_action_changed',
+      title: 'Данные заказа изменились',
+      detail: 'Данные заказа изменились. Обновите заказ и подтвердите действие повторно.'
+    },
     networkUnavailable: {
       suffix: 'network-unavailable',
       code: 'ui_network_unavailable',
